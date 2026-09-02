@@ -309,13 +309,89 @@ class OpenRouterPlannerProvider(PlannerProvider):
             raise RuntimeError(f"OpenRouterPlannerProvider call failed: {exc}") from exc
 
 
+# ── OpenAI-compatible provider ─────────────────────────────────────────
+
+class OpenAIPlannerProvider(PlannerProvider):
+    """Provider that calls any OpenAI-compatible API endpoint.
+
+    Environment variables:
+        OPENAI_API_KEY   — API key (required)
+        OPENAI_BASE_URL  — base URL (default: https://api.openai.com/v1)
+        OPENAI_MODEL     — model name (default: gpt-4o)
+
+    Works with OpenAI, Azure OpenAI (with custom endpoint), and other
+    OpenAI-compatible servers (vllm, text-gen-webui, etc.).
+    """
+
+    def __init__(
+        self,
+        api_key: Optional[str] = None,
+        model: Optional[str] = None,
+        base_url: Optional[str] = None,
+    ):
+        import os
+        self.api_key = api_key or os.environ.get("OPENAI_API_KEY", "")
+        self.model = model or os.environ.get("OPENAI_MODEL", "gpt-4o")
+        self.base_url = (base_url or os.environ.get("OPENAI_BASE_URL",
+                            "https://api.openai.com/v1")).rstrip("/")
+        self._call_count = 0
+
+    @property
+    def call_count(self) -> int:
+        return self._call_count
+
+    def generate(self, system_prompt: str, user_prompt: str) -> str:
+        import urllib.request
+        import urllib.error
+
+        if not self.api_key:
+            raise RuntimeError(
+                "OpenAIPlannerProvider: OPENAI_API_KEY not set."
+            )
+
+        self._call_count += 1
+        payload = json.dumps({
+            "model": self.model,
+            "messages": [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt},
+            ],
+        }).encode("utf-8")
+
+        req = urllib.request.Request(
+            f"{self.base_url}/chat/completions",
+            data=payload,
+            headers={
+                "Content-Type": "application/json",
+                "Authorization": f"Bearer {self.api_key}",
+            },
+            method="POST",
+        )
+
+        try:
+            with urllib.request.urlopen(req, timeout=120) as resp:
+                data = json.loads(resp.read().decode("utf-8"))
+                return data["choices"][0]["message"]["content"]
+        except (urllib.error.URLError, urllib.error.HTTPError,
+                TimeoutError, json.JSONDecodeError, KeyError) as exc:
+            raise RuntimeError(
+                f"OpenAIPlannerProvider call failed: {exc}"
+            ) from exc
+
+
 def create_provider(
     config: Optional[EnvironmentPlannerConfig] = None,
 ) -> PlannerProvider:
     """Factory to create a provider from environment config."""
     cfg = config or load_provider_config()
 
-    if cfg.provider == "openrouter":
+    if cfg.provider == "openai":
+        return OpenAIPlannerProvider(
+            api_key=cfg.api_key,
+            model=cfg.model,
+            base_url=cfg.base_url,
+        )
+    elif cfg.provider == "openrouter":
         return OpenRouterPlannerProvider(
             api_key=cfg.api_key,
             model=cfg.model,
@@ -326,6 +402,12 @@ def create_provider(
             base_url=cfg.base_url or "http://localhost:11434",
             api_key=cfg.api_key,
             model=cfg.model,
+        )
+    elif cfg.provider == "openai":
+        return OpenAIPlannerProvider(
+            api_key=cfg.api_key,
+            model=cfg.model,
+            base_url=cfg.base_url,
         )
     else:
         return MockPlannerProvider()

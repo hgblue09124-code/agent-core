@@ -382,6 +382,42 @@ class TestCLISmoke(unittest.TestCase):
         self.assertIn("Executor", BANNER)
         self.assertIsInstance(HELP, str)
 
+    def test_cli_run_goal_end_to_end(self):
+        """CLI: goal → plan → task → execute → verify → result."""
+        import io, contextlib
+        from core.executor.cli import run_goal
+
+        tasks_dir = make_temp_tasks_dir()
+        try:
+            mgr = TaskManager(tasks_dir=tasks_dir)
+            from core.executor.executor import AgentExecutor
+            # Patch the default TaskManager via env-free injection by mocking
+            import core.executor.cli as cli_mod
+            orig_init = AgentExecutor.__init__
+
+            def patched_init(self, **kwargs):
+                kwargs.setdefault("task_manager", mgr)
+                orig_init(self, **kwargs)
+            AgentExecutor.__init__ = patched_init
+            try:
+                buf = io.StringIO()
+                with contextlib.redirect_stdout(buf):
+                    run_goal("cuu-gioi", "Inspect the project", no_execute=False)
+                out = buf.getvalue()
+            finally:
+                AgentExecutor.__init__ = orig_init
+
+            self.assertIn("Status", out)
+            self.assertIn("TASK-", out)
+            # Final result must be either COMPLETED or VERIFIED
+            self.assertTrue(
+                "VERIFIED" in out or "COMPLETED" in out,
+                f"Expected VERIFIED/COMPLETED in output, got:\n{out}",
+            )
+        finally:
+            import shutil
+            shutil.rmtree(tasks_dir)
+
 
 # ── Test runner ─────────────────────────────────────────────────────────
 
