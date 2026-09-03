@@ -72,6 +72,9 @@ class Evidence:
         return False
 
 
+from core.config.storage import get_storage_path
+
+
 class ProvenanceTracker:
     """In-memory evidence ledger.
 
@@ -80,7 +83,7 @@ class ProvenanceTracker:
 
     def __init__(self, storage_path: Optional[str] = None):
         if storage_path is None:
-            self._path = __import__("pathlib").Path("/root/agent-core/knowledge/evidence.json")
+            self._path = get_storage_path("knowledge/evidence.json")
         else:
             self._path = __import__("pathlib").Path(storage_path)
         self._path.parent.mkdir(parents=True, exist_ok=True)

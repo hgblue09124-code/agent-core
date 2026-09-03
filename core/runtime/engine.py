@@ -340,6 +340,7 @@ class RuntimeEngine:
                     return state, tasks
             elif verified:
                 state.completed_task_ids.append(task.task_id)
+                state.current_task_index += 1
 
             # Save checkpoint after each task
             state = self._checkpoint(state)

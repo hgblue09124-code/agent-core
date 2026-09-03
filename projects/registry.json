@@ -4,7 +4,7 @@
     "cuu-gioi": {
       "project_id": "cuu-gioi",
       "name": "Cửu Giới (Nine Realms)",
-      "root_path": "/root/.nanobot/workspace/Cuu-Gioi",
+      "root_path": "workspace/Cuu-Gioi",
       "agent_contract": "AGENT.md",
       "architecture": "ARCHITECTURE.md",
       "source_of_truth": "docs/architecture/source-of-truth.md",

@@ -14,6 +14,46 @@ from pathlib import Path
 from typing import Optional
 
 
+ENV_WORKSPACE_DIR = "AGENTCORE_WORKSPACE_DIR"
+
+
+def get_base_workspace_dir() -> Path:
+    """Return workspace base directory based on environment variable or repository root."""
+    env_dir = os.environ.get(ENV_WORKSPACE_DIR, "").strip()
+    if env_dir:
+        return Path(env_dir).resolve()
+    # Fallback to repo root: <agent-core>/
+    return Path(__file__).resolve().parents[2]
+
+
+def resolve_project_root(root_path: str) -> Path:
+    """Deterministically resolve project root path.
+
+    Rules:
+    1. Relative paths resolve relative to get_base_workspace_dir().
+    2. Absolute paths that exist resolve directly.
+    3. Nonexistent absolute paths do not silently guess alternative locations,
+       except preserving explicit legacy fallback for the Cuu-Gioi workspace path.
+    """
+    path_obj = Path(root_path)
+    base_ws = get_base_workspace_dir()
+
+    if path_obj.is_absolute():
+        if path_obj.exists():
+            return path_obj
+        # Legacy fallback for Cuu-Gioi workspace path
+        if "Cuu-Gioi" in path_obj.parts or "cuu-gioi" in path_obj.parts:
+            fallback = base_ws / "workspace" / "Cuu-Gioi"
+            if fallback.exists():
+                return fallback
+            fallback_direct = base_ws / "Cuu-Gioi"
+            if fallback_direct.exists():
+                return fallback_direct
+        return path_obj
+
+    return base_ws / path_obj
+
+
 @dataclass
 class Project:
     """Minimal project descriptor."""
@@ -113,7 +153,7 @@ class ProjectManager:
         if not project:
             return False, f"Project '{project_id}' not found in registry"
 
-        root = Path(project.root_path)
+        root = resolve_project_root(project.root_path)
         if not root.exists():
             return False, f"root_path does not exist: {root}"
         if not root.is_dir():
@@ -137,7 +177,8 @@ class ProjectManager:
         if not rel_path:
             return None
 
-        abs_path = Path(project.root_path) / rel_path
+        root = resolve_project_root(project.root_path)
+        abs_path = root / rel_path
         return str(abs_path) if abs_path.exists() else None
 
     def locate_agent_md(self, project_id: str) -> Optional[str]:
@@ -175,11 +216,12 @@ class ProjectManager:
         if not project:
             return None
 
+        root = resolve_project_root(project.root_path)
         context: dict = {
             "project_id": project.project_id,
             "name": project.name,
-            "root_path": project.root_path,
-            "path_valid": Path(project.root_path).exists(),
+            "root_path": str(root),
+            "path_valid": root.exists(),
             "status": project.status,
             "documents": {},
             "agent_contract": None,
@@ -222,8 +264,9 @@ class ProjectManager:
             print("No projects registered.")
             return
         for p in projects:
-            status_flag = "✓" if Path(p.root_path).exists() else "✗"
-            print(f"{status_flag} {p.project_id}  ({p.name})  [{p.status}]  — {p.root_path}")
+            root = resolve_project_root(p.root_path)
+            status_flag = "✓" if root.exists() else "✗"
+            print(f"{status_flag} {p.project_id}  ({p.name})  [{p.status}]  — {root}")
 
     def cli_inspect(self, project_id: str) -> None:
         """Print detailed project info to stdout."""
@@ -232,12 +275,12 @@ class ProjectManager:
             print(f"Project '{project_id}' not found in registry.")
             sys.exit(1)
 
-        root = Path(project.root_path)
+        root = resolve_project_root(project.root_path)
         path_ok = root.exists()
 
         print(f"Project ID   : {project.project_id}")
         print(f"Name         : {project.name}")
-        print(f"Root path    : {project.root_path}")
+        print(f"Root path    : {root}")
         print(f"Status       : {project.status}")
         print(f"Path valid   : {'yes' if path_ok else 'NO — does not exist'}")
         print()

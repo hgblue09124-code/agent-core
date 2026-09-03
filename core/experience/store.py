@@ -16,6 +16,7 @@ import os
 from pathlib import Path
 from typing import Optional
 
+from core.config.storage import get_storage_dir
 from core.experience.schema import Experience
 
 
@@ -30,7 +31,7 @@ class ExperienceStore:
 
     def __init__(self, store_dir: Optional[str] = None):
         if store_dir is None:
-            self._dir = Path("/root/agent-core/experience")
+            self._dir = get_storage_dir("experience")
         else:
             self._dir = Path(store_dir)
         self._dir.mkdir(parents=True, exist_ok=True)

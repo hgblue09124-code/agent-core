@@ -9,6 +9,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
+from core.config.storage import get_storage_dir
 from core.kernel.schema import KernelContext, KernelStatus
 
 
@@ -26,7 +27,7 @@ class KernelLifecycle:
 
     def __init__(self, storage_dir: Optional[str] = None):
         if storage_dir is None:
-            self._dir = Path("/root/agent-core/kernels")
+            self._dir = get_storage_dir("kernels")
         else:
             self._dir = Path(storage_dir)
         self._dir.mkdir(parents=True, exist_ok=True)

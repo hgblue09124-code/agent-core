@@ -18,6 +18,7 @@ import tempfile
 from pathlib import Path
 from typing import Optional
 
+from core.config.storage import get_storage_dir
 from core.knowledge.schema import Primitive, generate_primitive_id
 
 
@@ -36,7 +37,7 @@ class PrimitiveStore:
 
     def __init__(self, store_dir: Optional[str] = None):
         if store_dir is None:
-            self._dir = Path("/root/agent-core/knowledge")
+            self._dir = get_storage_dir("knowledge")
         else:
             self._dir = Path(store_dir)
         self._dir.mkdir(parents=True, exist_ok=True)

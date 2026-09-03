@@ -14,7 +14,138 @@ _root = Path(__file__).resolve().parents[1]
 if str(_root) not in sys.path:
     sys.path.insert(0, str(_root))
 
+import tempfile
 from core.config.manager import ConfigManager, ProviderConfig
+from core.config.storage import (
+    get_base_storage_dir,
+    get_storage_dir,
+    get_storage_path,
+    ENV_STORAGE_DIR,
+)
+from core.evaluation.evidence import EvidenceLedger
+from core.knowledge.provenance import ProvenanceTracker
+from core.knowledge.index import InvertedIndex
+from core.knowledge.store import PrimitiveStore
+from core.experience.store import ExperienceStore
+from core.runtime.checkpoint import CheckpointStore
+from core.kernel.lifecycle import KernelLifecycle
+
+
+class TestStorageConfig(unittest.TestCase):
+    """Tests for default storage directory & environment fallback."""
+
+    def setUp(self):
+        self._orig_env = os.environ.get(ENV_STORAGE_DIR)
+
+    def tearDown(self):
+        if self._orig_env is not None:
+            os.environ[ENV_STORAGE_DIR] = self._orig_env
+        else:
+            os.environ.pop(ENV_STORAGE_DIR, None)
+
+    def test_default_fallback(self):
+        os.environ.pop(ENV_STORAGE_DIR, None)
+        base = get_base_storage_dir()
+        self.assertEqual(base, Path.home() / ".agent-core")
+        self.assertEqual(get_storage_dir("runs"), Path.home() / ".agent-core" / "runs")
+        self.assertEqual(
+            get_storage_path("knowledge/index.json"),
+            Path.home() / ".agent-core" / "knowledge" / "index.json",
+        )
+
+    def test_environment_fallback(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            os.environ[ENV_STORAGE_DIR] = tmpdir
+            base = get_base_storage_dir()
+            self.assertEqual(base, Path(tmpdir).resolve())
+            self.assertEqual(get_storage_dir("knowledge"), Path(tmpdir).resolve() / "knowledge")
+            self.assertEqual(
+                get_storage_path("evaluation/evidence.json"),
+                Path(tmpdir).resolve() / "evaluation" / "evidence.json",
+            )
+
+    def test_absolute_subfolder_rejected(self):
+        with self.assertRaises(ValueError) as cm:
+            get_storage_dir("/etc/passwd")
+        self.assertIn("Absolute storage path rejected", str(cm.exception))
+
+    def test_absolute_relative_path_rejected(self):
+        with self.assertRaises(ValueError) as cm:
+            get_storage_path("/var/log/syslog")
+        self.assertIn("Absolute storage path rejected", str(cm.exception))
+
+    def test_path_traversal_outside_storage_root_rejected(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            os.environ[ENV_STORAGE_DIR] = tmpdir
+            with self.assertRaises(ValueError) as cm:
+                get_storage_path("../outside_file.json")
+            self.assertIn("traversal outside base storage root rejected", str(cm.exception))
+
+    def test_nested_valid_relative_path_accepted(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            os.environ[ENV_STORAGE_DIR] = tmpdir
+            p = get_storage_path("a/b/c/data.json")
+            self.assertEqual(p, Path(tmpdir).resolve() / "a" / "b" / "c" / "data.json")
+
+    def test_env_storage_dir_is_absolute_and_cwd_independent(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            full_path = (Path(tmpdir) / "custom_storage_dir").resolve()
+            full_path.mkdir(parents=True, exist_ok=True)
+            orig_cwd = os.getcwd()
+            try:
+                os.environ[ENV_STORAGE_DIR] = str(full_path)
+                os.chdir(tmpdir)
+                base1 = get_base_storage_dir()
+                self.assertTrue(base1.is_absolute())
+                self.assertEqual(base1, full_path)
+
+                # Change working directory elsewhere
+                os.chdir("/tmp")
+                base2 = get_base_storage_dir()
+                self.assertEqual(base2, full_path)
+            finally:
+                os.chdir(orig_cwd)
+
+    def test_empty_or_invalid_env_reverts_to_default(self):
+        os.environ[ENV_STORAGE_DIR] = "   "
+        base = get_base_storage_dir()
+        self.assertEqual(base, Path.home() / ".agent-core")
+
+    def test_explicit_configuration_overrides(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            os.environ[ENV_STORAGE_DIR] = "/env/should/not/be/used"
+            explicit_path = str(Path(tmpdir) / "custom.json")
+            ledger = EvidenceLedger(storage_path=explicit_path)
+            self.assertEqual(ledger._path, Path(explicit_path))
+
+            explicit_dir = str(Path(tmpdir) / "custom_store")
+            store = PrimitiveStore(store_dir=explicit_dir)
+            self.assertEqual(store._dir, Path(explicit_dir))
+
+    def test_core_classes_respect_env_storage_dir(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            os.environ[ENV_STORAGE_DIR] = tmpdir
+
+            ledger = EvidenceLedger()
+            self.assertEqual(ledger._path, Path(tmpdir) / "evaluation" / "evidence.json")
+
+            prov = ProvenanceTracker()
+            self.assertEqual(prov._path, Path(tmpdir) / "knowledge" / "evidence.json")
+
+            idx = InvertedIndex()
+            self.assertEqual(idx._path, Path(tmpdir) / "knowledge" / "index.json")
+
+            prims = PrimitiveStore()
+            self.assertEqual(prims._dir, Path(tmpdir) / "knowledge")
+
+            exps = ExperienceStore()
+            self.assertEqual(exps._dir, Path(tmpdir) / "experience")
+
+            ckpts = CheckpointStore()
+            self.assertEqual(ckpts._dir, Path(tmpdir) / "runs")
+
+            klife = KernelLifecycle()
+            self.assertEqual(klife._dir, Path(tmpdir) / "kernels")
 
 
 class TestConfigManager(unittest.TestCase):

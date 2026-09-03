@@ -22,7 +22,12 @@ _root = Path(__file__).resolve().parents[1]
 if str(_root) not in sys.path:
     sys.path.insert(0, str(_root))
 
-from core.projects.manager import ProjectManager, Project
+from core.projects.manager import (
+    ProjectManager,
+    Project,
+    resolve_project_root,
+    ENV_WORKSPACE_DIR,
+)
 from core.projects.context import load_project_context, ProjectContext
 
 
@@ -33,7 +38,49 @@ PROJECTS_DIR = AGENT_CORE_ROOT / "projects"
 REGISTRY_PATH = PROJECTS_DIR / "registry.json"
 
 # The real Cuu-Gioi project root
-CUU_GIOI_ROOT = Path("/root/.nanobot/workspace/Cuu-Gioi")
+CUU_GIOI_ROOT = resolve_project_root("workspace/Cuu-Gioi")
+
+
+class TestWorkspacePathResolution(unittest.TestCase):
+    """Tests for workspace path resolution and cwd independence."""
+
+    def setUp(self):
+        self._orig_env = os.environ.get(ENV_WORKSPACE_DIR)
+
+    def tearDown(self):
+        if self._orig_env is not None:
+            os.environ[ENV_WORKSPACE_DIR] = self._orig_env
+        else:
+            os.environ.pop(ENV_WORKSPACE_DIR, None)
+
+    def test_relative_path_resolves_from_repo_root(self):
+        os.environ.pop(ENV_WORKSPACE_DIR, None)
+        resolved = resolve_project_root("workspace/Cuu-Gioi")
+        self.assertEqual(resolved, AGENT_CORE_ROOT / "workspace" / "Cuu-Gioi")
+
+    def test_environment_workspace_dir_takes_precedence(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            os.environ[ENV_WORKSPACE_DIR] = tmpdir
+            resolved = resolve_project_root("my_proj")
+            self.assertEqual(resolved, Path(tmpdir) / "my_proj")
+
+    def test_cwd_independence(self):
+        orig_cwd = os.getcwd()
+        os.environ.pop(ENV_WORKSPACE_DIR, None)
+        with tempfile.TemporaryDirectory() as tmpdir:
+            try:
+                os.chdir(tmpdir)
+                resolved = resolve_project_root("workspace/Cuu-Gioi")
+                self.assertEqual(resolved, AGENT_CORE_ROOT / "workspace" / "Cuu-Gioi")
+            finally:
+                os.chdir(orig_cwd)
+
+    def test_nonexistent_absolute_path_fallback_regression(self):
+        # Discovered failure mode: hardcoded /root/.nanobot/workspace/Cuu-Gioi
+        fake_abs = "/root/.nanobot/workspace/Cuu-Gioi"
+        resolved = resolve_project_root(fake_abs)
+        self.assertTrue(resolved.exists(), f"Resolved path {resolved} should exist via fallback")
+        self.assertTrue(resolved.name == "Cuu-Gioi")
 
 
 class TestRegistryLoading(unittest.TestCase):
@@ -109,7 +156,7 @@ class TestProjectLookup(unittest.TestCase):
         self.assertIsNotNone(p)
         self.assertEqual(p.project_id, "cuu-gioi")
         self.assertEqual(p.name, "Cửu Giới (Nine Realms)")
-        self.assertEqual(p.root_path, str(CUU_GIOI_ROOT))
+        self.assertEqual(resolve_project_root(p.root_path), CUU_GIOI_ROOT)
         self.assertEqual(p.status, "active")
 
     def test_get_nonexistent_returns_none(self):

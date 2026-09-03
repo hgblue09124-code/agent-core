@@ -443,11 +443,12 @@ class TestTaskRunner(unittest.TestCase):
     def test_runner_verification_sets_verified_flag(self):
         """COMPLETED task has verification with verified=True."""
         task = self.mgr.create_task("cuu-gioi", "Verify Test")
+        project_root = load_task_context(task).project_root
         step = TaskStep(
             type=StepType.SHELL,
             title="List dir",
             command="ls",
-            args=["/root/.nanobot/workspace/Cuu-Gioi"],
+            args=[project_root],
             expect_exit_code=0,
             verify_contains=["AGENT.md"],
         )

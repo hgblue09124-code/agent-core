@@ -17,6 +17,7 @@ import tempfile
 from pathlib import Path
 from typing import Optional
 
+from core.config.storage import get_storage_dir
 from core.runtime.schema import RunState
 
 
@@ -25,7 +26,7 @@ class CheckpointStore:
 
     def __init__(self, runs_dir: Optional[str] = None):
         if runs_dir is None:
-            self._dir = Path("/root/agent-core/runs")
+            self._dir = get_storage_dir("runs")
         else:
             self._dir = Path(runs_dir)
         self._dir.mkdir(parents=True, exist_ok=True)

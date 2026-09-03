@@ -12,6 +12,7 @@ import re
 from pathlib import Path
 from typing import Optional
 
+from core.config.storage import get_storage_path
 from core.evaluation.schema import Evidence, EvidenceType
 
 
@@ -37,7 +38,7 @@ class EvidenceLedger:
 
     def __init__(self, storage_path: Optional[str] = None):
         if storage_path is None:
-            self._path = Path("/root/agent-core/evaluation/evidence.json")
+            self._path = get_storage_path("evaluation/evidence.json")
         else:
             self._path = Path(storage_path)
         self._path.parent.mkdir(parents=True, exist_ok=True)
