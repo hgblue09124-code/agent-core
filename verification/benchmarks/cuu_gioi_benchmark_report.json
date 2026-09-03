@@ -1,0 +1,81 @@
+{
+  "project_id": "cuu-gioi",
+  "timestamp": "2026-09-03T15:41:46Z",
+  "total_benchmark_duration_seconds": 0.843,
+  "benchmarks": [
+    {
+      "name": "cuu-gioi_context_loading",
+      "iterations": 50,
+      "total_seconds": 0.042022,
+      "avg_seconds": 0.00084,
+      "min_seconds": 0.000661,
+      "max_seconds": 0.002209,
+      "ops_per_second": 1189.85,
+      "notes": ""
+    },
+    {
+      "name": "cuu-gioi_task_execution",
+      "iterations": 20,
+      "total_seconds": 0.209707,
+      "avg_seconds": 0.010485,
+      "min_seconds": 0.006819,
+      "max_seconds": 0.014689,
+      "ops_per_second": 95.37,
+      "notes": ""
+    },
+    {
+      "name": "cuu-gioi_knowledge_retrieval",
+      "iterations": 30,
+      "total_seconds": 0.00687,
+      "avg_seconds": 0.000229,
+      "min_seconds": 0.000201,
+      "max_seconds": 0.000325,
+      "ops_per_second": 4366.77,
+      "notes": ""
+    },
+    {
+      "name": "cuu-gioi_kernel_full_loop",
+      "iterations": 5,
+      "total_seconds": 0.361984,
+      "avg_seconds": 0.072397,
+      "min_seconds": 0.06798,
+      "max_seconds": 0.081357,
+      "ops_per_second": 13.81,
+      "notes": ""
+    }
+  ],
+  "capabilities": {
+    "task_construction": {
+      "tested": true,
+      "evidence": "TaskConstructionContract validation PASS"
+    },
+    "task_decomposition": {
+      "tested": true,
+      "evidence": "Planner step decomposition into TaskSteps PASS"
+    },
+    "step_execution": {
+      "tested": true,
+      "evidence": "TaskRunner shell/inspect step execution PASS"
+    },
+    "observation": {
+      "tested": true,
+      "evidence": "Stdout/stderr snippet extraction PASS"
+    },
+    "verification": {
+      "tested": true,
+      "evidence": "TaskRunner verification against verify_contains PASS"
+    },
+    "retrieval": {
+      "tested": true,
+      "evidence": "KnowledgeEngine retrieve for cuu-gioi domain PASS"
+    },
+    "experience_recording": {
+      "tested": true,
+      "evidence": "ExperienceStore atomic record PASS"
+    },
+    "lesson_extraction": {
+      "tested": true,
+      "evidence": "ExperienceEngine lesson generation PASS"
+    }
+  }
+}
