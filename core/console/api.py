@@ -5,12 +5,12 @@ from __future__ import annotations
 
 import json
 import logging
-import os
+import queue
 import threading
 import time
 import urllib.parse
 from pathlib import Path
-from http.server import HTTPServer, BaseHTTPRequestHandler
+from http.server import HTTPServer, BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Optional
 
 from core.events.bus import get_bus
@@ -30,28 +30,98 @@ def _static_dir() -> Path:
 
 
 # ── SSE client registry ───────────────────────────────────────────────
+# SSE clients register as bus subscribers for real-time push.
+# Polling is removed; the bus notifies subscribers immediately on publish.
 
 _sse_clients: list["SSEClient"] = []
 _sse_lock = threading.Lock()
 
 
 class SSEClient:
-    def __init__(self, handler: BaseHTTPRequestHandler):
-        self.handler = handler
-        self.alive = True
+    """An SSE client with its own queue and bus subscriber thread.
 
-    def send(self, event_data: dict) -> None:
+    Events from the bus are queued (non-blocking) so the bus thread
+    is never blocked. A background thread drains the queue and writes
+    to the client socket.
+    """
+
+    def __init__(self, handler: BaseHTTPRequestHandler,
+                 run_id: Optional[str] = None):
+        self.handler = handler
+        self.run_id = run_id          # filter: None = all events
+        self.alive = True
+        self._queue: queue.Queue = queue.Queue(maxsize=200)
+        self._thread = threading.Thread(target=self._drain, daemon=True)
+        self._thread.start()
+
+        # Register as bus subscriber
+        bus = get_bus()
+        bus.subscribe(self._bus_handler)
+
+    def _bus_handler(self, event: AgentEvent) -> None:
+        """Called synchronously by EventBus.publish(). Runs in bus thread.
+
+        Non-blocking: drops event if queue is full rather than blocking
+        the bus thread. This keeps publish() latency low.
+        """
+        if not self.alive:
+            bus = get_bus()
+            bus.unsubscribe(self._bus_handler)
+            return
+        # Filter by run_id if specified
+        if self.run_id and event.run_id != self.run_id:
+            return
+        try:
+            self._queue.put_nowait(event.to_dict())
+        except queue.Full:
+            # Drop rather than block the bus thread
+            pass
+
+    def _drain(self) -> None:
+        """Background thread: write queued events to SSE socket."""
+        while self.alive:
+            try:
+                data = self._queue.get(timeout=1.0)
+                self._send(data)
+            except queue.Empty:
+                continue
+            except Exception:
+                break
+        # Drain remaining
+        while True:
+            try:
+                data = self._queue.get_nowait()
+                self._send(data)
+            except queue.Empty:
+                break
+            except Exception:
+                break
+
+    def _send(self, data: dict) -> None:
+        """Write one SSE data frame to the client."""
         if not self.alive:
             return
         try:
-            payload = f"data: {json.dumps(event_data, default=str)}\n\n"
+            payload = f"data: {json.dumps(data, default=str)}\n\n"
             self.handler.wfile.write(payload.encode("utf-8"))
             self.handler.wfile.flush()
         except Exception:
             self.alive = False
 
     def close(self) -> None:
+        """Unsubscribe from bus and signal drain thread to stop."""
+        if not self.alive:
+            return
         self.alive = False
+        try:
+            bus = get_bus()
+            bus.unsubscribe(self._bus_handler)
+        except Exception:
+            pass
+        try:
+            self.handler.wfile.close()
+        except Exception:
+            pass
 
 
 # ── Router ─────────────────────────────────────────────────────────────
@@ -111,6 +181,8 @@ class LiveActivityHandler(BaseHTTPRequestHandler):
                              "GET, OPTIONS")
             self.send_header("Access-Control-Allow-Headers",
                              "Content-Type, Cache-Control")
+            # Prevent nginx buffering for SSE
+            self.send_header("X-Accel-Buffering", "no")
         if extra:
             for k, v in extra.items():
                 self.send_header(k, v)
@@ -252,53 +324,70 @@ class LiveActivityHandler(BaseHTTPRequestHandler):
         })
 
     def _stream(self, run_id: str):
-        """Server-Sent Events endpoint for live updates."""
-        self._set_headers(200, "text/event-stream",
-                          extra={"Cache-Control": "no-cache",
-                                 "Connection": "keep-alive"})
+        """Server-Sent Events endpoint — real-time push via bus subscription.
 
-        client = SSEClient(self)
+        No polling. The SSE client registers as a bus subscriber and receives
+        events immediately when RuntimeEngine publishes them.
+        """
+        self._set_headers(200, "text/event-stream",
+                          extra={"Cache-Control": "no-store, no-cache",
+                                 "Connection": "keep-alive",
+                                 "X-Accel-Buffering": "no"})
+
+        # Create SSE client that subscribes to the bus
+        client = SSEClient(self, run_id=run_id)
 
         # Send current events first (catch-up)
         existing = self._combined_events(run_id=run_id)
         for ev in existing:
-            client.send(ev.to_dict())
+            # Queue for the drain thread (non-blocking)
+            client._queue.put_nowait(ev.to_dict())
 
+        # Register client for cleanup tracking
         with _sse_lock:
             _sse_clients.append(client)
 
-        self._sse_loop(client, run_id)
-
-    def _sse_loop(self, client: SSEClient, run_id: str):
-        """Poll for new events and send them to the client."""
-        last_run_count = len(self._combined_events(run_id=run_id))
-        last_result_sent = False
-        loop_deadline = time.time() + 60
-
+        # Send a "stream opened" comment so the browser knows it's live
         try:
-            while client.alive and time.time() < loop_deadline:
-                time.sleep(0.3)
-                current = self._combined_events(run_id=run_id)
-                if len(current) > last_run_count:
-                    for ev in current[last_run_count:]:
-                        client.send(ev.to_dict())
-                    last_run_count = len(current)
-                if current and current[-1].phase == "RESULT" and not last_result_sent:
-                    time.sleep(0.3)
-                    if client.alive:
-                        client.send({"type": "done"})
-                    last_result_sent = True
+            self.handler.wfile.write(b": connected\n\n")
+            self.handler.wfile.flush()
+        except Exception:
+            pass
+
+        # Register a done-sender callback via the run result check
+        # The drain thread watches for RESULT phase in the stream
+        self._sse_wait_for_done(client, run_id)
+
+    def _sse_wait_for_done(self, client: SSEClient, run_id: str) -> None:
+        """Wait for RESULT phase then send 'done' and close.
+
+        This runs in the request thread. We poll very infrequently
+        (every 5s) just to detect run completion — all real-time delivery
+        happens via the bus subscriber queue.
+        """
+        deadline = time.time() + 3600  # 1h max
+        try:
+            while client.alive and time.time() < deadline:
+                time.sleep(5)
+                if not client.alive:
+                    break
+                # Check if run has RESULT
+                evs = self._combined_events(run_id=run_id)
+                if evs and evs[-1].phase == "RESULT":
+                    try:
+                        payload = "data: {\"type\": \"done\"}\n\n"
+                        client.handler.wfile.write(payload.encode("utf-8"))
+                        client.handler.wfile.flush()
+                    except Exception:
+                        pass
                     break
         except Exception:
             pass
         finally:
+            client.close()
             with _sse_lock:
                 if client in _sse_clients:
                     _sse_clients.remove(client)
-            try:
-                client.handler.wfile.close()
-            except Exception:
-                pass
 
     # ── Static files ─────────────────────────────────────────────
 
@@ -345,7 +434,11 @@ class LiveActivityHandler(BaseHTTPRequestHandler):
 # ── Server ────────────────────────────────────────────────────────────
 
 class LiveActivityServer:
-    """HTTP API server for Live Activity Console."""
+    """HTTP API server for Live Activity Console.
+
+    Uses ThreadingHTTPServer so SSE long-lived connections do not block
+    other concurrent requests (e.g. healthz, static files).
+    """
 
     def __init__(self, host: str = "127.0.0.1", port: int = 8080):
         self.host = host
@@ -361,7 +454,8 @@ class LiveActivityServer:
     def start(self) -> None:
         if self._running:
             return
-        self._server = HTTPServer((self.host, self.port), LiveActivityHandler)
+        self._server = ThreadingHTTPServer(
+            (self.host, self.port), LiveActivityHandler)
         self._thread = threading.Thread(target=self._serve, daemon=True)
         self._thread.start()
         self._running = True
@@ -379,6 +473,14 @@ class LiveActivityServer:
             self._server.shutdown()
             self._server = None
         self._running = False
+        # Close all SSE clients gracefully
+        with _sse_lock:
+            for client in list(_sse_clients):
+                try:
+                    client.close()
+                except Exception:
+                    pass
+            _sse_clients.clear()
         logger.info("Live Activity API stopped")
 
     def wait(self) -> None:

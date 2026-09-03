@@ -28,6 +28,16 @@ logger = logging.getLogger(__name__)
 _EVENTS_PATH = Path("/tmp/agent-core-events.json")
 
 
+def _enum_value(v):
+    """Safely extract a string from either an Enum or a plain str.
+
+    After state.transition(), RunState.status / RunState.phase become
+    plain strings (not Enum members), so naive `.value` access raises
+    AttributeError. This helper handles both shapes uniformly.
+    """
+    return v.value if hasattr(v, "value") else str(v)
+
+
 class RuntimeEventAdapter:
     """Subscribes to RuntimeEngine phase transitions and emits AgentEvents.
 
@@ -75,7 +85,7 @@ class RuntimeEventAdapter:
             "COMPLETED": EventStatus.PASS.value,
             "FAILED": EventStatus.FAIL.value,
         }
-        status_val = task.status.value if hasattr(task.status, "value") else str(task.status)
+        status_val = _enum_value(task.status)
         ev_status = status_map.get(status_val, EventStatus.OK.value)
         self._emit(run_id, EventPhase.EXECUTE.value,
                    f"[{self._task_count}] {task.title}: {status_val}",
@@ -107,8 +117,8 @@ class RuntimeEventAdapter:
                    metadata={"recovered": recovered, "reason": reason[:200]})
 
     def on_run_end(self, run_id: str, state: "RunState") -> None:
-        status = state.status.value if hasattr(state.status, "value") else str(state.status)
-        phase = state.phase.value if hasattr(state.phase, "value") else str(state.phase)
+        status = _enum_value(state.status)
+        phase = _enum_value(state.phase)
         verdict = EventStatus.OK.value if status == "COMPLETED" else EventStatus.FAIL.value
         self._emit(run_id, EventPhase.RESULT.value,
                    f"Run {status} — {phase}",
@@ -131,20 +141,20 @@ class RuntimeEventAdapter:
                        status=status, **kwargs)
         try:
             self._bus.publish(ev)
-            # Persist to disk for cross-process visibility
-            _EVENTS_PATH.write_text(
-                json.dumps([e.to_dict() for e in self._bus._buffer], default=str)
-            )
         except Exception:
             logger.warning("EventBus publish failed (adapter): %s",
                            __import__("traceback").format_exc())
+        # Persist to disk for cross-process visibility.
+        # Use bus.save_to_file (atomic write) instead of rewriting
+        # the whole buffer synchronously on every event.
+        try:
+            self._bus.save_to_file(str(_EVENTS_PATH))
+        except Exception:
+            logger.warning("EventBus persist failed (adapter): %s",
+                           __import__("traceback").format_exc())
 
     def _task_metadata(self, task: "Task") -> dict:
-        status_val = (
-            task.status.value
-            if hasattr(task.status, "value")
-            else str(task.status)
-        )
+        status_val = _enum_value(task.status)
         meta = {"task_id": task.task_id, "status": status_val}
         if task.steps:
             s = task.steps[0]
@@ -185,7 +195,7 @@ def patch_runtime_engine() -> None:
         def event_checkpoint(state):
             result = _orig_checkpoint(state)
             # Emit phase change events
-            phase = state.phase.value if hasattr(state.phase, "value") else str(state.phase)
+            phase = _enum_value(state.phase)
             if phase == "BOOTSTRAP":
                 adapter.on_run_start(state.run_id, goal, project_id)
             elif phase == "PLANNING":
@@ -261,7 +271,7 @@ def patch_runtime_engine() -> None:
 
         def event_checkpoint(state):
             result = _orig_checkpoint(state)
-            phase = state.phase.value if hasattr(state.phase, "value") else str(state.phase)
+            phase = _enum_value(state.phase)
             if phase == "EXECUTING":
                 adapter.on_phase(state.run_id, EventPhase.EXECUTE.value,
                                  "RUNNING", "Resuming execution")
