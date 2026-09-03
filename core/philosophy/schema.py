@@ -126,10 +126,17 @@ class PhilosophyTendency:
             tags=list(d.get("tags", [])),
         )
 
-    def is_active_preference(self) -> bool:
-        """Returns True if the tendency can act as a soft behavioral preference."""
-        return self.status in (
-            PhilosophyStatus.CANDIDATE.value,
-            PhilosophyStatus.SUPPORTED.value,
-            PhilosophyStatus.WEAKENED.value,
-        ) and self.confidence >= 0.1
+    def is_active_preference(self, include_weakened: bool = False) -> bool:
+        """Returns True if the tendency can act as a soft behavioral preference.
+
+        Rules:
+        - CANDIDATE: False (forming seeds do NOT influence behavior).
+        - SUPPORTED: True (established preferences, if confidence >= 0.2).
+        - WEAKENED: False by default (only True if include_weakened=True).
+        - REJECTED / RETIRED: False.
+        """
+        if self.status == PhilosophyStatus.SUPPORTED.value:
+            return self.confidence >= 0.2
+        if include_weakened and self.status == PhilosophyStatus.WEAKENED.value:
+            return self.confidence >= 0.1
+        return False

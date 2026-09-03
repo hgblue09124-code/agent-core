@@ -94,14 +94,20 @@ class PhilosophyEngine:
         self,
         statement: str,
         origin: str = "human_teaching",
-        initial_confidence: float = 0.5,
+        initial_confidence: float = 0.4,
         tags: Optional[list[str]] = None,
+        establish_immediately: bool = False,
     ) -> PhilosophyTendency:
-        """Teach the Agent a new behavioral tendency. Starts as candidate or supported based on confidence."""
+        """Teach the Agent a new behavioral tendency.
+
+        Human teaching is a strong teaching input, but by default creates a CANDIDATE.
+        A single teaching event does NOT automatically become established SUPPORTED truth
+        unless explicitly requested via establish_immediately=True.
+        """
         now = self._now_str()
         status = (
             PhilosophyStatus.SUPPORTED.value
-            if initial_confidence >= 0.5
+            if establish_immediately
             else PhilosophyStatus.CANDIDATE.value
         )
 
@@ -289,20 +295,54 @@ class PhilosophyEngine:
 
     # ── Soft Behavioral Preferences & Precedence Enforcement ──────────
 
+    def validate_evidence_id(self, evidence_id: str) -> bool:
+        """Interface boundary hook for checking if an evidence_id is valid.
+
+        Can be integrated with core/evaluation/evidence.py or core/knowledge/provenance.py.
+        """
+        return bool(evidence_id and isinstance(evidence_id, str) and evidence_id.strip())
+
     def consult_soft_preferences(
         self,
         task_context: Optional[dict] = None,
         min_confidence: float = 0.2,
+        include_weakened: bool = False,
     ) -> list[PhilosophyTendency]:
         """Consult philosophy tendencies as SOFT PREFERENCES for decision-making.
 
-        Returns only active/supported tendencies sorted by confidence (highest first).
+        Returns only active (SUPPORTED) tendencies sorted by confidence (highest first).
+        If task_context is provided, deterministically filters or boosts matching tags/keywords.
+        CANDIDATE, REJECTED, and RETIRED tendencies are NEVER returned.
         """
         all_tendencies = self._store.list_all()
         active = [
             t for t in all_tendencies
-            if t.is_active_preference() and t.confidence >= min_confidence
+            if t.is_active_preference(include_weakened=include_weakened) and t.confidence >= min_confidence
         ]
+
+        if task_context and isinstance(task_context, dict):
+            # Deterministic keyword/tag matching
+            query_tokens = set()
+            for key in ("tags", "keywords", "project_id", "goal", "domain"):
+                val = task_context.get(key)
+                if isinstance(val, str):
+                    query_tokens.update(val.lower().split())
+                elif isinstance(val, (list, set, tuple)):
+                    for item in val:
+                        if isinstance(item, str):
+                            query_tokens.update(item.lower().split())
+
+            if query_tokens:
+                matched = []
+                for t in active:
+                    stmt_tokens = set(t.statement.lower().split())
+                    tag_tokens = {tag.lower() for tag in t.tags}
+                    if stmt_tokens.intersection(query_tokens) or tag_tokens.intersection(query_tokens):
+                        matched.append(t)
+                if matched:
+                    matched.sort(key=lambda x: x.confidence, reverse=True)
+                    return matched
+
         active.sort(key=lambda x: x.confidence, reverse=True)
         return active
 

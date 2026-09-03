@@ -25,22 +25,40 @@ Do NOT collapse these distinct abstractions into one single layer.
 
 ---
 
-## 2. Core Philosophy Pipeline
+## 2. Core Philosophy Pipeline & Hardened Lifecycle
 
 ```
 Kernel → Experience → Lesson → Philosophy Candidate → Evidence → Tendency → Behavior → Result → new Evidence
 ```
 
-1. **Experience**: Execution runs record actions and outcomes.
-2. **Lesson**: `LessonEngine` extracts structured patterns from experiences.
-3. **Philosophy Candidate**: `PhilosophyEngine.propose_candidate_from_lesson()` bridges a Lesson into a `PhilosophyTendency` candidate with explicit provenance.
-4. **Human Teaching & Feedback**: Operators teach, support, challenge, modify, reject, or retire tendencies.
-5. **Soft Behavioral Preference**: Planners and decision engines consult active tendencies as soft preferences.
-6. **New Evidence**: Results update supporting or contradicting evidence IDs and confidence scores.
+### Lifecycle States:
+- **`CANDIDATE`**: A forming seed derived from a Lesson or single Human Teaching event.
+  - *Behavioral Influence*: **ZERO** (`is_active_preference()` = `False`).
+- **`SUPPORTED`**: Established tendency backed by supporting evidence or confirmed human feedback (`confidence >= 0.2`).
+  - *Behavioral Influence*: **ACTIVE** as a soft preference.
+- **`WEAKENED`**: Tendency challenged by contradicting evidence (`confidence < 0.3`).
+  - *Behavioral Influence*: **INACTIVE** by default (excluded from `consult_soft_preferences()`).
+- **`REJECTED`**: Tendency explicitly rejected by operator (`confidence = 0.0`).
+  - *Behavioral Influence*: **PERMANENTLY INACTIVE**.
+- **`RETIRED`**: Tendency retired due to obsolescence (`confidence = 0.0`).
+  - *Behavioral Influence*: **PERMANENTLY INACTIVE**.
 
 ---
 
-## 3. Explicit Precedence Hierarchy
+## 3. Human Teaching & Feedback Semantics
+
+Human teaching is a strong influence/evidence input, but does **NOT** automatically become established truth:
+
+- `teach()`: Creates a `PhilosophyTendency` in `CANDIDATE` status by default.
+- `support()`: Confirms/strengthens a tendency with evidence, transitioning `CANDIDATE` $\rightarrow$ `SUPPORTED`.
+- `challenge()` / `contradict()`: Weakens confidence, attaches contradicting evidence IDs, and transitions `SUPPORTED` $\rightarrow$ `WEAKENED`.
+- `modify()`: Reshapes the tendency statement while preserving evolution history.
+- `reject()`: Rejects a tendency completely (`confidence = 0.0`, `status = REJECTED`).
+- `retire()`: Retires an obsolete tendency (`confidence = 0.0`, `status = RETIRED`).
+
+---
+
+## 4. Absolute Precedence Hierarchy
 
 The architecture enforces absolute precedence:
 
@@ -53,23 +71,9 @@ $$\text{Kernel / Security / Contracts} > \text{Verification Requirements} > \tex
 
 ---
 
-## 4. Human Teaching & Challenge Mechanisms
+## 5. Context-Aware Consultation
 
-Operators have full authority to reshape the Agent's behavioral tendencies over time:
-
-- `teach()`: Introduce a new behavioral tendency.
-- `support()`: Strengthen confidence and promote candidate to `SUPPORTED`.
-- `challenge()` / `contradict()`: Weaken confidence, add contradicting evidence, and transition status to `WEAKENED`.
-- `modify()`: Reshape the tendency statement while preserving evolution history.
-- `reject()`: Instantly reject a tendency (confidence = 0.0, status = `REJECTED`).
-- `retire()`: Retire an obsolete tendency (confidence = 0.0, status = `RETIRED`).
-
----
-
-## 5. Operational Self-Knowledge
-
-Philosophy tendencies capture operational self-knowledge derived from evidence and human critique, such as:
-
-- *"I tend to verify assumptions before modifying code."*
-- *"I perform better when I inspect project structure first."*
-- *"I tend to check test suite execution status before final submission."*
+`consult_soft_preferences(task_context, min_confidence, include_weakened)`:
+- Returns active `SUPPORTED` tendencies sorted by confidence.
+- Deterministically filters or ranks tendencies matching task context `tags`, `keywords`, `project_id`, or `goal`.
+- `CANDIDATE`, `REJECTED`, and `RETIRED` tendencies are **NEVER** returned.
