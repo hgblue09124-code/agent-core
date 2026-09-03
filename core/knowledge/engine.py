@@ -70,6 +70,7 @@ class KnowledgeEngine:
                           verification_method: str = "",
                           source_type: str = SourceType.MANUAL.value,
                           source_id: str = "",
+                          evidence_ids: Optional[list[str]] = None,
                           created_by: str = "agent-core",
                           notes: str = "",
                           run_id: str = "") -> Primitive:
@@ -89,6 +90,7 @@ class KnowledgeEngine:
                 source_type=source_type,
                 source_id=source_id,
                 run_id=run_id,
+                evidence_ids=evidence_ids or [],
                 created_by=created_by,
                 notes=notes,
             ),
