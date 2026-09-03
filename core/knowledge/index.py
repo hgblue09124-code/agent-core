@@ -17,6 +17,7 @@ import re
 from pathlib import Path
 from typing import Optional
 
+from core.config.storage import get_storage_path
 from core.knowledge.schema import Primitive, KnowledgeStatus
 
 
@@ -39,7 +40,7 @@ class InvertedIndex:
         if index_path:
             self._path = Path(index_path)
         else:
-            self._path = Path("/root/agent-core/knowledge/index.json")
+            self._path = get_storage_path("knowledge/index.json")
         self._term_index: dict[str, set[str]] = {}   # term -> set of prim ids
         self._domain_index: dict[str, set[str]] = {}  # domain -> set of prim ids
         self._status_index: dict[str, set[str]] = {}  # status -> set of prim ids
