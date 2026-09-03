@@ -107,12 +107,8 @@ class RuntimeEventAdapter:
                    metadata={"recovered": recovered, "reason": reason[:200]})
 
     def on_run_end(self, run_id: str, state: "RunState") -> None:
-        status = state.status
-        if not isinstance(status, str):
-            status = status.value
-        phase = state.phase
-        if not isinstance(phase, str):
-            phase = phase.value
+        status = state.status.value if hasattr(state.status, "value") else str(state.status)
+        phase = state.phase.value if hasattr(state.phase, "value") else str(state.phase)
         verdict = EventStatus.OK.value if status == "COMPLETED" else EventStatus.FAIL.value
         self._emit(run_id, EventPhase.RESULT.value,
                    f"Run {status} — {phase}",
@@ -189,9 +185,7 @@ def patch_runtime_engine() -> None:
         def event_checkpoint(state):
             result = _orig_checkpoint(state)
             # Emit phase change events
-            phase = state.phase
-            if not isinstance(phase, str):
-                phase = phase.value
+            phase = state.phase.value if hasattr(state.phase, "value") else str(state.phase)
             if phase == "BOOTSTRAP":
                 adapter.on_run_start(state.run_id, goal, project_id)
             elif phase == "PLANNING":
@@ -267,9 +261,7 @@ def patch_runtime_engine() -> None:
 
         def event_checkpoint(state):
             result = _orig_checkpoint(state)
-            phase = state.phase
-            if not isinstance(phase, str):
-                phase = phase.value
+            phase = state.phase.value if hasattr(state.phase, "value") else str(state.phase)
             if phase == "EXECUTING":
                 adapter.on_phase(state.run_id, EventPhase.EXECUTE.value,
                                  "RUNNING", "Resuming execution")
