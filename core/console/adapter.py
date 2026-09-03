@@ -144,7 +144,12 @@ class RuntimeEventAdapter:
                            __import__("traceback").format_exc())
 
     def _task_metadata(self, task: "Task") -> dict:
-        meta = {"task_id": task.task_id, "status": task.status.value}
+        status_val = (
+            task.status.value
+            if hasattr(task.status, "value")
+            else str(task.status)
+        )
+        meta = {"task_id": task.task_id, "status": status_val}
         if task.steps:
             s = task.steps[0]
             if s.result:
