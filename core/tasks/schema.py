@@ -2,11 +2,26 @@
 """Task schema — stable dataclass definitions with JSON serialization.
 
 Task Engine v0.1. No LLM. Stdlib only.
+
+Deep Task Prompt Primitive
+===========================
+A DeepTaskPrompt captures how GPT (Director) structurally specifies a coding
+task for NanoBot. It is NOT a prompt template — it is a structured contract
+representing the decision structure behind a high-quality task.
+
+Lifecycle:
+    GPT Reasoning → DeepTaskPrompt → Task → Execution → Evidence
+                → Evaluation → Lesson → Reusable Primitive
+
+A generated prompt is NOT automatically knowledge. The lifecycle enforces
+that evaluation evidence is required before any learning claim.
 """
 
 from __future__ import annotations
 
 import json
+import re
+import time as _time
 from dataclasses import dataclass, field, asdict
 from datetime import datetime, timezone
 from enum import Enum
@@ -220,11 +235,190 @@ class Task:
         return total
 
 
+# ── Evidence types for Deep Task Prompt ─────────────────────────────────
+
+# Reuse evidence type vocabulary from evaluation schema (avoid duplication).
+# Values are strings so no import cycle is needed.
+DTP_EVIDENCE_TYPES = (
+    "TEST",
+    "COMMAND_RESULT",
+    "FILE_STATE",
+    "RUNTIME_RESULT",
+    "REGRESSION_RESULT",
+    "COMMIT_STATE",
+    "ASSERTION",
+)
+
+
+# ── Deep Task Prompt Primitive ──────────────────────────────────────────
+
+_ID_RE = re.compile(r"^[A-Za-z0-9_\-]{3,64}$")
+
+
+@dataclass
+class DeepTaskPrompt:
+    """Structured representation of a GPT-directed coding task.
+
+    Models the full decision structure behind a high-quality NanoBot task:
+    - What to achieve (intent + acceptance criteria)
+    - Where to act (scope + files)
+    - How to act (execution strategy + constraints)
+    - What constitutes success (verification requirements)
+    - What went wrong if it failed (failure protocol)
+    - What was learned (learning capture)
+    - What outcome is expected (expected outcome)
+
+    NOT an LLM call. NOT an executor. Pure data with deterministic
+    validation. Serializable. Extensible.
+
+    A DeepTaskPrompt is NOT automatically knowledge. It becomes a candidate
+    for learning only after evaluation produces evidence of success.
+    """
+    # ── Identity ──────────────────────────────────────────────────────
+    prompt_id: str                  # unique stable id (e.g. "DTP-00001")
+    task_id: str                   # associated task id
+    project_id: str = ""           # project this prompt targets
+
+    # ── Intent ─────────────────────────────────────────────────────────
+    intent: str = ""               # What the task is fundamentally achieving
+    goal: str = ""                 # Specific target outcome
+
+    # ── Context ────────────────────────────────────────────────────────
+    context: list[str] = field(default_factory=list)   # relevant project state / files
+    prerequisites: list[str] = field(default_factory=list)  # preconditions
+
+    # ── Scope ─────────────────────────────────────────────────────────
+    scope: list[str] = field(default_factory=list)    # explicit boundaries (files/modules)
+    files: list[str] = field(default_factory=list)    # files to touch
+
+    # ── Constraints ────────────────────────────────────────────────────
+    must_not: list[str] = field(default_factory=list)  # forbidden actions
+    must: list[str] = field(default_factory=list)      # required actions
+    constraints: list[str] = field(default_factory=list)  # general constraints
+
+    # ── Execution Strategy ─────────────────────────────────────────────
+    strategy: str = ""              # recommended reasoning/execution sequence
+    reasoning_steps: list[str] = field(default_factory=list)  # inspect → reason → ...
+
+    # ── Acceptance Criteria ────────────────────────────────────────────
+    acceptance_criteria: list[str] = field(default_factory=list)
+    done_when: str = ""            # natural-language finish condition
+
+    # ── Verification Requirements ─────────────────────────────────────
+    verification_requirements: list[str] = field(default_factory=list)
+    verify_with: list[str] = field(default_factory=list)  # command / test names
+    expected_evidence_types: list[str] = field(default_factory=list)
+    # Reuse EvidenceType vocabulary: TEST, COMMAND_RESULT, FILE_STATE,
+    # RUNTIME_RESULT, REGRESSION_RESULT, COMMIT_STATE
+
+    # ── Failure Protocol ───────────────────────────────────────────────
+    failure_protocol: str = ""      # what to do on failure
+    failure_actions: list[str] = field(default_factory=list)  # inspect → retry → replan
+    max_retries: int = 3           # bounded retries
+    recovery_strategy: str = ""     # how to recover from failure
+
+    # ── Evidence Requirements ─────────────────────────────────────────
+    required_evidence: list[str] = field(default_factory=list)
+    evidence_after_success: list[str] = field(default_factory=list)
+    evidence_after_failure: list[str] = field(default_factory=list)
+
+    # ── Learning Capture ──────────────────────────────────────────────
+    # Filled after execution + evaluation
+    observations: list[str] = field(default_factory=list)    # what was observed
+    decisions: list[str] = field(default_factory=list)      # key decisions made
+    actions_taken: list[str] = field(default_factory=list)  # actions executed
+    failure_reason: str = ""       # root cause if failed
+    recovery_applied: str = ""     # recovery that was applied
+    lesson: str = ""              # reusable lesson / pattern
+    reusable_pattern: str = ""     # pattern extracted for future use
+    evaluation_id: str = ""       # links to Evaluation that verified this
+
+    # ── Expected Outcome ───────────────────────────────────────────────
+    expected_outcome: str = ""      # explicit outcome description
+    expected_changed_files: list[str] = field(default_factory=list)
+    expected_verification: str = ""  # what verification should show
+
+    # ── Provenance ────────────────────────────────────────────────────
+    created_by: str = "gpt-director"   # who authored this prompt
+    created_at: str = ""
+    schema_version: int = 1
+
+    # ── Validation ────────────────────────────────────────────────────
+
+    def validate(self) -> tuple[bool, str]:
+        """Deterministic validation. Returns (valid, reason)."""
+        if not self.prompt_id or not _ID_RE.match(self.prompt_id):
+            return False, f"prompt_id must match {_ID_RE.pattern}"
+        if not self.task_id or not _ID_RE.match(self.task_id):
+            return False, f"task_id must match {_ID_RE.pattern}"
+        if not self.intent or not self.intent.strip():
+            return False, "intent is required"
+        if not self.goal or not self.goal.strip():
+            return False, "goal is required"
+        if not self.acceptance_criteria and not self.done_when:
+            return False, "Either acceptance_criteria or done_when is required"
+        if not self.expected_evidence_types:
+            return False, "expected_evidence_types is required"
+        # Validate evidence type values
+        for et in self.expected_evidence_types:
+            if et not in DTP_EVIDENCE_TYPES:
+                return False, f"Unknown evidence type: {et}"
+        # Validate failure_actions values
+        valid_actions = {"inspect", "reason", "modify", "test", "verify",
+                         "report", "retry", "replan", "stop"}
+        for fa in self.failure_actions:
+            if fa not in valid_actions:
+                return False, f"Unknown failure_action: {fa}"
+        if self.max_retries < 0:
+            return False, "max_retries must be non-negative"
+        return True, ""
+
+    # ── Serialization ─────────────────────────────────────────────────
+
+    def to_dict(self) -> dict:
+        return asdict(self)
+
+    @classmethod
+    def from_dict(cls, d: dict) -> "DeepTaskPrompt":
+        return cls(**d)
+
+    def to_json(self) -> str:
+        return json.dumps(self.to_dict(), indent=2, ensure_ascii=False)
+
+    @classmethod
+    def from_json(cls, text: str) -> "DeepTaskPrompt":
+        return cls.from_dict(json.loads(text))
+
+    # ── Helpers ────────────────────────────────────────────────────────
+
+    def now_str(self) -> str:
+        return datetime.now(timezone.utc).isoformat(timespec="seconds")
+
+    def is_valid(self) -> bool:
+        valid, _ = self.validate()
+        return valid
+
+    def learning_ready(self) -> bool:
+        """True only after execution + evaluation produces evidence."""
+        return (
+            bool(self.lesson)
+            and bool(self.evaluation_id)
+            and bool(self.reusable_pattern)
+        )
+
+
+# ── ID generation ──────────────────────────────────────────────────────
+
+def new_task_id(sequence: int) -> str:
+    return f"TASK-{sequence:04d}"
+
+
+def new_dtp_id() -> str:
+    """Monotonic deep-task-prompt id."""
+    return f"DTP-{int(_time.time() * 1000) % 100000:05d}"
+
+
 # ── Utilities ─────────────────────────────────────────────────────────────
 
 def _now() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
-
-
-def new_task_id(sequence: int) -> str:
-    return f"TASK-{sequence:04d}"
