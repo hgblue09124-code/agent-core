@@ -129,6 +129,158 @@ class VerificationResult:
         return cls(**d)
 
 
+# ── Task Construction Contract ──────────────────────────────────────────
+# First-class kernel capability: define WHAT is built before execution.
+
+_VALID_ACTIONS = frozenset({"inspect", "reason", "modify", "test", "verify",
+                             "report", "retry", "replan", "stop"})
+
+
+@dataclass
+class TaskConstructionContract:
+    """Structured contract defining WHAT must be built before execution.
+
+    Task Construction is a first-class kernel capability. This contract
+    is authored by Administrator/GPT before the Task Engine runs.
+
+    Architecture:
+        Administrator/GPT
+               ↓
+        Task Construction (this contract)
+               ↓
+        Structured Task Contract
+               ↓
+        Task Engine
+               ↓
+        NanoBot Execution
+               ↓
+        Verification
+               ↓
+        Experience / Knowledge
+
+    The contract is purely declarative. It does NOT execute, does NOT
+    call LLM, does NOT dispatch NanoBot. It is a kernel primitive.
+
+    Lifecycle: authored -> validated -> attached to Task -> executed
+    -> verified -> experience/knowledge captured.
+
+    Compatible with existing Evaluation evidence model.
+    """
+    # ── Identity ─────────────────────────────────────────────────────────
+    contract_id: str = ""              # unique stable id (e.g. "TCC-00001")
+    title: str = ""                    # short human-readable title
+
+    # ── Objective ───────────────────────────────────────────────────────
+    objective: str = ""                 # fundamental goal of this task
+    rationale: str = ""               # why this objective matters
+
+    # ── Context ─────────────────────────────────────────────────────────
+    context: list[str] = field(default_factory=list)   # relevant files / state
+    prerequisites: list[str] = field(default_factory=list)  # preconditions
+
+    # ── Scope ───────────────────────────────────────────────────────────
+    scope: list[str] = field(default_factory=list)     # explicit boundaries
+    files_in_scope: list[str] = field(default_factory=list)  # files to modify
+    files_not_in_scope: list[str] = field(default_factory=list)  # off-limits
+
+    # ── Constraints ──────────────────────────────────────────────────────
+    must: list[str] = field(default_factory=list)      # required actions
+    must_not: list[str] = field(default_factory=list)  # forbidden actions
+    constraints: list[str] = field(default_factory=list)  # general constraints
+
+    # ── Execution Guidance ──────────────────────────────────────────────
+    guidance: str = ""                 # recommended approach / strategy
+    reasoning_steps: list[str] = field(
+        default_factory=list
+    )                                  # e.g. ["inspect", "reason", "modify", "test"]
+
+    # ── Acceptance Criteria ──────────────────────────────────────────────
+    acceptance_criteria: list[str] = field(default_factory=list)
+    done_when: str = ""               # natural-language finish condition
+
+    # ── Verification Requirements ───────────────────────────────────────
+    verification_requirements: list[str] = field(default_factory=list)
+    verify_with: list[str] = field(default_factory=list)  # commands / tools
+    expected_evidence_types: list[str] = field(
+        default_factory=list
+    )                                  # e.g. TEST, COMMAND_RESULT, FILE_STATE
+
+    # ── Evidence Requirements ────────────────────────────────────────────
+    required_evidence: list[str] = field(default_factory=list)
+    evidence_after_success: list[str] = field(default_factory=list)
+    evidence_after_failure: list[str] = field(default_factory=list)
+
+    # ── Failure Handling ─────────────────────────────────────────────────
+    failure_protocol: str = ""          # what to do on failure
+    failure_actions: list[str] = field(default_factory=list)  # inspect → retry → replan
+    max_retries: int = 3             # bounded retry count
+    recovery_strategy: str = ""        # how to recover from failure
+
+    # ── Expected Outcome ────────────────────────────────────────────────
+    expected_outcome: str = ""         # explicit outcome description
+    expected_changed_files: list[str] = field(default_factory=list)
+    expected_verification: str = ""    # what verification should demonstrate
+
+    # ── Provenance ──────────────────────────────────────────────────────
+    authored_by: str = "gpt-administrator"
+    authored_at: str = ""
+    schema_version: int = 1
+
+    # ── Validation ──────────────────────────────────────────────────────
+
+    def validate(self) -> tuple[bool, str]:
+        """Deterministic validation. Returns (valid, reason)."""
+        if not self.contract_id or not _ID_RE.match(self.contract_id):
+            return False, f"contract_id must match {_ID_RE.pattern}"
+        if not self.objective or not self.objective.strip():
+            return False, "objective is required"
+        if not self.acceptance_criteria and not self.done_when:
+            return False, "Either acceptance_criteria or done_when is required"
+        if not self.expected_evidence_types:
+            return False, "expected_evidence_types is required"
+        for et in self.expected_evidence_types:
+            if et not in DTP_EVIDENCE_TYPES:
+                return False, f"Unknown evidence type: {et}"
+        for fa in self.failure_actions:
+            if fa not in _VALID_ACTIONS:
+                return False, f"Unknown failure_action: {fa!r}"
+        if self.max_retries < 0:
+            return False, "max_retries must be non-negative"
+        return True, ""
+
+    # ── Serialization ───────────────────────────────────────────────────
+
+    def to_dict(self) -> dict:
+        return asdict(self)
+
+    @classmethod
+    def from_dict(cls, d: dict) -> "TaskConstructionContract":
+        return cls(**d)
+
+    def to_json(self) -> str:
+        return json.dumps(self.to_dict(), indent=2, ensure_ascii=False)
+
+    @classmethod
+    def from_json(cls, text: str) -> "TaskConstructionContract":
+        return cls.from_dict(json.loads(text))
+
+    # ── Helpers ─────────────────────────────────────────────────────────
+
+    def is_valid(self) -> bool:
+        valid, _ = self.validate()
+        return valid
+
+    def construction_summary(self) -> str:
+        """Human-readable summary for logging."""
+        return (
+            f"TaskConstructionContract[{self.contract_id}] "
+            f"objective={self.objective[:60]!r} "
+            f"scope={len(self.scope)} files "
+            f"acceptance_criteria={len(self.acceptance_criteria)} "
+            f"max_retries={self.max_retries}"
+        )
+
+
 # ── Task ─────────────────────────────────────────────────────────────────
 
 @dataclass
@@ -146,6 +298,10 @@ class Task:
     result: Optional[str] = None   # human-readable summary of all steps
     verification: Optional[VerificationResult] = None
     error: Optional[str] = None    # fatal error (task itself failed to start)
+    # Optional structured construction contract (Task Construction layer).
+    # When present, this defines WHAT must be built before execution begins.
+    # It does NOT change existing Task semantics — purely additive.
+    construction: Optional["TaskConstructionContract"] = None
 
     # ── Serialization ─────────────────────────────────────────────────────
 
@@ -154,6 +310,8 @@ class Task:
         d["status"] = self.status.value
         d["steps"] = [s.to_dict() for s in self.steps]
         d["verification"] = self.verification.to_dict() if self.verification else None
+        # asdict() already recursively converts nested dataclasses to dicts,
+        # so construction is already a dict here. Leave it as-is.
         return d
 
     @classmethod
@@ -163,6 +321,10 @@ class Task:
         d["steps"] = [TaskStep.from_dict(s) for s in d.get("steps", [])]
         v = d.get("verification")
         d["verification"] = VerificationResult.from_dict(v) if v else None
+        c = d.get("construction")
+        d["construction"] = (
+            TaskConstructionContract.from_dict(c) if isinstance(c, dict) else None
+        )
         return cls(**d)
 
     def to_json(self) -> str:
