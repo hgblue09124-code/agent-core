@@ -1,0 +1,142 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://agent-core.example/constitution/schemas/capabilities.json",
+  "title": "Agent Core Capability Model",
+  "description": "Formal definition of agent capabilities and their promotion stages",
+  "version": "1.0.0",
+  "type": "object",
+  "required": ["capabilities", "promotion_model"],
+  "properties": {
+    "capabilities": {
+      "type": "array",
+      "minItems": 8,
+      "items": {
+        "type": "object",
+        "required": [
+          "capability_id",
+          "name",
+          "definition",
+          "test_required",
+          "stages"
+        ],
+        "properties": {
+          "capability_id": {
+            "type": "string",
+            "pattern": "^CAP-[a-z_]+$"
+          },
+          "name": {
+            "type": "string"
+          },
+          "definition": {
+            "type": "string",
+            "minLength": 20
+          },
+          "test_required": {
+            "type": "string"
+          },
+          "input": {
+            "type": "string"
+          },
+          "output": {
+            "type": "string"
+          },
+          "stages": {
+            "type": "array",
+            "minItems": 6,
+            "items": {
+              "type": "object",
+              "required": ["stage", "evidence_required", "test_count"],
+              "properties": {
+                "stage": {
+                  "type": "string",
+                  "enum": [
+                    "candidate",
+                    "tested",
+                    "verified",
+                    "repeated",
+                    "generalized",
+                    "proven"
+                  ]
+                },
+                "evidence_required": {
+                  "type": "array",
+                  "items": {"type": "string"}
+                },
+                "test_count": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "diversity_required": {
+                  "type": "boolean"
+                },
+                "real_task_required": {
+                  "type": "boolean"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "promotion_model": {
+      "type": "object",
+      "required": ["stages", "evidence_threshold", "progression_rules"],
+      "properties": {
+        "stages": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["name", "order", "evidence_threshold"],
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "order": {
+                "type": "integer"
+              },
+              "evidence_threshold": {
+                "type": "integer"
+              },
+              "test_diversity_minimum": {
+                "type": "integer"
+              },
+              "real_task_minimum": {
+                "type": "integer"
+              }
+            }
+          }
+        },
+        "evidence_threshold": {
+          "type": "object",
+          "required": ["min_tests", "min_real_tasks"],
+          "properties": {
+            "min_tests": {
+              "type": "integer"
+            },
+            "min_real_tasks": {
+              "type": "integer"
+            },
+            "min_diverse_scenarios": {
+              "type": "integer"
+            }
+          }
+        },
+        "progression_rules": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["from", "to", "requires"],
+            "properties": {
+              "from": {"type": "string"},
+              "to": {"type": "string"},
+              "requires": {
+                "type": "array",
+                "items": {"type": "string"}
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

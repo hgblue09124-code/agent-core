@@ -1,0 +1,147 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://agent-core.example/constitution/schemas/verification_layers.json",
+  "title": "Agent Core Verification Layers",
+  "description": "Formal definition of verification layers and their requirements",
+  "version": "1.0.0",
+  "type": "object",
+  "required": ["verification_layers", "verification_gate", "adversarial_cases"],
+  "properties": {
+    "verification_layers": {
+      "type": "array",
+      "minItems": 9,
+      "items": {
+        "type": "object",
+        "required": ["layer", "verifies", "required_evidence", "test"],
+        "properties": {
+          "layer": {
+            "type": "string",
+            "enum": [
+              "architectural",
+              "behavioral",
+              "integration",
+              "regression",
+              "evidence",
+              "reproducibility",
+              "real_task",
+              "capability",
+              "adversarial"
+            ]
+          },
+          "verifies": {
+            "type": "string"
+          },
+          "required_evidence": {
+            "type": "array",
+            "minItems": 1,
+            "items": {"type": "string"}
+          },
+          "method": {
+            "type": "string"
+          },
+          "test": {
+            "type": "string"
+          },
+          "verdict_produces": {
+            "type": "string",
+            "enum": ["PASS", "FAIL", "INCONCLUSIVE"]
+          }
+        }
+      }
+    },
+    "verification_gate": {
+      "type": "object",
+      "required": ["conditions", "prohibitions"],
+      "properties": {
+        "conditions": {
+          "type": "array",
+          "minItems": 3,
+          "items": {
+            "type": "object",
+            "required": ["condition", "enforcement"],
+            "properties": {
+              "condition": {
+                "type": "string"
+              },
+              "enforcement": {
+                "type": "string"
+              }
+            }
+          }
+        },
+        "prohibitions": {
+          "type": "array",
+          "minItems": 2,
+          "items": {
+            "type": "object",
+            "required": ["prohibited_action", "enforcement"],
+            "properties": {
+              "prohibited_action": {
+                "type": "string"
+              },
+              "enforcement": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      }
+    },
+    "adversarial_cases": {
+      "type": "array",
+      "minItems": 16,
+      "items": {
+        "type": "object",
+        "required": ["case_id", "description", "expected_behavior", "test"],
+        "properties": {
+          "case_id": {
+            "type": "string",
+            "pattern": "^ADV-[0-9]+$"
+          },
+          "category": {
+            "type": "string",
+            "enum": [
+              "malformed_input",
+              "missing_evidence",
+              "fabrication",
+              "false_verification",
+              "incomplete_execution",
+              "wrong_placement",
+              "forbidden_escalation",
+              "unauthorized_change",
+              "regression",
+              "repeated_failure",
+              "inconsistent_state",
+              "misleading_report",
+              "improvement_without_baseline",
+              "knowledge_without_verification",
+              "capability_without_evidence",
+              "authority_escalation"
+            ]
+          },
+          "description": {
+            "type": "string"
+          },
+          "expected_behavior": {
+            "type": "string",
+            "enum": [
+              "validate() returns (False, reason)",
+              "Evaluation verdict = FAIL",
+              "Verification FAILS",
+              "PermissionError raised",
+              "FATAL raised",
+              "Budget check stops execution",
+              "Comparator returns REGRESSED",
+              "Store raises error",
+              "Policy engine blocks",
+              "Architectural test FAILS"
+            ]
+          },
+          "test": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  }
+}

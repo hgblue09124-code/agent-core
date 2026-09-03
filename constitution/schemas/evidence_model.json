@@ -1,0 +1,151 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://agent-core.example/constitution/schemas/evidence_model.json",
+  "title": "Agent Core Evidence Model",
+  "description": "Formal evidence model: Claim → Evidence → Verification → Evaluation",
+  "version": "1.0.0",
+  "type": "object",
+  "required": ["evidence_types", "claims", "integrity_rules"],
+  "properties": {
+    "evidence_types": {
+      "type": "array",
+      "minItems": 8,
+      "items": {
+        "type": "object",
+        "required": ["type", "description", "source"],
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "TEST",
+              "ASSERTION",
+              "COMMAND_RESULT",
+              "FILE_STATE",
+              "CHECKPOINT",
+              "BENCHMARK",
+              "REGRESSION",
+              "MANUAL"
+            ]
+          },
+          "description": {
+            "type": "string"
+          },
+          "source": {
+            "type": "string",
+            "enum": [
+              "TaskRunner",
+              "RuntimeEngine",
+              "Kernel",
+              "Administrator",
+              "EvidenceLedger",
+              "Comparator"
+            ]
+          },
+          "required_for_achievement": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "TASK_COMPLETED",
+                "GOAL_ACHIEVED",
+                "SOLUTION_VALID",
+                "SOLUTION_OPTIMAL"
+              ]
+            }
+          }
+        }
+      }
+    },
+    "claims": {
+      "type": "array",
+      "minItems": 7,
+      "items": {
+        "type": "object",
+        "required": ["claim", "required_evidence", "evidence_types"],
+        "properties": {
+          "claim": {
+            "type": "string",
+            "enum": [
+              "implemented",
+              "tested",
+              "verified",
+              "learned",
+              "improved",
+              "capability_proven",
+              "authority_promoted"
+            ]
+          },
+          "required_evidence": {
+            "type": "array",
+            "minItems": 1,
+            "items": {"type": "string"}
+          },
+          "evidence_types": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "TEST",
+                "ASSERTION",
+                "COMMAND_RESULT",
+                "FILE_STATE",
+                "CHECKPOINT",
+                "BENCHMARK",
+                "REGRESSION",
+                "MANUAL"
+              ]
+            }
+          },
+          "minimum_count": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "enforcement_location": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "integrity_rules": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["rule", "enforcement"],
+        "properties": {
+          "rule": {
+            "type": "string"
+          },
+          "enforcement": {
+            "type": "string",
+            "enum": [
+              "EvidenceLedger.record()",
+              "KnowledgeValidator",
+              "PromotionEngine.can_promote()",
+              "Evaluator._determine_verdict()",
+              "ImprovementEngine.decide()"
+            ]
+          },
+          "secret_patterns": {
+            "type": "array",
+            "items": {"type": "string"}
+          }
+        }
+      }
+    },
+    "secret_patterns": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["pattern", "name"],
+        "properties": {
+          "pattern": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  }
+}

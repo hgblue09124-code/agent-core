@@ -1,0 +1,359 @@
+{
+  "constitution_version": "1.0.0",
+  "preamble": {
+    "authority": "This constitution governs all layers below it.",
+    "purpose": "Establish the authoritative rule system for agent-core covering authority, absolute invariants, architectural boundaries, and authority model transitions.",
+    "enforceability": "both"
+  },
+  "articles": [
+    {
+      "article_id": "Article I",
+      "title": "Authority",
+      "sections": [
+        {
+          "section_id": "1.1",
+          "title": "Architecture Decision",
+          "actor": "Administrator",
+          "may": [
+            "Define the overall system architecture",
+            "Approve architectural changes",
+            "Define the authority model transitions",
+            "Set policy defaults"
+          ],
+          "must_not": [
+            "Override kernel-level safety invariants",
+            "Bypass the policy engine at runtime",
+            "Silently modify constitutional modules without evidence"
+          ],
+          "enforcement_mechanism": "PolicyEngine + Administrator approval",
+          "test_required": "test_authority_matrix"
+        },
+        {
+          "section_id": "1.2",
+          "title": "Task Definition",
+          "actor": "Administrator",
+          "may": [
+            "Author TaskConstructionContracts",
+            "Define acceptance criteria",
+            "Define evidence requirements",
+            "Define failure protocols"
+          ],
+          "must_not": [
+            "Modify objective mid-execution",
+            "Skip verification"
+          ],
+          "enforcement_mechanism": "TaskConstructionContract.validate()",
+          "test_required": "test_task_construction"
+        }
+      ]
+    },
+    {
+      "article_id": "Article II",
+      "title": "Absolute Invariants",
+      "sections": [
+        {
+          "section_id": "2.1",
+          "title": "INV-1: No Evidence → No Claim",
+          "may": [],
+          "must_not": ["Claim implementation/verification without evidence"],
+          "enforcement_mechanism": "EvidenceLedger + EvaluationEngine"
+        }
+      ]
+    },
+    {
+      "article_id": "Article III",
+      "title": "Architectural Boundary",
+      "sections": [
+        {
+          "section_id": "3.1",
+          "title": "Kernel Boundaries",
+          "actor": "Kernel",
+          "may": [
+            "Bootstrap run context",
+            "Call knowledge retrieval",
+            "Orchestrate execution",
+            "Record experience",
+            "Trigger evaluation",
+            "Emit events"
+          ],
+          "must_not": [
+            "Execute shell commands directly",
+            "Call LLM directly",
+            "Declare verification of its own output",
+            "Persist API keys or secrets"
+          ],
+          "enforcement_mechanism": "Code structure (no subprocess in kernel)",
+          "test_required": "test_architectural_boundaries"
+        }
+      ]
+    },
+    {
+      "article_id": "Article IV",
+      "title": "EARLY / MID / FINAL Authority Model",
+      "sections": [
+        {
+          "section_id": "4.1",
+          "title": "EARLY State",
+          "may": ["Execute tasks as defined by Administrator"],
+          "must_not": ["Automatic dispatch", "Self-construct tasks"]
+        }
+      ]
+    },
+    {
+      "article_id": "Article V",
+      "title": "Evidence Integrity",
+      "sections": [
+        {
+          "section_id": "5.1",
+          "title": "Secret Detection",
+          "may": [],
+          "must_not": ["Persist secrets in evidence/experience/knowledge"]
+        }
+      ]
+    },
+    {
+      "article_id": "Article VI",
+      "title": "Constitutional Enforcement",
+      "sections": [
+        {
+          "section_id": "6.1",
+          "title": "Test-Based Enforcement",
+          "may": [],
+          "must_not": ["Release code that fails constitutional tests"]
+        }
+      ]
+    },
+    {
+      "article_id": "Article VII",
+      "title": "Amendments",
+      "sections": [
+        {
+          "section_id": "7.1",
+          "title": "Amendment Process",
+          "may": ["Amend non-safety rules via 5-step process"],
+          "must_not": ["Suspend safety invariants"]
+        }
+      ]
+    },
+    {
+      "article_id": "Article VIII",
+      "title": "Interpretation",
+      "sections": [
+        {
+          "section_id": "8.1",
+          "title": "Ambiguity Resolution",
+          "may": [],
+          "must_not": ["Silently resolve ambiguity without records"]
+        }
+      ]
+    }
+  ],
+  "invariants": [
+    {
+      "invariant_id": "INV-1",
+      "name": "No Evidence → No Claim",
+      "rule": "A claim must be accompanied by evidence.",
+      "enforcement": {
+        "mechanism": "evaluation",
+        "location": "core/evaluation/evaluator.py",
+        "raises": "Empty evidence -> verdict FAIL"
+      },
+      "test": "test_INV1_no_evidence_no_pass",
+      "safety_critical": true
+    },
+    {
+      "invariant_id": "INV-2",
+      "name": "Generated != Active",
+      "rule": "A GENERATED primitive MUST NOT reach ACTIVE without manual validation.",
+      "enforcement": {
+        "mechanism": "lifecycle_check",
+        "location": "core/knowledge/promotion.py",
+        "raises": "LifecycleError"
+      },
+      "test": "test_INV2_generated_cannot_be_active",
+      "safety_critical": true
+    },
+    {
+      "invariant_id": "INV-3",
+      "name": "Tested != Verified",
+      "rule": "Tests alone do not constitute verification.",
+      "enforcement": {
+        "mechanism": "evaluation",
+        "location": "core/evaluation/evaluator.py",
+        "raises": "Insufficient evidence -> verdict FAIL"
+      },
+      "test": "test_INV3_tested_not_verified",
+      "safety_critical": true
+    },
+    {
+      "invariant_id": "INV-4",
+      "name": "Completed != Goal Achieved",
+      "rule": "AchievementState values are 4 distinct states.",
+      "enforcement": {
+        "mechanism": "schema_validation",
+        "location": "core/evaluation/schema.py",
+        "raises": "TypeError on invalid state"
+      },
+      "test": "test_INV4_completed_not_goal_achieved",
+      "safety_critical": true
+    },
+    {
+      "invariant_id": "INV-5",
+      "name": "Capability Proven -> Authority",
+      "rule": "Capability must be proven before authority promotion.",
+      "enforcement": {
+        "mechanism": "evidence_check",
+        "location": "capability_test()",
+        "raises": "Promotion gate"
+      },
+      "test": "test_INV5_capability_proven_authority_promoted",
+      "safety_critical": false
+    },
+    {
+      "invariant_id": "INV-6",
+      "name": "Worker Cannot Override Architecture",
+      "rule": "TaskRunner must not modify architectural files.",
+      "enforcement": {
+        "mechanism": "policy_check",
+        "location": "files_not_in_scope",
+        "raises": "PermissionError"
+      },
+      "test": "test_INV6_worker_cannot_override_architecture",
+      "safety_critical": true
+    },
+    {
+      "invariant_id": "INV-7",
+      "name": "Verification Not Self-Declared",
+      "rule": "Executor may not declare its own verification.",
+      "enforcement": {
+        "mechanism": "policy_check",
+        "location": "core/kernel/policy.py",
+        "raises": "PermissionError"
+      },
+      "test": "test_INV7_verification_not_self_declared",
+      "safety_critical": true
+    },
+    {
+      "invariant_id": "INV-8",
+      "name": "Improvement Requires Baseline",
+      "rule": "Improvement candidate must have baseline_evaluation_id.",
+      "enforcement": {
+        "mechanism": "evaluation",
+        "location": "core/evaluation/improvement.py",
+        "raises": "ImprovementError"
+      },
+      "test": "test_INV8_improvement_requires_baseline",
+      "safety_critical": false
+    },
+    {
+      "invariant_id": "INV-9",
+      "name": "Architectural Change Requires Evidence",
+      "rule": "Constitutional changes must have passing regression suite.",
+      "enforcement": {
+        "mechanism": "test_assertion",
+        "location": "tests/test_constitution.py",
+        "raises": "AssertionError"
+      },
+      "test": "test_INV9_architectural_change_requires_evidence",
+      "safety_critical": false
+    },
+    {
+      "invariant_id": "INV-10",
+      "name": "Unproven Capability Cannot Self-Promote",
+      "rule": "Unproven capability cannot self-promote authority.",
+      "enforcement": {
+        "mechanism": "evidence_check",
+        "location": "capability_test()",
+        "raises": "Promotion gate"
+      },
+      "test": "test_INV10_unproven_capability_cannot_self_promote",
+      "safety_critical": false
+    }
+  ],
+  "authority_model": {
+    "stages": [
+      {
+        "name": "EARLY",
+        "version": "v1.0",
+        "automatic_dispatch": false,
+        "gpt_responsibility": "Constructs and directs all tasks",
+        "kernel_responsibility": "Executes, records, verifies, learns",
+        "worker_responsibility": "Executes individual steps"
+      },
+      {
+        "name": "MID",
+        "version": "v1.1",
+        "automatic_dispatch": true,
+        "gpt_responsibility": "Handles difficult decisions and escalation",
+        "kernel_responsibility": "Progressively assumes planning/decomposition/verification",
+        "worker_responsibility": "Executes individual steps"
+      },
+      {
+        "name": "FINAL",
+        "version": "v2.0",
+        "automatic_dispatch": true,
+        "gpt_responsibility": "Sets high-level strategy",
+        "kernel_responsibility": "Operational brain",
+        "worker_responsibility": "Execution worker"
+      }
+    ],
+    "transitions": [
+      {
+        "from": "EARLY",
+        "to": "MID",
+        "gate": [
+          {
+            "criterion": "5+ autonomous task completions",
+            "evidence_required": ["task completion records"],
+            "decision_authority": "Administrator"
+          },
+          {
+            "criterion": "All 8 capabilities at TESTED",
+            "evidence_required": ["capability test reports"],
+            "decision_authority": "Administrator"
+          },
+          {
+            "criterion": "20 clean runs",
+            "evidence_required": ["run history"],
+            "decision_authority": "Administrator"
+          }
+        ]
+      },
+      {
+        "from": "MID",
+        "to": "FINAL",
+        "gate": [
+          {
+            "criterion": "All 8 capabilities at PROVEN",
+            "evidence_required": ["capability test reports"],
+            "decision_authority": "Administrator"
+          },
+          {
+            "criterion": "100+ autonomous runs",
+            "evidence_required": ["run history"],
+            "decision_authority": "Administrator"
+          },
+          {
+            "criterion": "Zero constitutional violations in 50 runs",
+            "evidence_required": ["violation reports"],
+            "decision_authority": "Administrator"
+          }
+        ]
+      }
+    ]
+  },
+  "amendments": {
+    "process": [
+      "Written proposal by Administrator",
+      "Impact assessment",
+      "Full regression suite passes",
+      "Adversarial tests pass",
+      "Written approval by Administrator"
+    ],
+    "safety_invariants": ["INV-1", "INV-2", "INV-6", "INV-7"],
+    "emergency_suspension": {
+      "max_duration_hours": 24,
+      "review_required": true
+    }
+  }
+}

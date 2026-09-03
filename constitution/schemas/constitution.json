@@ -1,0 +1,239 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://agent-core.example/constitution/schemas/constitution.json",
+  "title": "Agent Core Kernel Constitution Schema",
+  "description": "Machine-checkable schema for constitutional rules in agent-core",
+  "version": "1.0.0",
+  "type": "object",
+  "required": ["constitution_version", "articles", "preamble"],
+  "properties": {
+    "constitution_version": {
+      "type": "string",
+      "pattern": "^\\d+\\.\\d+\\.\\d+$"
+    },
+    "preamble": {
+      "type": "object",
+      "required": ["authority", "purpose"],
+      "properties": {
+        "authority": {
+          "type": "string",
+          "const": "This constitution governs all layers below it."
+        },
+        "purpose": {
+          "type": "string",
+          "minLength": 10
+        },
+        "enforceability": {
+          "type": "string",
+          "enum": ["machine-checkable", "administrative", "both"]
+        }
+      }
+    },
+    "articles": {
+      "type": "array",
+      "minItems": 8,
+      "items": {
+        "type": "object",
+        "required": ["article_id", "title", "sections"],
+        "properties": {
+          "article_id": {
+            "type": "string",
+            "pattern": "^Article [IVXLCDM]+"
+          },
+          "title": {
+            "type": "string",
+            "minLength": 1
+          },
+          "sections": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "object",
+              "required": ["section_id", "title", "may", "must_not"],
+              "properties": {
+                "section_id": {
+                  "type": "string"
+                },
+                "title": {
+                  "type": "string"
+                },
+                "actor": {
+                  "type": "string",
+                  "enum": [
+                    "Administrator",
+                    "Kernel",
+                    "RuntimeEngine",
+                    "TaskRunner",
+                    "Planner",
+                    "KnowledgeEngine",
+                    "ExperienceEngine",
+                    "EvaluationEngine"
+                  ]
+                },
+                "may": {
+                  "type": "array",
+                  "items": {"type": "string"},
+                  "minItems": 1
+                },
+                "must_not": {
+                  "type": "array",
+                  "items": {"type": "string"},
+                  "minItems": 1
+                },
+                "enforcement_mechanism": {
+                  "type": "string"
+                },
+                "test_required": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "invariants": {
+      "type": "array",
+      "minItems": 10,
+      "items": {
+        "type": "object",
+        "required": ["invariant_id", "rule", "enforcement", "test"],
+        "properties": {
+          "invariant_id": {
+            "type": "string",
+            "pattern": "^INV-[0-9]+$"
+          },
+          "name": {
+            "type": "string"
+          },
+          "rule": {
+            "type": "string",
+            "minLength": 10
+          },
+          "enforcement": {
+            "type": "object",
+            "required": ["mechanism", "location"],
+            "properties": {
+              "mechanism": {
+                "type": "string"
+              },
+              "location": {
+                "type": "string"
+              },
+              "raises": {
+                "type": "string"
+              }
+            }
+          },
+          "test": {
+            "type": "string"
+          },
+          "safety_critical": {
+            "type": "boolean",
+            "const": true
+          }
+        }
+      }
+    },
+    "authority_model": {
+      "type": "object",
+      "required": ["stages", "transitions"],
+      "properties": {
+        "stages": {
+          "type": "array",
+          "minItems": 3,
+          "items": {
+            "type": "object",
+            "required": ["name", "version", "automatic_dispatch"],
+            "properties": {
+              "name": {
+                "type": "string",
+                "enum": ["EARLY", "MID", "FINAL"]
+              },
+              "version": {
+                "type": "string"
+              },
+              "automatic_dispatch": {
+                "type": "boolean"
+              },
+              "gpt_responsibility": {
+                "type": "string"
+              },
+              "kernel_responsibility": {
+                "type": "string"
+              },
+              "worker_responsibility": {
+                "type": "string"
+              }
+            }
+          }
+        },
+        "transitions": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["from", "to", "gate"],
+            "properties": {
+              "from": {
+                "type": "string"
+              },
+              "to": {
+                "type": "string"
+              },
+              "gate": {
+                "type": "array",
+                "minItems": 1,
+                "items": {
+                  "type": "object",
+                  "required": ["criterion", "evidence_required"],
+                  "properties": {
+                    "criterion": {
+                      "type": "string"
+                    },
+                    "evidence_required": {
+                      "type": "array",
+                      "items": {"type": "string"}
+                    },
+                    "decision_authority": {
+                      "type": "string",
+                      "const": "Administrator"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "amendments": {
+      "type": "object",
+      "required": ["process", "safety_invariants"],
+      "properties": {
+        "process": {
+          "type": "array",
+          "minItems": 5,
+          "items": {"type": "string"}
+        },
+        "safety_invariants": {
+          "type": "array",
+          "items": {"type": "string"}
+        },
+        "emergency_suspension": {
+          "type": "object",
+          "required": ["max_duration_hours", "review_required"],
+          "properties": {
+            "max_duration_hours": {
+              "type": "integer",
+              "const": 24
+            },
+            "review_required": {
+              "type": "boolean",
+              "const": true
+            }
+          }
+        }
+      }
+    }
+  }
+}

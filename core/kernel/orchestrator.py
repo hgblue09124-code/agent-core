@@ -240,7 +240,7 @@ class KernelOrchestrator:
             self.experience.record_experience(exp)
             self._emit(ctx, EventPhase.EXPERIENCE.value,
                        "Experience recorded", EventStatus.OK.value,
-                       metadata={"outcome": outcome})
+                       metadata={"outcome": exp.outcome})
         except ValueError:
             self._emit(ctx, EventPhase.EXPERIENCE.value,
                        "Experience already exists", EventStatus.OK.value)

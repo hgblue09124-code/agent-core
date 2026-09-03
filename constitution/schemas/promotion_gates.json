@@ -1,0 +1,151 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://agent-core.example/constitution/schemas/promotion_gates.json",
+  "title": "Agent Core Promotion Gates",
+  "description": "Objective gates for knowledge, capability, improvement, and authority promotion",
+  "version": "1.0.0",
+  "type": "object",
+  "required": ["knowledge_gates", "capability_gates", "improvement_gates", "authority_gates"],
+  "properties": {
+    "knowledge_gates": {
+      "type": "array",
+      "minItems": 4,
+      "items": {
+        "type": "object",
+        "required": ["transition", "required_evidence", "minimum_evidence_count"],
+        "properties": {
+          "transition": {
+            "type": "string",
+            "pattern": "^[A-Z_]+\\s*->\\s*[A-Z_]+$"
+          },
+          "from_status": {
+            "type": "string",
+            "enum": ["CANDIDATE", "VALIDATED", "VERIFIED", "ACTIVE"]
+          },
+          "to_status": {
+            "type": "string",
+            "enum": ["VALIDATED", "VERIFIED", "ACTIVE", "DEPRECATED", "REJECTED"]
+          },
+          "required_evidence": {
+            "type": "array",
+            "items": {"type": "string"}
+          },
+          "minimum_evidence_count": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "minimum_confidence": {
+            "type": "number",
+            "minimum": 0.0,
+            "maximum": 1.0
+          },
+          "forbidden_source_types": {
+            "type": "array",
+            "items": {"type": "string"}
+          },
+          "enforcement_location": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "capability_gates": {
+      "type": "array",
+      "minItems": 6,
+      "items": {
+        "type": "object",
+        "required": ["transition", "test_count", "diversity_required"],
+        "properties": {
+          "transition": {
+            "type": "string",
+            "pattern": "^[a-z]+\\s*->\\s*[a-z]+$"
+          },
+          "test_count": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "diversity_required": {
+            "type": "boolean"
+          },
+          "real_task_required": {
+            "type": "boolean"
+          },
+          "evidence_required": {
+            "type": "array",
+            "items": {"type": "string"}
+          }
+        }
+      }
+    },
+    "improvement_gates": {
+      "type": "array",
+      "minItems": 4,
+      "items": {
+        "type": "object",
+        "required": ["transition", "baseline_required", "regression_threshold"],
+        "properties": {
+          "transition": {
+            "type": "string",
+            "enum": [
+              "proposed -> testing",
+              "testing -> accepted",
+              "testing -> rejected",
+              "proposed -> rejected"
+            ]
+          },
+          "baseline_required": {
+            "type": "boolean"
+          },
+          "regression_threshold": {
+            "type": "number",
+            "maximum": 0.0
+          },
+          "improvement_threshold": {
+            "type": "number",
+            "minimum": 0.0
+          },
+          "evidence_required": {
+            "type": "array",
+            "items": {"type": "string"}
+          },
+          "forbidden_in_state": {
+            "type": "array",
+            "items": {"type": "string"}
+          }
+        }
+      }
+    },
+    "authority_gates": {
+      "type": "array",
+      "minItems": 2,
+      "items": {
+        "type": "object",
+        "required": ["transition", "evidence_required", "decision_authority"],
+        "properties": {
+          "transition": {
+            "type": "string",
+            "enum": ["EARLY -> MID", "MID -> FINAL", "FINAL -> MID", "MID -> EARLY"]
+          },
+          "evidence_required": {
+            "type": "array",
+            "minItems": 3,
+            "items": {"type": "string"}
+          },
+          "decision_authority": {
+            "type": "string",
+            "const": "Administrator"
+          },
+          "minimum_capabilities_proven": {
+            "type": "integer"
+          },
+          "minimum_clean_runs": {
+            "type": "integer"
+          },
+          "constitutional_violations_allowed": {
+            "type": "integer"
+          }
+        }
+      }
+    }
+  }
+}

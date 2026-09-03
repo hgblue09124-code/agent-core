@@ -1,0 +1,94 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://agent-core.example/constitution/schemas/invariants.json",
+  "title": "Agent Core Absolute Invariants",
+  "description": "Rules that must never be violated",
+  "version": "1.0.0",
+  "type": "object",
+  "required": ["invariants", "safety_critical", "non_negotiable"],
+  "properties": {
+    "invariants": {
+      "type": "array",
+      "minItems": 10,
+      "items": {
+        "type": "object",
+        "required": [
+          "invariant_id",
+          "name",
+          "rule",
+          "cannot_be_suspended",
+          "enforcement"
+        ],
+        "properties": {
+          "invariant_id": {
+            "type": "string",
+            "pattern": "^INV-[0-9]+$"
+          },
+          "name": {
+            "type": "string"
+          },
+          "rule": {
+            "type": "string",
+            "minLength": 20
+          },
+          "cannot_be_suspended": {
+            "type": "boolean",
+            "const": true
+          },
+          "enforcement": {
+            "type": "object",
+            "required": ["mechanism", "location", "raises"],
+            "properties": {
+              "mechanism": {
+                "type": "string",
+                "enum": [
+                  "validation",
+                  "policy_check",
+                  "test_assertion",
+                  "schema_validation",
+                  "lifecycle_check",
+                  "evidence_check"
+                ]
+              },
+              "location": {
+                "type": "string"
+              },
+              "raises": {
+                "type": "string"
+              }
+            }
+          },
+          "test": {
+            "type": "object",
+            "required": ["name", "pass_means", "fail_means"],
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "pass_means": {
+                "type": "string"
+              },
+              "fail_means": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      }
+    },
+    "safety_critical": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^INV-[0-9]+$"
+      }
+    },
+    "non_negotiable": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^INV-[0-9]+$"
+      }
+    }
+  }
+}
