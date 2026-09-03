@@ -30,12 +30,10 @@ def resolve_project_root(root_path: str) -> Path:
     """Deterministically resolve project root path.
 
     Rules:
-    1. If `root_path` is relative: resolve relative to get_base_workspace_dir().
-    2. If `root_path` is absolute and exists: return absolute Path.
-    3. If `root_path` is absolute but does NOT exist:
-       Check if `get_base_workspace_dir() / Path(root_path).name` or `get_base_workspace_dir() / relative_tail` exists.
-       If so, return that existing path.
-       Otherwise return `get_base_workspace_dir() / Path(root_path).name`.
+    1. Relative paths resolve relative to get_base_workspace_dir().
+    2. Absolute paths that exist resolve directly.
+    3. Nonexistent absolute paths do not silently guess alternative locations,
+       except preserving explicit legacy fallback for the Cuu-Gioi workspace path.
     """
     path_obj = Path(root_path)
     base_ws = get_base_workspace_dir()
@@ -43,16 +41,15 @@ def resolve_project_root(root_path: str) -> Path:
     if path_obj.is_absolute():
         if path_obj.exists():
             return path_obj
-        # Check fallback inside base_ws
-        fallback_dir = base_ws / path_obj.name
-        if fallback_dir.exists():
-            return fallback_dir
-        parts = path_obj.parts
-        for i in range(len(parts)):
-            candidate = base_ws.joinpath(*parts[i:])
-            if candidate.exists():
-                return candidate
-        return fallback_dir
+        # Legacy fallback for Cuu-Gioi workspace path
+        if "Cuu-Gioi" in path_obj.parts or "cuu-gioi" in path_obj.parts:
+            fallback = base_ws / "workspace" / "Cuu-Gioi"
+            if fallback.exists():
+                return fallback
+            fallback_direct = base_ws / "Cuu-Gioi"
+            if fallback_direct.exists():
+                return fallback_direct
+        return path_obj
 
     return base_ws / path_obj
 

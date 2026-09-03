@@ -22,8 +22,8 @@ def get_base_storage_dir() -> Path:
     """Return base storage directory based on environment fallback rules."""
     env_dir = os.environ.get(ENV_STORAGE_DIR, "").strip()
     if env_dir:
-        return Path(env_dir)
-    return Path.home() / DEFAULT_STORAGE_DIR_NAME
+        return Path(env_dir).expanduser().resolve()
+    return (Path.home() / DEFAULT_STORAGE_DIR_NAME).resolve()
 
 
 def get_storage_dir(subfolder: Optional[str] = None) -> Path:

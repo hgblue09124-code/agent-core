@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # scripts/run_real_task.py
-"""Execute a genuine end-to-end Kernel task and output machine-verifiable evidence."""
+"""Execute an end-to-end Kernel loop using deterministic mock-planner validation."""
 
 import os
 import sys
@@ -19,7 +19,7 @@ from core.kernel.kernel import Kernel
 
 
 def main():
-    print("=== Kernel Real-Task Validation ===")
+    print("=== Kernel End-to-End Task Validation (Mock Planner) ===")
     t0 = time.time()
     kernel = Kernel(project_id="cuu-gioi")
 
@@ -38,8 +38,9 @@ def main():
 
     ctx = kernel.get_run(result.run_id)
     if ctx:
-        print("\n--- Machine-Verifiable Evidence Artifact ---")
+        print("\n--- Machine-Verifiable Evidence Artifact (Deterministic Mock Planner Validation) ---")
         evidence_artifact = {
+            "validation_type": "deterministic_mock_planner_e2e_validation",
             "run_id": ctx.run_id,
             "goal": ctx.goal,
             "project_id": ctx.project_id,
@@ -51,6 +52,7 @@ def main():
             "knowledge_retrieved": ctx.knowledge_retrieved,
             "errors": ctx.errors,
             "verification_result": "PASS" if result.success else "FAIL",
+            "note": "This artifact validates the deterministic Kernel pipeline end-to-end using MockPlannerProvider in offline mode.",
         }
         print(json.dumps(evidence_artifact, indent=2))
 
