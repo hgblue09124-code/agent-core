@@ -30,3 +30,6 @@ tasks/task-*.json
 
 # Logs
 *.log
+
+# Console runtime artifacts
+/tmp/agent-core-events.json

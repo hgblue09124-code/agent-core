@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>agent-core Live Console</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<header class="header">
+  <div class="logo">&#x1F680; agent-core <span class="badge">Live Console v1.1</span></div>
+  <div class="header-right">
+    <span id="connection-status" class="conn-status disconnected">&#x25CF; Disconnected</span>
+    <span id="event-count" class="event-count">0 events</span>
+  </div>
+</header>
+
+<main class="main">
+
+  <!-- Left column: run list + goal -->
+  <aside class="sidebar">
+    <section class="panel">
+      <h2 class="panel-title">&#x1F3AF; Runs</h2>
+      <div id="run-list" class="run-list">
+        <div class="empty-state">No runs yet</div>
+      </div>
+    </section>
+
+    <section class="panel">
+      <h2 class="panel-title">&#x1F3AF; Goal</h2>
+      <div id="goal-panel" class="goal-panel">
+        <div class="empty-state">Select a run to view details</div>
+      </div>
+    </section>
+  </aside>
+
+  <!-- Right column: activity + evidence + result -->
+  <div class="content">
+
+    <!-- Live Activity -->
+    <section class="panel activity-panel">
+      <div class="panel-header">
+        <h2 class="panel-title">&#x26A1; Live Activity</h2>
+        <div class="phase-legend">
+          <span class="legend-item" data-phase="PLAN">PLAN</span>
+          <span class="legend-item" data-phase="KNOWLEDGE">KNOWLEDGE</span>
+          <span class="legend-item" data-phase="EXECUTE">EXECUTE</span>
+          <span class="legend-item" data-phase="OBSERVE">OBSERVE</span>
+          <span class="legend-item" data-phase="VERIFY">VERIFY</span>
+          <span class="legend-item" data-phase="RECOVERY">RECOVERY</span>
+          <span class="legend-item" data-phase="CHECKPOINT">CHECKPOINT</span>
+          <span class="legend-item" data-phase="EXPERIENCE">EXPERIENCE</span>
+          <span class="legend-item" data-phase="EVALUATION">EVALUATION</span>
+          <span class="legend-item" data-phase="RESULT">RESULT</span>
+        </div>
+      </div>
+      <div id="activity-feed" class="activity-feed">
+        <div class="empty-state">Waiting for events...</div>
+      </div>
+    </section>
+
+    <!-- Evidence + Result row -->
+    <div class="bottom-row">
+      <section class="panel evidence-panel">
+        <h2 class="panel-title">&#x1F50E; Evidence</h2>
+        <div id="evidence-panel" class="evidence-panel-body">
+          <div class="empty-state">No evidence yet</div>
+        </div>
+      </section>
+
+      <section class="panel result-panel">
+        <h2 class="panel-title">&#x2705; Result</h2>
+        <div id="result-panel" class="result-panel-body">
+          <div class="empty-state">Run not complete</div>
+        </div>
+      </section>
+    </div>
+
+  </div>
+</main>
+
+<script src="app.js"></script>
+</body>
+</html>
