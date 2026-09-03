@@ -57,12 +57,54 @@ class TestStorageConfig(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmpdir:
             os.environ[ENV_STORAGE_DIR] = tmpdir
             base = get_base_storage_dir()
-            self.assertEqual(base, Path(tmpdir))
-            self.assertEqual(get_storage_dir("knowledge"), Path(tmpdir) / "knowledge")
+            self.assertEqual(base, Path(tmpdir).resolve())
+            self.assertEqual(get_storage_dir("knowledge"), Path(tmpdir).resolve() / "knowledge")
             self.assertEqual(
                 get_storage_path("evaluation/evidence.json"),
-                Path(tmpdir) / "evaluation" / "evidence.json",
+                Path(tmpdir).resolve() / "evaluation" / "evidence.json",
             )
+
+    def test_absolute_subfolder_rejected(self):
+        with self.assertRaises(ValueError) as cm:
+            get_storage_dir("/etc/passwd")
+        self.assertIn("Absolute storage path rejected", str(cm.exception))
+
+    def test_absolute_relative_path_rejected(self):
+        with self.assertRaises(ValueError) as cm:
+            get_storage_path("/var/log/syslog")
+        self.assertIn("Absolute storage path rejected", str(cm.exception))
+
+    def test_path_traversal_outside_storage_root_rejected(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            os.environ[ENV_STORAGE_DIR] = tmpdir
+            with self.assertRaises(ValueError) as cm:
+                get_storage_path("../outside_file.json")
+            self.assertIn("traversal outside base storage root rejected", str(cm.exception))
+
+    def test_nested_valid_relative_path_accepted(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            os.environ[ENV_STORAGE_DIR] = tmpdir
+            p = get_storage_path("a/b/c/data.json")
+            self.assertEqual(p, Path(tmpdir).resolve() / "a" / "b" / "c" / "data.json")
+
+    def test_env_storage_dir_is_absolute_and_cwd_independent(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            full_path = (Path(tmpdir) / "custom_storage_dir").resolve()
+            full_path.mkdir(parents=True, exist_ok=True)
+            orig_cwd = os.getcwd()
+            try:
+                os.environ[ENV_STORAGE_DIR] = str(full_path)
+                os.chdir(tmpdir)
+                base1 = get_base_storage_dir()
+                self.assertTrue(base1.is_absolute())
+                self.assertEqual(base1, full_path)
+
+                # Change working directory elsewhere
+                os.chdir("/tmp")
+                base2 = get_base_storage_dir()
+                self.assertEqual(base2, full_path)
+            finally:
+                os.chdir(orig_cwd)
 
     def test_empty_or_invalid_env_reverts_to_default(self):
         os.environ[ENV_STORAGE_DIR] = "   "
