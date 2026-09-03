@@ -31,6 +31,8 @@ class PhilosophyPrecedenceError(PermissionError):
 class PhilosophyEngine:
     """Manages philosophy lifecycle, human teaching/challenge, and soft behavioral preferences."""
 
+    SUPPORT_PROMOTION_THRESHOLD = 0.50
+
     def __init__(self, store: Optional[PhilosophyStore] = None):
         self._store = store or PhilosophyStore()
         self._next_id_seq = self._store.count() + 1
@@ -49,7 +51,7 @@ class PhilosophyEngine:
         self,
         lesson: Lesson,
         statement: Optional[str] = None,
-        initial_confidence: float = 0.3,
+        initial_confidence: float = 0.2,
         tags: Optional[list[str]] = None,
     ) -> PhilosophyTendency:
         """Bridge a Lesson into a Philosophy Candidate.
@@ -94,7 +96,7 @@ class PhilosophyEngine:
         self,
         statement: str,
         origin: str = "human_teaching",
-        initial_confidence: float = 0.4,
+        initial_confidence: float = 0.2,
         tags: Optional[list[str]] = None,
         establish_immediately: bool = False,
     ) -> PhilosophyTendency:
@@ -139,20 +141,36 @@ class PhilosophyEngine:
     def support(
         self,
         tendency_id: str,
-        feedback: str = "Human supported tendency",
+        feedback: str = "Supported tendency with evidence",
         evidence_id: Optional[str] = None,
     ) -> PhilosophyTendency:
-        """Human or experience supports a tendency, strengthening confidence and status."""
+        """Support a tendency with evidence, strengthening confidence.
+
+        Repeated evidence increases confidence and promotes CANDIDATE -> SUPPORTED
+        when confidence reaches SUPPORT_PROMOTION_THRESHOLD (0.50).
+        Cannot resurrect REJECTED or RETIRED tendencies.
+        """
         t = self._must_get(tendency_id)
+        if t.status in (PhilosophyStatus.REJECTED.value, PhilosophyStatus.RETIRED.value):
+            raise ValueError(f"Cannot support a {t.status.upper()} tendency ({tendency_id})")
+
+        if evidence_id is not None:
+            if not self.validate_evidence_id(evidence_id):
+                raise ValueError(f"Invalid evidence_id: {evidence_id!r}")
+            if evidence_id not in t.supporting_evidence_ids:
+                t.supporting_evidence_ids.append(evidence_id)
+
         old_status = t.status
         old_conf = t.confidence
 
-        t.confidence = min(1.0, t.confidence + 0.2)
-        if evidence_id and evidence_id not in t.supporting_evidence_ids:
-            t.supporting_evidence_ids.append(evidence_id)
+        # Deterministic confidence increment (+0.15 per supporting evidence)
+        t.confidence = min(1.0, round(t.confidence + 0.15, 4))
 
-        # Transition candidate -> supported if confidence >= 0.4
-        if t.status in (PhilosophyStatus.CANDIDATE.value, PhilosophyStatus.WEAKENED.value) and t.confidence >= 0.4:
+        # Transition candidate / weakened -> supported if confidence >= 0.50
+        if t.confidence >= self.SUPPORT_PROMOTION_THRESHOLD and t.status in (
+            PhilosophyStatus.CANDIDATE.value,
+            PhilosophyStatus.WEAKENED.value,
+        ):
             t.status = PhilosophyStatus.SUPPORTED.value
 
         now = self._now_str()
@@ -161,7 +179,7 @@ class PhilosophyEngine:
             from_status=old_status,
             to_status=t.status,
             reason=feedback,
-            confidence_delta=t.confidence - old_conf,
+            confidence_delta=round(t.confidence - old_conf, 4),
             actor="human",
             action_type=TeachingType.SUPPORT.value,
         )
@@ -173,19 +191,30 @@ class PhilosophyEngine:
     def challenge(
         self,
         tendency_id: str,
-        feedback: str = "Human challenged tendency",
+        feedback: str = "Challenged tendency with evidence",
         evidence_id: Optional[str] = None,
     ) -> PhilosophyTendency:
-        """Human challenges a tendency, weakening confidence and status."""
+        """Challenge a tendency with evidence, weakening confidence and status.
+
+        Cannot modify REJECTED or RETIRED tendencies.
+        """
         t = self._must_get(tendency_id)
+        if t.status in (PhilosophyStatus.REJECTED.value, PhilosophyStatus.RETIRED.value):
+            raise ValueError(f"Cannot challenge a {t.status.upper()} tendency ({tendency_id})")
+
+        if evidence_id is not None:
+            if not self.validate_evidence_id(evidence_id):
+                raise ValueError(f"Invalid evidence_id: {evidence_id!r}")
+            if evidence_id not in t.contradicting_evidence_ids:
+                t.contradicting_evidence_ids.append(evidence_id)
+
         old_status = t.status
         old_conf = t.confidence
 
-        t.confidence = max(0.0, t.confidence - 0.25)
-        if evidence_id and evidence_id not in t.contradicting_evidence_ids:
-            t.contradicting_evidence_ids.append(evidence_id)
+        # Deterministic confidence decrement (-0.25 per challenging evidence)
+        t.confidence = max(0.0, round(t.confidence - 0.25, 4))
 
-        if t.confidence < 0.3 and t.status == PhilosophyStatus.SUPPORTED.value:
+        if t.confidence < 0.35 and t.status == PhilosophyStatus.SUPPORTED.value:
             t.status = PhilosophyStatus.WEAKENED.value
 
         now = self._now_str()
@@ -194,7 +223,7 @@ class PhilosophyEngine:
             from_status=old_status,
             to_status=t.status,
             reason=feedback,
-            confidence_delta=t.confidence - old_conf,
+            confidence_delta=round(t.confidence - old_conf, 4),
             actor="human",
             action_type=TeachingType.CHALLENGE.value,
         )
@@ -220,8 +249,10 @@ class PhilosophyEngine:
     ) -> PhilosophyTendency:
         """Reshape/modify a philosophy tendency statement."""
         t = self._must_get(tendency_id)
-        now = self._now_str()
+        if t.status in (PhilosophyStatus.REJECTED.value, PhilosophyStatus.RETIRED.value):
+            raise ValueError(f"Cannot modify a {t.status.upper()} tendency ({tendency_id})")
 
+        now = self._now_str()
         rec = EvolutionRecord(
             timestamp=now,
             from_status=t.status,
@@ -242,7 +273,7 @@ class PhilosophyEngine:
         tendency_id: str,
         reason: str = "Human rejected tendency",
     ) -> PhilosophyTendency:
-        """Reject a tendency completely."""
+        """Reject a tendency completely. Permanent terminal transition."""
         t = self._must_get(tendency_id)
         old_status = t.status
         old_conf = t.confidence
@@ -270,7 +301,7 @@ class PhilosophyEngine:
         tendency_id: str,
         reason: str = "Human retired tendency",
     ) -> PhilosophyTendency:
-        """Retire an obsolete tendency."""
+        """Retire an obsolete tendency. Permanent terminal transition."""
         t = self._must_get(tendency_id)
         old_status = t.status
         old_conf = t.confidence
@@ -296,9 +327,9 @@ class PhilosophyEngine:
     # ── Soft Behavioral Preferences & Precedence Enforcement ──────────
 
     def validate_evidence_id(self, evidence_id: str) -> bool:
-        """Interface boundary hook for checking if an evidence_id is valid.
+        """Validate non-empty evidence_id string structure.
 
-        Can be integrated with core/evaluation/evidence.py or core/knowledge/provenance.py.
+        Interface boundary hook for checking if an evidence_id is valid.
         """
         return bool(evidence_id and isinstance(evidence_id, str) and evidence_id.strip())
 
@@ -311,7 +342,7 @@ class PhilosophyEngine:
         """Consult philosophy tendencies as SOFT PREFERENCES for decision-making.
 
         Returns only active (SUPPORTED) tendencies sorted by confidence (highest first).
-        If task_context is provided, deterministically filters or boosts matching tags/keywords.
+        If task_context is provided, deterministically filters matching tags/keywords.
         CANDIDATE, REJECTED, and RETIRED tendencies are NEVER returned.
         """
         all_tendencies = self._store.list_all()
@@ -345,6 +376,22 @@ class PhilosophyEngine:
 
         active.sort(key=lambda x: x.confidence, reverse=True)
         return active
+
+    def resolve_action_conflict(
+        self,
+        philosophy_preference: str,
+        task_requirement: str,
+    ) -> tuple[str, str]:
+        """Deterministically resolves conflict between a philosophy soft preference and explicit task requirement.
+
+        Always chooses task_requirement over philosophy_preference.
+        Returns (chosen_action, suppression_reason).
+        """
+        reason = (
+            f"Explicit task requirement '{task_requirement}' strictly overrides "
+            f"philosophy preference '{philosophy_preference}'"
+        )
+        return task_requirement, reason
 
     def enforce_precedence_policy(
         self,

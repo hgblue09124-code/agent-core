@@ -4,23 +4,26 @@
 
 Verifies:
 1. New lesson -> Philosophy Candidate
-2. Candidate does NOT affect behavior
+2. Candidate does NOT affect behavior (is_active_preference is False)
 3. Human teaches a tendency -> provenance preserved, status remains CANDIDATE by default
-4. One teaching event does not automatically become established truth
+4. One teaching event does not automatically become established truth (SUPPORTED)
 5. Repeated supporting evidence -> confidence increases deterministically and promotes CANDIDATE -> SUPPORTED
+5b. Deterministic threshold promotion math
 6. Contradicting evidence -> confidence decreases deterministically
-7. Strong contradiction -> tendency weakened according to lifecycle
+7. Strong contradiction -> tendency weakened/rejected according to lifecycle
+7b. Cannot resurrect REJECTED or RETIRED tendencies
 8. Rejected tendency cannot be consulted
 9. Retired tendency cannot be consulted
-10. Weakened tendency does not behave as Supported
+10. Weakened tendency does not behave as Supported (excluded by default)
 11. Philosophy cannot bypass Kernel invariants or Security boundaries
 12. Philosophy cannot bypass Verification requirements
 13. Philosophy cannot violate Task Contract
-14. Explicit task requirement beats Philosophy
+14. Actual precedence conflict resolution: explicit task requirement beats philosophy preference
 15. Evolution history is complete, ordered, and retains exact provenance
 16. Serialization/deserialization retains all history and provenance
 17. Reloading from PhilosophyStore preserves exact semantics
 18. Context-aware preference consultation matching on tags/keywords is deterministic
+19. Invalid evidence ID structure is rejected by validation interface
 """
 
 from __future__ import annotations
@@ -47,7 +50,7 @@ from core.philosophy.engine import PhilosophyEngine, PhilosophyPrecedenceError
 
 
 class TestPhilosophyHardeningAdversarial(unittest.TestCase):
-    """18 Adversarial and hardening unit test scenarios for Agent Philosophy."""
+    """Adversarial and hardening unit test scenarios for Agent Philosophy."""
 
     def setUp(self):
         self.tmpdir = tempfile.mkdtemp(prefix="phil_adv_test_")
@@ -104,7 +107,7 @@ class TestPhilosophyHardeningAdversarial(unittest.TestCase):
     def test_04_one_teaching_event_not_automatic_truth(self):
         t = self.engine.teach(
             statement="I tend to write docstrings first",
-            initial_confidence=0.4,
+            initial_confidence=0.2,
         )
 
         # By default, a single teach event remains CANDIDATE and is NOT active preference truth
@@ -112,32 +115,43 @@ class TestPhilosophyHardeningAdversarial(unittest.TestCase):
         self.assertFalse(t.is_active_preference())
         self.assertNotIn(t.tendency_id, [p.tendency_id for p in self.engine.consult_soft_preferences()])
 
-    def test_05_repeated_supporting_evidence_increases_confidence(self):
-        t = self.engine.teach("I tend to verify imports before running", initial_confidence=0.3)
+    def test_05_repeated_supporting_evidence_increases_confidence_and_promotes(self):
+        # Starts as candidate with confidence 0.2
+        t = self.engine.teach("I tend to verify imports before running", initial_confidence=0.2)
         self.assertEqual(t.status, PhilosophyStatus.CANDIDATE.value)
 
-        # Support 1 -> confidence 0.5 -> promoted to SUPPORTED
-        t = self.engine.support(t.tendency_id, feedback="Run 1 success", evidence_id="EV-001")
-        self.assertEqual(t.status, PhilosophyStatus.SUPPORTED.value)
-        self.assertAlmostEqual(t.confidence, 0.5)
+        # First supporting evidence (+0.15) -> confidence 0.35 (still CANDIDATE)
+        t = self.engine.support(t.tendency_id, feedback="First evidence", evidence_id="EV-001")
+        self.assertEqual(t.status, PhilosophyStatus.CANDIDATE.value)
+        self.assertAlmostEqual(t.confidence, 0.35)
+        self.assertFalse(t.is_active_preference())
 
-        # Support 2 -> confidence 0.7
-        t = self.engine.support(t.tendency_id, feedback="Run 2 success", evidence_id="EV-002")
-        self.assertAlmostEqual(t.confidence, 0.7)
+        # REPEATED supporting evidence (+0.15) -> confidence 0.50 -> Promoted to SUPPORTED
+        t = self.engine.support(t.tendency_id, feedback="Repeated evidence", evidence_id="EV-002")
+        self.assertEqual(t.status, PhilosophyStatus.SUPPORTED.value)
+        self.assertAlmostEqual(t.confidence, 0.50)
         self.assertTrue(t.is_active_preference())
 
+    def test_05b_deterministic_threshold_promotion(self):
+        t = self.engine.teach("Threshold promotion test", initial_confidence=0.35)
+        self.assertEqual(t.status, PhilosophyStatus.CANDIDATE.value)
+
+        t = self.engine.support(t.tendency_id, feedback="Support event", evidence_id="EV-THRESH-1")
+        self.assertAlmostEqual(t.confidence, 0.50)
+        self.assertEqual(t.status, PhilosophyStatus.SUPPORTED.value)
+
     def test_06_contradicting_evidence_decreases_confidence(self):
-        t = self.engine.teach("I tend to assume default options", initial_confidence=0.5, establish_immediately=True)
+        t = self.engine.teach("I tend to assume default options", initial_confidence=0.6, establish_immediately=True)
         self.assertEqual(t.status, PhilosophyStatus.SUPPORTED.value)
 
         t = self.engine.challenge(t.tendency_id, feedback="Failed on custom option", evidence_id="EV-FAIL-01")
-        self.assertAlmostEqual(t.confidence, 0.25)
+        self.assertAlmostEqual(t.confidence, 0.35)
         self.assertIn("EV-FAIL-01", t.contradicting_evidence_ids)
 
     def test_07_strong_contradiction_weakens_or_rejects(self):
         t = self.engine.teach("I tend to ignore warnings", initial_confidence=0.5, establish_immediately=True)
 
-        # Challenge 1 -> confidence 0.25 -> status WEAKENED
+        # Challenge 1 -> confidence 0.25 < 0.35 -> status WEAKENED
         t = self.engine.challenge(t.tendency_id, feedback="Warning caused crash", evidence_id="EV-01")
         self.assertEqual(t.status, PhilosophyStatus.WEAKENED.value)
 
@@ -145,6 +159,21 @@ class TestPhilosophyHardeningAdversarial(unittest.TestCase):
         t = self.engine.reject(t.tendency_id, reason="Security audit rejected ignoring warnings")
         self.assertEqual(t.status, PhilosophyStatus.REJECTED.value)
         self.assertEqual(t.confidence, 0.0)
+
+    def test_07b_cannot_resurrect_rejected_or_retired(self):
+        t1 = self.engine.teach("Rejection test", establish_immediately=True)
+        self.engine.reject(t1.tendency_id, reason="Rejected")
+
+        with self.assertRaises(ValueError) as cm1:
+            self.engine.support(t1.tendency_id, evidence_id="EV-NEW-1")
+        self.assertIn("Cannot support a REJECTED", str(cm1.exception))
+
+        t2 = self.engine.teach("Retirement test", establish_immediately=True)
+        self.engine.retire(t2.tendency_id, reason="Retired")
+
+        with self.assertRaises(ValueError) as cm2:
+            self.engine.challenge(t2.tendency_id, evidence_id="EV-NEW-2")
+        self.assertIn("Cannot challenge a RETIRED", str(cm2.exception))
 
     def test_08_rejected_tendency_not_consulted(self):
         t = self.engine.teach("I tend to use deprecated APIs", establish_immediately=True)
@@ -193,26 +222,28 @@ class TestPhilosophyHardeningAdversarial(unittest.TestCase):
             )
         self.assertIn("explicit task contract", str(cm.exception))
 
-    def test_14_explicit_task_requirement_beats_philosophy(self):
-        # Established soft preference: "I tend to prefer concise answers"
-        t = self.engine.teach("I tend to prefer concise answers", initial_confidence=0.8, establish_immediately=True)
+    def test_14_actual_precedence_conflict_resolution(self):
+        # Soft philosophy preference
+        philosophy_preference = "I tend to prefer concise answers"
+        t = self.engine.teach(philosophy_preference, initial_confidence=0.8, establish_immediately=True)
         self.assertTrue(t.is_active_preference())
 
-        # Explicit task contract requirement: "Produce detailed 10-page audit report"
-        # Task requirement takes precedence over soft preference
-        task_contract_requirement = "Produce detailed 10-page audit report"
-        self.assertNotEqual(t.statement, task_contract_requirement)
-        # Enforce precedence rule
-        ok, msg = self.engine.enforce_precedence_policy(
-            requested_action="follow_task_contract_requirement",
-            violates_task_contract=False,
-        )
-        self.assertTrue(ok)
+        # Explicit task contract requirement
+        task_requirement = "Produce detailed 10-page audit report"
+
+        # Resolve conflict deterministically: Task requirement strictly wins!
+        chosen, reason = self.engine.resolve_action_conflict(philosophy_preference, task_requirement)
+        self.assertEqual(chosen, task_requirement)
+        self.assertIn("strictly overrides", reason)
+
+        # Precedence policy enforcement raises exception if philosophy attempts to violate task contract
+        with self.assertRaises(PhilosophyPrecedenceError):
+            self.engine.enforce_precedence_policy(philosophy_preference, violates_task_contract=True)
 
     def test_15_evolution_history_complete_and_ordered(self):
         t = self.engine.teach("I tend to verify assumptions first", initial_confidence=0.3)
-        t = self.engine.support(t.tendency_id, feedback="Support 1")
-        t = self.engine.challenge(t.tendency_id, feedback="Challenge 1")
+        t = self.engine.support(t.tendency_id, feedback="Support 1", evidence_id="EV-01")
+        t = self.engine.challenge(t.tendency_id, feedback="Challenge 1", evidence_id="EV-02")
         t = self.engine.modify(t.tendency_id, new_statement="I perform better when I verify assumptions first")
 
         history = t.evolution_history
@@ -256,6 +287,13 @@ class TestPhilosophyHardeningAdversarial(unittest.TestCase):
 
         self.assertEqual(len(matched), 1)
         self.assertEqual(matched[0].tendency_id, t1.tendency_id)
+
+    def test_19_invalid_evidence_id_rejected(self):
+        t = self.engine.teach("Test invalid evidence ID", establish_immediately=True)
+        with self.assertRaises(ValueError):
+            self.engine.support(t.tendency_id, evidence_id="")
+        with self.assertRaises(ValueError):
+            self.engine.challenge(t.tendency_id, evidence_id="   ")
 
 
 if __name__ == "__main__":
