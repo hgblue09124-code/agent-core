@@ -439,7 +439,7 @@ class Agent:
         elapsed = time.time() - t0
         return AgentRunResult(
             run_id=run_id,
-            project_id=res.goal if hasattr(res, "project_id") else self.project_id,
+            project_id=getattr(res, "project_id", self.project_id),
             goal=res.goal,
             status=res.status,
             phase=res.phase,
