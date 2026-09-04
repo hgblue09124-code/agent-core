@@ -174,18 +174,20 @@ class PolicyEngine:
             return False, "Policy prohibits overall execution"
 
         constraints = getattr(capability_spec, "constraints", None)
-        if constraints:
-            # Explicit user approval requirement check
-            req_approval = getattr(constraints, "requires_user_approval", False)
-            if req_approval and not user_approved:
-                return False, f"Capability '{getattr(capability_spec, 'capability_id', 'unknown')}' requires explicit user approval"
+        act_str = str(action or (inputs or {}).get("action", "")).lower()
+        write_keywords = ("create", "update", "delete", "post", "put", "patch", "write", "comment")
+        is_write_action = any(kw in act_str for kw in write_keywords)
 
+        if constraints:
             # Read-only constraint check
             read_only = getattr(constraints, "read_only", False)
-            act_str = str(action or (inputs or {}).get("action", "")).lower()
-            write_keywords = ("create", "update", "delete", "post", "put", "patch", "write", "comment")
-            if read_only and any(kw in act_str for kw in write_keywords):
+            if read_only and is_write_action:
                 return False, f"Capability '{getattr(capability_spec, 'capability_id', 'unknown')}' is restricted to read-only actions (requested: '{act_str}')"
+
+            # Write actions or capabilities marked requires_user_approval demand explicit approval
+            req_approval = getattr(constraints, "requires_user_approval", False) or is_write_action
+            if req_approval and not user_approved:
+                return False, f"Action '{act_str}' on capability '{getattr(capability_spec, 'capability_id', 'unknown')}' requires explicit user approval"
 
             # Domain restriction check
             allowed_domains = getattr(constraints, "allowed_domains", [])

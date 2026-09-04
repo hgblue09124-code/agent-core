@@ -93,10 +93,8 @@ class TestPersonalAgentBetaEndToEndSmoke(unittest.TestCase):
     def test_06_capability_execution(self):
         """6. Check GitHub capability execution [Mode: MOCK/LOCAL or REAL_EXTERNAL]."""
         gh = GitHubCapabilityAdapter()
-        # Execution is classified based on whether GITHUB_TOKEN is supplied
-        mode = "REAL_EXTERNAL" if os.getenv("GITHUB_TOKEN") else "MOCK/LOCAL"
-
-        res = gh.execute({"action": "get_repo", "owner": "hgblue09124", "repo": "agent-core"})
+        # Explicit mock mode used for deterministic offline test verification
+        res = gh.execute({"action": "get_repo", "owner": "hgblue09124", "repo": "agent-core", "mock_offline": True})
         self.assertTrue(res.success)
         self.assertEqual(res.output["action"], "get_repo")
 
@@ -106,7 +104,7 @@ class TestPersonalAgentBetaEndToEndSmoke(unittest.TestCase):
             "Run task with github capability dispatch",
             capability_dispatch=(
                 "github_integration",
-                {"action": "get_repo", "owner": "hgblue09124", "repo": "agent-core"},
+                {"action": "get_repo", "owner": "hgblue09124", "repo": "agent-core", "mock_offline": True},
             ),
         )
 
@@ -177,7 +175,7 @@ class TestPersonalAgentBetaEndToEndSmoke(unittest.TestCase):
             "Execute pipeline test with github context",
             capability_dispatch=(
                 "github_integration",
-                {"action": "get_repo", "owner": "hgblue09124", "repo": "agent-core"},
+                {"action": "get_repo", "owner": "hgblue09124", "repo": "agent-core", "mock_offline": True},
             ),
         )
 

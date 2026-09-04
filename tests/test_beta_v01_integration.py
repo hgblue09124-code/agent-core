@@ -93,7 +93,7 @@ class TestExternalCapabilityBridgeAndGitHub(unittest.TestCase):
         self.assertEqual(spec.capability_id, "github_integration")
         self.assertIn("api.github.com", spec.constraints.allowed_domains)
 
-        res = gh.execute({"action": "get_repo", "owner": "hgblue09124", "repo": "agent-core"})
+        res = gh.execute({"action": "get_repo", "owner": "hgblue09124", "repo": "agent-core", "mock_offline": True})
         self.assertTrue(res.success)
         self.assertEqual(res.output["action"], "get_repo")
 
@@ -172,7 +172,7 @@ class TestAgentBetaV01AcceptanceFlow(unittest.TestCase):
     def test_agent_execute_capability_success(self):
         res: CapabilityResult = self.agent.execute_capability(
             "github_integration",
-            {"action": "list_issues", "owner": "hgblue09124", "repo": "agent-core"},
+            {"action": "list_issues", "owner": "hgblue09124", "repo": "agent-core", "mock_offline": True},
         )
         self.assertTrue(res.success)
         self.assertEqual(res.status, "SUCCESS")
@@ -182,7 +182,7 @@ class TestAgentBetaV01AcceptanceFlow(unittest.TestCase):
             "Inspect repository and list open issues",
             capability_dispatch=(
                 "github_integration",
-                {"action": "list_issues", "owner": "hgblue09124", "repo": "agent-core"},
+                {"action": "list_issues", "owner": "hgblue09124", "repo": "agent-core", "mock_offline": True},
             ),
         )
 

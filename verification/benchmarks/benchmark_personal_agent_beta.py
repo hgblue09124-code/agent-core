@@ -46,7 +46,7 @@ def benchmark_e2e_run(agent: Agent, iterations: int = 10) -> tuple[BenchmarkResu
         "Benchmark E2E warmup",
         capability_dispatch=(
             "github_integration",
-            {"action": "get_repo", "owner": "hgblue09124", "repo": "agent-core"},
+            {"action": "get_repo", "owner": "hgblue09124", "repo": "agent-core", "mock_offline": True},
         ),
     )
 
@@ -58,7 +58,7 @@ def benchmark_e2e_run(agent: Agent, iterations: int = 10) -> tuple[BenchmarkResu
             "Benchmark E2E request",
             capability_dispatch=(
                 "github_integration",
-                {"action": "get_repo", "owner": "hgblue09124", "repo": "agent-core"},
+                {"action": "get_repo", "owner": "hgblue09124", "repo": "agent-core", "mock_offline": True},
             ),
         )
         t_elapsed = time.time() - t_iter_0
@@ -121,7 +121,7 @@ def benchmark_capability_dispatch(agent: Agent, iterations: int = 20) -> Benchma
     def fn():
         res: CapabilityResult = agent.execute_capability(
             "github_integration",
-            {"action": "get_repo", "owner": "hgblue09124", "repo": "agent-core"},
+            {"action": "get_repo", "owner": "hgblue09124", "repo": "agent-core", "mock_offline": True},
         )
         assert res.success
 

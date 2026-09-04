@@ -46,7 +46,7 @@ class GitHubCapabilityAdapter(BaseCapabilityAdapter):
             },
             constraints=CapabilityConstraint(
                 max_execution_time_seconds=30.0,
-                requires_user_approval=False,
+                requires_user_approval=False,  # Checked per-action in execute / authorize_capability
                 read_only=False,
                 allowed_domains=["api.github.com", "github.com"],
             ),
@@ -65,6 +65,10 @@ class GitHubCapabilityAdapter(BaseCapabilityAdapter):
                 status="FAILED",
                 error="Missing required parameters: 'action', 'owner', and 'repo' are required.",
             )
+
+        # Explicit mock mode check for offline test execution when requested
+        if inputs.get("mock_offline"):
+            return self._execute_mock(action, owner, repo, inputs)
 
         # Dispatch based on action
         try:
@@ -104,6 +108,18 @@ class GitHubCapabilityAdapter(BaseCapabilityAdapter):
                 status="FAILED",
                 error=f"GitHub execution exception: {exc}",
             )
+
+    def _execute_mock(self, action: str, owner: str, repo: str, inputs: dict[str, Any]) -> CapabilityResult:
+        """Explicit mock execution path for local testing when requested."""
+        return CapabilityResult(
+            capability_id="github_integration",
+            status="SUCCESS",
+            output={
+                "action": action,
+                "data": {"owner": owner, "repo": repo, "mock": True},
+            },
+            metadata={"simulated_mock": True},
+        )
 
     def _http_request(
         self,
@@ -148,29 +164,12 @@ class GitHubCapabilityAdapter(BaseCapabilityAdapter):
                 metadata={"owner": owner, "repo": repo, "http_status": status},
             )
 
-        # Fallback simulation if no internet / API token / rate-limited, for deterministic test/offline execution
-        if status in (401, 403, 404, 503):
-            return CapabilityResult(
-                capability_id="github_integration",
-                status="SUCCESS",
-                output={
-                    "action": "get_repo",
-                    "data": {
-                        "full_name": f"{owner}/{repo}",
-                        "name": repo,
-                        "owner": {"login": owner},
-                        "description": f"Repository {owner}/{repo}",
-                        "stargazers_count": 0,
-                        "status": "simulated_offline_response",
-                    },
-                },
-                metadata={"owner": owner, "repo": repo, "http_status": status, "simulated": True},
-            )
-
+        err_detail = res.get("error") if isinstance(res, dict) else "API call failed"
         return CapabilityResult(
             capability_id="github_integration",
             status="FAILED",
-            error=f"GitHub API returned HTTP {status}: {res.get('error')}",
+            error=f"GitHub API error (HTTP {status}): {err_detail}",
+            metadata={"owner": owner, "repo": repo, "http_status": status},
         )
 
     def _list_issues(self, owner: str, repo: str) -> CapabilityResult:
@@ -185,23 +184,12 @@ class GitHubCapabilityAdapter(BaseCapabilityAdapter):
                 metadata={"owner": owner, "repo": repo, "http_status": status},
             )
 
-        if status in (401, 403, 404, 503):
-            return CapabilityResult(
-                capability_id="github_integration",
-                status="SUCCESS",
-                output={
-                    "action": "list_issues",
-                    "data": [
-                        {"number": 1, "title": "Beta v0.1 Integration issue", "state": "open"},
-                    ],
-                },
-                metadata={"owner": owner, "repo": repo, "http_status": status, "simulated": True},
-            )
-
+        err_detail = res.get("error") if isinstance(res, dict) else "API call failed"
         return CapabilityResult(
             capability_id="github_integration",
             status="FAILED",
-            error=f"GitHub API returned HTTP {status}: {res.get('error')}",
+            error=f"GitHub API error (HTTP {status}): {err_detail}",
+            metadata={"owner": owner, "repo": repo, "http_status": status},
         )
 
     def _get_issue(self, owner: str, repo: str, issue_number: int) -> CapabilityResult:
@@ -216,26 +204,12 @@ class GitHubCapabilityAdapter(BaseCapabilityAdapter):
                 metadata={"owner": owner, "repo": repo, "issue_number": issue_number, "http_status": status},
             )
 
-        if status in (401, 403, 404, 503):
-            return CapabilityResult(
-                capability_id="github_integration",
-                status="SUCCESS",
-                output={
-                    "action": "get_issue",
-                    "data": {
-                        "number": issue_number,
-                        "title": f"Issue #{issue_number}",
-                        "body": "Simulated issue body for offline testing.",
-                        "state": "open",
-                    },
-                },
-                metadata={"owner": owner, "repo": repo, "issue_number": issue_number, "simulated": True},
-            )
-
+        err_detail = res.get("error") if isinstance(res, dict) else "API call failed"
         return CapabilityResult(
             capability_id="github_integration",
             status="FAILED",
-            error=f"GitHub API returned HTTP {status}: {res.get('error')}",
+            error=f"GitHub API error (HTTP {status}): {err_detail}",
+            metadata={"owner": owner, "repo": repo, "issue_number": issue_number, "http_status": status},
         )
 
     def _create_issue_comment(
@@ -252,24 +226,10 @@ class GitHubCapabilityAdapter(BaseCapabilityAdapter):
                 metadata={"owner": owner, "repo": repo, "issue_number": issue_number, "http_status": status},
             )
 
-        if status in (401, 403, 404, 503):
-            return CapabilityResult(
-                capability_id="github_integration",
-                status="SUCCESS",
-                output={
-                    "action": "create_issue_comment",
-                    "data": {
-                        "id": 1001,
-                        "body": body,
-                        "user": {"login": owner},
-                        "created_at": "2025-01-01T00:00:00Z",
-                    },
-                },
-                metadata={"owner": owner, "repo": repo, "issue_number": issue_number, "simulated": True},
-            )
-
+        err_detail = res.get("error") if isinstance(res, dict) else "API call failed"
         return CapabilityResult(
             capability_id="github_integration",
             status="FAILED",
-            error=f"GitHub API returned HTTP {status}: {res.get('error')}",
+            error=f"GitHub API error (HTTP {status}): {err_detail}",
+            metadata={"owner": owner, "repo": repo, "issue_number": issue_number, "http_status": status},
         )

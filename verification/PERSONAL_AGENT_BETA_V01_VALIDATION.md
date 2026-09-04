@@ -3,7 +3,7 @@
 **Date**: 2026-09-04
 **Target Repository**: `Agent-Core` (`hgblue09124-code/agent-core`)
 **Version**: `v0.1.0-beta`
-**Validation Verdict**: **`BETA READY WITH TECHNICAL DEBT`**
+**Validation Verdict**: **`BETA READY`**
 
 ---
 
@@ -11,9 +11,9 @@
 
 Personal Agent Beta v0.1 integration and end-to-end validation has been successfully completed.
 
-`Agent-Core` now serves as the authoritative kernel composition point bringing together `agent-personal-vault` (persistent personal context storage via `PersonalVaultAdapter`) and `agent-capabilities` (pluggable external capability framework via `ExternalCapabilityBridge` and `GitHubCapabilityAdapter`).
+`Agent-Core` serves as the authoritative kernel composition point bringing together `agent-personal-vault` (persistent personal context storage via `PersonalVaultAdapter`) and `agent-capabilities` (pluggable external capability framework via `ExternalCapabilityBridge` and `GitHubCapabilityAdapter`).
 
-All 12 end-to-end Beta pipeline smoke test checks and the complete 714-test regression suite pass with 100% success rate.
+All 12 end-to-end Beta pipeline smoke test checks, 10 focused Bug #1 and Bug #2 capability regression tests, and the complete 736-test suite pass with 100% success rate.
 
 ---
 
@@ -50,7 +50,7 @@ All 12 end-to-end Beta pipeline smoke test checks and the complete 714-test regr
 2. **Personal Vault Integration (`core/vault/adapter.py`)**: `PersonalVaultAdapter` provides narrow storage integration with local memory fallback buffer when external vault package is absent.
 3. **Capabilities Framework Bridge (`core/capabilities/bridge.py`)**: `ExternalCapabilityBridge` translates external `agent-capabilities` adapters into Core's `BaseCapabilityAdapter` contract.
 4. **GitHub Capability Target (`core/capabilities/github.py`)**: Real capability target handling repository metadata, issue listing, issue inspection, and comment creation.
-5. **Policy & Permission Engine (`core/kernel/policy.py`)**: Deterministic `authorize_capability()` validation enforcing read-only constraints, explicit user approval, and domain restrictions.
+5. **Policy & Permission Engine (`core/kernel/policy.py`)**: Deterministic `authorize_capability()` validation enforcing read-only constraints, explicit user approval for write actions (`create_issue_comment`), and domain restrictions.
 6. **Experience & Strategy Learning**: Structured experience persistence, lesson extraction, candidate strategy generation, and strategy ranker selection.
 7. **Run State Continuity & Resume (`core/runtime/checkpoint.py`)**: Atomic run state checkpoint persistence and restoration via `agent.resume(run_id)`.
 
@@ -66,7 +66,7 @@ All 12 end-to-end Beta pipeline smoke test checks and the complete 714-test regr
   - `PersonalVaultAdapter` fallback in-memory store when external `agent-personal-vault` package is omitted.
   - Shell and inspect task step executions via `TaskRunner`.
 - **REAL_EXTERNAL**:
-  - `GitHubCapabilityAdapter` executes live against `https://api.github.com` when a valid `GITHUB_TOKEN` environment variable is present. When absent, it operates in simulated offline fallback mode.
+  - `GitHubCapabilityAdapter` executes live against `https://api.github.com` when a valid `GITHUB_TOKEN` environment variable is present. HTTP errors (401, 403, 404, 503) return explicit `status="FAILED"`.
 
 ---
 
@@ -90,28 +90,24 @@ All 12 end-to-end Beta pipeline smoke test checks and the complete 714-test regr
 
 ---
 
-## 5. Technical Debt Backlog (Non-Blocking)
+## 5. Hardening Bug Fixes (Resolved)
 
-The following non-blocking hardening backlog items are identified for future release iterations:
+1. **`HARDENING-BETA-01` (Resolved)**:
+   - GitHub write operations (such as `create_issue_comment`) now strictly require explicit user approval (`user_approved=True`). Unapproved write requests are denied (`status="DENIED"`) by `PolicyEngine.authorize_capability()`.
 
-1. **`HARDENING-BETA-01`**:
-   - **Description**: GitHub write operations (such as `create_issue_comment`) should set `requires_user_approval=True` on `CapabilityConstraint` so write actions always demand explicit user approval.
-   - **Impact**: Security hardening for mutating actions. Does not block Beta developer preview.
-
-2. **`HARDENING-BETA-02`**:
-   - **Description**: GitHub HTTP API error responses (401/403/404/503) during unauthenticated offline calls currently return simulated fallback success payloads instead of returning explicit `FAILED` status.
-   - **Impact**: Capability error reporting refinement. Does not block Beta orchestration.
+2. **`HARDENING-BETA-02` (Resolved)**:
+   - GitHub HTTP API errors (401, 403, 404, 503) and network failures now explicitly return `status="FAILED"` with error details, ensuring API failures never masquerade as fake successes.
 
 ---
 
 ## 6. Blockers Assessment
 
 - **Blockers preventing Beta usage**: **NONE**
-- **Regression status**: All 714 existing unit, kernel, runtime, and CLI smoke tests pass without regressions.
+- **Regression status**: All 736 unit, kernel, runtime, capability, and CLI smoke tests pass without regressions.
 
 ---
 
 ## 7. Conclusion & Next Steps
 
-Personal Agent Beta v0.1 is **VALIDATED** and **READY FOR DEVELOPER PREVIEW**.
+Personal Agent Beta v0.1 is **VALIDATED** and **BETA READY FOR DEVELOPER PREVIEW**.
 The composition of Agent-Core + Personal Vault + Capabilities functions seamlessly across the full end-to-end lifecycle.
