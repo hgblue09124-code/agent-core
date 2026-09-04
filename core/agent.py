@@ -242,7 +242,7 @@ class Agent:
             exp_recorded = True
         else:
             try:
-                exp = Experience(
+                new_exp = Experience(
                     run_id=res.run_id,
                     goal=goal,
                     project_id=pid,
@@ -252,7 +252,7 @@ class Agent:
                     llm_calls=res.llm_calls,
                     estimated_tokens=res.estimated_tokens,
                 )
-                self._experience_engine.record_experience(exp)
+                exp = self._experience_engine.record_experience(new_exp)
                 exp_recorded = True
             except (ValueError, OSError, RuntimeError) as exc:
                 exp_recorded = False
@@ -274,8 +274,16 @@ class Agent:
                         verification_result=verdict,
                         actual_outcome=f"status={res.status}, phase={res.phase}",
                     )
-            except Exception:
-                pass
+            except Exception as exc:
+                run_errors.append(f"Strategy learning pipeline notice: {exc}")
+                self._event_bus.publish(
+                    new_event(
+                        run_id=res.run_id,
+                        phase=EventPhase.EXPERIENCE.value,
+                        action=f"Learning pipeline exception: {exc}",
+                        status=EventStatus.FAIL.value,
+                    )
+                )
 
         # 5. UPDATE MEMORY
         if res.success:

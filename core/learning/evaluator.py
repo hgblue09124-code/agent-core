@@ -8,7 +8,7 @@ from datetime import datetime, timezone
 from typing import Optional
 
 from core.learning.strategy import Strategy, StrategyStatus, StrategyApplication
-from core.learning.store import StrategyStore
+from core.learning.store import StrategyStore, StrategyApplicationStore
 
 
 class StrategyEvaluator:
@@ -25,8 +25,13 @@ class StrategyEvaluator:
     WEAKENED_CONFIDENCE_THRESHOLD = 0.35
     RETIRED_CONFIDENCE_THRESHOLD = 0.15
 
-    def __init__(self, store: Optional[StrategyStore] = None):
+    def __init__(
+        self,
+        store: Optional[StrategyStore] = None,
+        app_store: Optional[StrategyApplicationStore] = None,
+    ):
         self.store = store or StrategyStore()
+        self.app_store = app_store or StrategyApplicationStore()
 
     def evaluate_application(
         self,
@@ -40,6 +45,20 @@ class StrategyEvaluator:
         strategy = self.store.get(strategy_id)
         if not strategy:
             return None
+
+        now = datetime.now(timezone.utc).isoformat()
+        app = StrategyApplication(
+            application_id=f"APP-{uuid.uuid4().hex[:10]}",
+            strategy_id=strategy_id,
+            run_id=run_id,
+            task_id=task_id,
+            context={"strategy_rule": strategy.rule},
+            expected_outcome=strategy.expected_outcome,
+            actual_outcome=actual_outcome,
+            verification_result=verification_result,
+            applied_at=now,
+        )
+        self.app_store.create(app)
 
         # 1. Update evidence counts
         if verification_result == "PASS":

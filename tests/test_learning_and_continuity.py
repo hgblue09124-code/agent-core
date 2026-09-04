@@ -203,6 +203,36 @@ class TestLearningPipelineAndConsolidation(unittest.TestCase):
 class TestProcessRestartContinuity(unittest.TestCase):
     """Test process restart continuity: learned state survives process restart."""
 
+    def test_first_execution_generates_and_persists_strategy(self):
+        """Mandatory regression test: single first execution on fresh storage must generate and persist a strategy."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            os.environ["AGENTCORE_STORAGE_DIR"] = tmpdir
+            os.environ["AGENTCORE_PLANNER_PROVIDER"] = "mock"
+
+            # 1. Fresh Agent instance
+            agent = Agent(project_id="default")
+
+            # 2. Execute successful task on FIRST run
+            res: AgentRunResult = agent.run("Verify first execution strategy creation")
+            self.assertTrue(res.success)
+            self.assertTrue(res.experience_recorded)
+
+            # 3. Verify Experience exists
+            exp_store = agent._experience_engine.store
+            exps = exp_store.list_all()
+            self.assertEqual(len(exps), 1)
+
+            # 4. Verify Strategy is created and persisted immediately on run 1
+            strat_store = StrategyStore(store_dir=os.path.join(tmpdir, "strategies"))
+            strats = strat_store.list_all()
+            self.assertTrue(len(strats) > 0, "Strategy must be created on the very first execution")
+
+            # 5. Process restart simulation: new Agent instance retrieves strategy
+            agent2 = Agent(project_id="default")
+            ranker2 = StrategyRanker(store=agent2._strategy_store)
+            retrieved = ranker2.select_applicable_strategies("Verify first execution strategy creation")
+            self.assertTrue(len(retrieved) > 0, "Strategy must survive process restart")
+
     def test_learned_strategy_survives_restart_and_affects_future_runs(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             os.environ["AGENTCORE_STORAGE_DIR"] = tmpdir
@@ -217,7 +247,6 @@ class TestProcessRestartContinuity(unittest.TestCase):
             strat_store1 = StrategyStore(store_dir=os.path.join(tmpdir, "strategies"))
             strats1 = strat_store1.list_all()
             self.assertTrue(len(strats1) > 0)
-            target_strat_id = strats1[0].strategy_id
 
             # Simulate Process Restart (Session 2): Create brand new Agent instance reading same storage
             agent2 = Agent(project_id="default")
