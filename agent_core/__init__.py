@@ -10,6 +10,14 @@ from core import (
     Experience,
     PhilosophyEngine,
     PhilosophyTendency,
+    MemoryManager,
+    MemoryItem,
+    MemoryType,
+    Strategy,
+    StrategyStatus,
+    StrategyStore,
+    LearningPipeline,
+    StrategyEvaluator,
 )
 
 __all__ = [
@@ -21,4 +29,12 @@ __all__ = [
     "Experience",
     "PhilosophyEngine",
     "PhilosophyTendency",
+    "MemoryManager",
+    "MemoryItem",
+    "MemoryType",
+    "Strategy",
+    "StrategyStatus",
+    "StrategyStore",
+    "LearningPipeline",
+    "StrategyEvaluator",
 ]
