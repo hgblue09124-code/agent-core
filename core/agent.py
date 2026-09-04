@@ -26,6 +26,11 @@ from core.memory.manager import MemoryManager
 from core.memory.schema import MemoryQuery, MemoryType
 from core.capabilities.adapter import CapabilityRegistry
 from core.capabilities.mock_adapter import MockEchoCapabilityAdapter
+from core.learning.strategy import Strategy
+from core.learning.store import StrategyStore
+from core.learning.pipeline import LearningPipeline
+from core.learning.evaluator import StrategyEvaluator
+from core.learning.retrieval import StrategyRanker
 from core.events.bus import EventBus
 from core.events.schema import new_event, EventPhase, EventStatus
 
@@ -100,6 +105,10 @@ class Agent:
         self._memory = MemoryManager()
         self._capabilities = CapabilityRegistry()
         self._capabilities.register(MockEchoCapabilityAdapter())
+        self._strategy_store = StrategyStore()
+        self._learning_pipeline = LearningPipeline(strategy_store=self._strategy_store)
+        self._strategy_evaluator = StrategyEvaluator(store=self._strategy_store)
+        self._strategy_ranker = StrategyRanker(store=self._strategy_store)
         self._event_bus = EventBus()
         self._kernel = Kernel(project_id=self.project_id, budget=self.budget)
 
@@ -178,9 +187,10 @@ class Agent:
                 errors=[f"Authority violation: {exc}"],
             )
 
-        # 3. MEMORY RETRIEVAL: Retrieve relevant context and identity
+        # 3. MEMORY & STRATEGY RETRIEVAL: Retrieve context, identity, and active strategies
         identity_mem = self._memory.get_identity()
         relevant_mems = self._memory.retrieve(MemoryQuery(query=goal, limit=3))
+        applicable_strategies = self._strategy_ranker.select_applicable_strategies(goal=goal, limit=2)
 
         # Emit TASK_STARTED Event
         self._event_bus.publish(
@@ -200,6 +210,8 @@ class Agent:
         observations = [f"Identity: {identity_mem.content[:60]}..."]
         if relevant_mems:
             observations.extend([f"Memory context: {m.content[:50]}" for m in relevant_mems])
+        if applicable_strategies:
+            observations.extend([f"Applied strategy: {s.name} ({s.rule[:40]})" for s in applicable_strategies])
 
         if ctx:
             if ctx.plan and hasattr(ctx.plan, "steps"):
@@ -225,7 +237,8 @@ class Agent:
         # Record Experience / Verify Experience Persistence
         exp_recorded = False
         run_errors = list(res.errors) if res.errors else []
-        if self._experience_engine.get_experience(res.run_id) is not None:
+        exp = self._experience_engine.get_experience(res.run_id)
+        if exp is not None:
             exp_recorded = True
         else:
             try:
@@ -245,7 +258,26 @@ class Agent:
                 exp_recorded = False
                 run_errors.append(f"Experience recording failed: {exc}")
 
-        # 4. UPDATE MEMORY
+        # 4. EXTRACT LESSON -> FORM CANDIDATE STRATEGY -> EVALUATE STRATEGY OUTCOMES
+        if exp is not None:
+            try:
+                # Process experience into candidate strategy
+                new_strat = self._learning_pipeline.process_experience(exp)
+
+                # Evaluate applied strategies against verification result
+                verdict = "PASS" if res.success else "FAIL"
+                for strat in applicable_strategies:
+                    self._strategy_evaluator.evaluate_application(
+                        strategy_id=strat.strategy_id,
+                        run_id=res.run_id,
+                        task_id=res.run_id,
+                        verification_result=verdict,
+                        actual_outcome=f"status={res.status}, phase={res.phase}",
+                    )
+            except Exception:
+                pass
+
+        # 5. UPDATE MEMORY
         if res.success:
             self._memory.remember(
                 content=f"Successfully executed goal '{goal}' on project '{pid}'",

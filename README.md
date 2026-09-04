@@ -4,13 +4,13 @@ Personal Agent development substrate.
 
 ## Key Features
 
-- **Personal Agent Runtime Foundation**: Coherent runtime loop (`Observe -> Understand -> Retrieve Memory -> Reason -> Plan -> Policy Check -> Capability Execution -> Verify -> Record Experience -> Update Memory -> Continue`).
-- **Persistent Memory & Identity Subsystem**: Short-term, long-term, user context, and cross-session identity memory model (`core/memory/`).
+- **True Personal Agent Foundation (100% Core Architecture)**: Complete learning-and-continuity loop (`Observe -> Understand -> Retrieve Memory -> Retrieve Strategies -> Reason -> Plan -> Policy -> Capability Execution -> Verify -> Record Experience -> Extract Lesson -> Form Candidate Strategy -> Evaluate Outcome -> Consolidate Memory -> Continue`).
+- **First-Class Strategy Memory & Evaluator**: Persistent Strategy model (`core/learning/strategy.py`) with explicit lifecycle states (`CANDIDATE`, `VALIDATED`, `SUPPORTED`, `WEAKENED`, `RETIRED`, `SUPERSEDED`), versioning, supersession, and deterministic confidence updates.
+- **Persistent Memory & Cross-Session Continuity**: Short-term, long-term, user context, and identity memory (`core/memory/`) preserving learned state across process restarts.
 - **Autonomous Task Queue & Scheduler**: Priority-based task queue and deterministic bounded scheduler supporting dependencies, state machine transitions, bounded retries, pause/resume, and cancellation (`core/tasks/queue.py`, `core/tasks/scheduler.py`).
-- **Pluggable Capability Adapters**: Strict capability specification contract (`core/capabilities/`) insulating Core from external implementations.
-- **Constitutional Execution & Independent Verifier**: Enforces invariants INV-1 through INV-10 with strict separation of executor and verifier authority.
-- **Agent Philosophy Layer**: Soft behavioral preferences obeying strict precedence (`Kernel/Security/Contracts > Verification > Task Requirements > Philosophy`).
-- **Command-Line Interface & Subsystems**: `agent-core` CLI supporting `run`, `queue`, `schedule`, `inspect`, `history`, and `benchmark`.
+- **Pluggable Capability Adapters**: Abstract capability contract (`core/capabilities/`) insulating Core from external capability implementations.
+- **Constitutional Precedence & Safety**: Strict hierarchy (`Kernel/Security/Contracts > Verification > Task Requirements > Learned Strategies > Philosophy`).
+- **Command-Line Subsystems**: `agent-core` CLI supporting `run`, `queue`, `schedule`, `inspect`, `history`, and `benchmark`.
 
 ## Principles
 
