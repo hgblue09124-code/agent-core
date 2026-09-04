@@ -316,15 +316,14 @@ class TestCrashResume(unittest.TestCase):
 
     def test_idempotent_experience_recording(self):
         """Recording same experience twice is idempotent."""
-        from core.experience.store import ExperienceStore
+        from core.experience.store import ExperienceStore, ExperienceStoreError
         from core.experience.schema import Experience
         s = ExperienceStore(self.tmpdir)
         e = Experience(run_id="R1", goal="x", project_id="p",
                       outcome="success")
         s.create(e)
-        # Try to create again → must raise
-        import pytest
-        with self.assertRaises(Exception):
+        # Try to create again → must raise ExperienceStoreError
+        with self.assertRaises(ExperienceStoreError):
             s.create(e)
 
     def test_no_duplicate_on_resume(self):

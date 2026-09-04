@@ -21,6 +21,7 @@ from core.projects.manager import ProjectManager
 from core.philosophy.engine import PhilosophyEngine, PhilosophyPrecedenceError
 from core.experience.engine import ExperienceEngine
 from core.experience.schema import Experience
+from core.experience.store import ExperienceStoreError
 from core.tasks.manager import TaskManager
 from core.memory.manager import MemoryManager
 from core.memory.schema import MemoryQuery, MemoryType
@@ -254,7 +255,7 @@ class Agent:
                 )
                 exp = self._experience_engine.record_experience(new_exp)
                 exp_recorded = True
-            except (ValueError, OSError, RuntimeError) as exc:
+            except (ExperienceStoreError, ValueError, OSError, RuntimeError) as exc:
                 exp_recorded = False
                 run_errors.append(f"Experience recording failed: {exc}")
 
@@ -274,7 +275,7 @@ class Agent:
                         verification_result=verdict,
                         actual_outcome=f"status={res.status}, phase={res.phase}",
                     )
-            except Exception as exc:
+            except (ExperienceStoreError, ValueError, OSError, RuntimeError) as exc:
                 run_errors.append(f"Strategy learning pipeline notice: {exc}")
                 self._event_bus.publish(
                     new_event(

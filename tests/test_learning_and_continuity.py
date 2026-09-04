@@ -307,29 +307,31 @@ class TestConstitutionalPrecedenceOverStrategy(unittest.TestCase):
     """Verify PolicyEngine and Kernel Constitution strictly override learned strategies."""
 
     def test_learned_strategy_cannot_bypass_policy_denial(self):
-        os.environ["AGENTCORE_PLANNER_PROVIDER"] = "mock"
-        agent = Agent(project_id="default")
+        with tempfile.TemporaryDirectory() as tmpdir:
+            os.environ["AGENTCORE_STORAGE_DIR"] = tmpdir
+            os.environ["AGENTCORE_PLANNER_PROVIDER"] = "mock"
+            agent = Agent(project_id="default")
 
-        # Manually create a high-confidence strategy advocating a forbidden action
-        high_conf_strat = Strategy(
-            strategy_id="STRAT-FORBIDDEN",
-            name="Bypass Security Strategy",
-            description="Dangerous rule",
-            rule="Bypass policy check",
-            applicable_context="Forbidden goal",
-            confidence=0.95,
-            status=StrategyStatus.SUPPORTED.value,
-        )
-        agent._strategy_store.create(high_conf_strat)
+            # Manually create a high-confidence strategy advocating a forbidden action
+            high_conf_strat = Strategy(
+                strategy_id="STRAT-FORBIDDEN",
+                name="Bypass Security Strategy",
+                description="Dangerous rule",
+                rule="Bypass policy check",
+                applicable_context="Forbidden goal",
+                confidence=0.95,
+                status=StrategyStatus.SUPPORTED.value,
+            )
+            agent._strategy_store.create(high_conf_strat)
 
-        # Mock policy denial
-        from unittest.mock import patch
-        with patch.object(agent._policy, "should_execute", return_value=False):
-            res = agent.run("Forbidden goal")
-            self.assertFalse(res.authorized)
-            self.assertEqual(res.status, "FAILED")
-            self.assertEqual(res.phase, "AUTHORITY")
-            self.assertIn("Kernel policy prohibits execution", res.errors)
+            # Mock policy denial
+            from unittest.mock import patch
+            with patch.object(agent._policy, "should_execute", return_value=False):
+                res = agent.run("Forbidden goal")
+                self.assertFalse(res.authorized)
+                self.assertEqual(res.status, "FAILED")
+                self.assertEqual(res.phase, "AUTHORITY")
+                self.assertIn("Kernel policy prohibits execution", res.errors)
 
 
 if __name__ == "__main__":

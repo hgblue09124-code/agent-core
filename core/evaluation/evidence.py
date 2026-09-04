@@ -72,7 +72,9 @@ class EvidenceLedger:
             raise ValueError("evidence_id required")
         if _contains_secret(evidence.source + evidence.result + evidence.run_id):
             raise ValueError("Evidence contains secret-like content — refused")
-        # Idempotent: same id → overwrite
+        existing = self._evidence.get(evidence.evidence_id)
+        if existing and existing.to_dict() == evidence.to_dict():
+            return evidence
         self._evidence[evidence.evidence_id] = evidence
         self.save()
         return evidence

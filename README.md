@@ -2,15 +2,25 @@
 
 Personal Agent development substrate.
 
-## Key Features
+## Architecture Status
 
-- **True Personal Agent Foundation (100% Core Architecture)**: Complete learning-and-continuity loop (`Observe -> Understand -> Retrieve Memory -> Retrieve Strategies -> Reason -> Plan -> Policy -> Capability Execution -> Verify -> Record Experience -> Extract Lesson -> Form Candidate Strategy -> Evaluate Outcome -> Consolidate Memory -> Continue`).
-- **First-Class Strategy Memory & Evaluator**: Persistent Strategy model (`core/learning/strategy.py`) with explicit lifecycle states (`CANDIDATE`, `VALIDATED`, `SUPPORTED`, `WEAKENED`, `RETIRED`, `SUPERSEDED`), versioning, supersession, and deterministic confidence updates.
-- **Persistent Memory & Cross-Session Continuity**: Short-term, long-term, user context, and identity memory (`core/memory/`) preserving learned state across process restarts.
-- **Autonomous Task Queue & Scheduler**: Priority-based task queue and deterministic bounded scheduler supporting dependencies, state machine transitions, bounded retries, pause/resume, and cancellation (`core/tasks/queue.py`, `core/tasks/scheduler.py`).
-- **Pluggable Capability Adapters**: Abstract capability contract (`core/capabilities/`) insulating Core from external capability implementations.
-- **Constitutional Precedence & Safety**: Strict hierarchy (`Kernel/Security/Contracts > Verification > Task Requirements > Learned Strategies > Philosophy`).
-- **Command-Line Subsystems**: `agent-core` CLI supporting `run`, `queue`, `schedule`, `inspect`, `history`, and `benchmark`.
+Agent-Core provides a **hardened foundational substrate** for Personal Agent development.
+
+It implements clean core boundaries, deterministic persistence, experience-based strategy learning, and pluggable capability adapters while strictly keeping external domain logic outside the kernel.
+
+### Implemented Core Subsystems
+- **Core Architecture & Kernel Loop**: Bounded orchestration pipeline (`Observe -> Retrieve -> Reason -> Plan -> Policy -> Execute -> Verify -> Record Experience -> Extract Lesson -> Strategy -> Consolidate Memory -> Continue`).
+- **Persistent Memory Subsystem**: Atomic filesystem storage for `SHORT_TERM`, `LONG_TERM`, `USER_CONTEXT`, and `IDENTITY` memory (`core/memory/`) preserving learned state across process restarts.
+- **First-Class Strategy Subsystem**: Persistent Strategy schema (`core/learning/strategy.py`) with explicit lifecycle states (`CANDIDATE`, `VALIDATED`, `SUPPORTED`, `WEAKENED`, `RETIRED`, `SUPERSEDED`), versioning, supersession, and deterministic confidence updates (+0.15 on PASS, -0.25 on FAIL).
+- **Capability Adapter Contracts**: Abstract capability specification contract (`core/capabilities/`) insulating Core from concrete external capability implementations.
+- **Autonomous Task Queue & Scheduler**: Priority queue and deterministic bounded scheduler (`core/tasks/queue.py`, `core/tasks/scheduler.py`) with state machine transitions, dependency checks, and bounded retries.
+- **Constitutional Precedence**: Strict hierarchy (`Kernel/Security/Contracts > Verification > Task Requirements > Learned Strategies > Philosophy`).
+
+### Intentionally Deferred Capabilities (Future Milestones)
+- Vector database / embedding-based semantic retrieval.
+- Autonomous web browser agents or unrestricted internet execution.
+- Autonomous self-modifying code generation.
+- Production external API integrations.
 
 ## Principles
 

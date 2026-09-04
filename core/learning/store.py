@@ -94,6 +94,19 @@ class StrategyStore:
         else:
             self.store_dir = get_storage_dir("strategies")
         self.store_dir.mkdir(parents=True, exist_ok=True)
+        self._cache: dict[str, Strategy] = {}
+        self._load_cache()
+
+    def _load_cache(self) -> None:
+        self._cache.clear()
+        for p in self.store_dir.glob("*.json"):
+            try:
+                with open(p, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                strat = Strategy.from_dict(data)
+                self._cache[strat.strategy_id] = strat
+            except (json.JSONDecodeError, OSError):
+                continue
 
     def _file_path(self, strategy_id: str) -> Path:
         safe_id = "".join(c for c in strategy_id if c.isalnum() or c in ("-", "_"))
@@ -101,29 +114,36 @@ class StrategyStore:
 
     def create(self, strategy: Strategy) -> Strategy:
         p = self._file_path(strategy.strategy_id)
-        if p.exists():
+        if p.exists() or strategy.strategy_id in self._cache:
             raise ValueError(f"Strategy already exists: {strategy.strategy_id}")
         self._write_atomic(p, strategy.to_dict())
+        self._cache[strategy.strategy_id] = strategy
         return strategy
 
     def update(self, strategy: Strategy) -> Strategy:
         p = self._file_path(strategy.strategy_id)
         strategy.touch()
         self._write_atomic(p, strategy.to_dict())
+        self._cache[strategy.strategy_id] = strategy
         return strategy
 
     def get(self, strategy_id: str) -> Optional[Strategy]:
+        if strategy_id in self._cache:
+            return self._cache[strategy_id]
         p = self._file_path(strategy_id)
         if not p.exists():
             return None
         try:
             with open(p, "r", encoding="utf-8") as f:
                 data = json.load(f)
-            return Strategy.from_dict(data)
+            strat = Strategy.from_dict(data)
+            self._cache[strat.strategy_id] = strat
+            return strat
         except (json.JSONDecodeError, OSError):
             return None
 
     def delete(self, strategy_id: str) -> bool:
+        self._cache.pop(strategy_id, None)
         p = self._file_path(strategy_id)
         if p.exists():
             try:
@@ -134,16 +154,10 @@ class StrategyStore:
         return False
 
     def list_all(self, status: Optional[str] = None) -> list[Strategy]:
-        strategies = []
-        for p in self.store_dir.glob("*.json"):
-            try:
-                with open(p, "r", encoding="utf-8") as f:
-                    data = json.load(f)
-                strat = Strategy.from_dict(data)
-                if status is None or strat.status == status:
-                    strategies.append(strat)
-            except (json.JSONDecodeError, OSError):
-                continue
+        strategies = [
+            s for s in self._cache.values()
+            if status is None or s.status == status
+        ]
         strategies.sort(key=lambda x: (x.confidence, x.updated_at or x.created_at or ""), reverse=True)
         return strategies
 
