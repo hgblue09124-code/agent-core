@@ -215,7 +215,7 @@ class Agent:
                 )
                 self._experience_engine.record_experience(exp)
                 exp_recorded = True
-            except (ValueError, OSError, RuntimeError, Exception) as exc:
+            except (ValueError, OSError, RuntimeError) as exc:
                 exp_recorded = False
                 run_errors.append(f"Experience recording failed: {exc}")
 

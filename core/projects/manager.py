@@ -17,6 +17,22 @@ from typing import Optional
 ENV_WORKSPACE_DIR = "AGENTCORE_WORKSPACE_DIR"
 
 
+def safe_path_exists(path: Path) -> bool:
+    """Check if path exists safely without raising PermissionError or OSError."""
+    try:
+        return path.exists()
+    except (PermissionError, OSError):
+        return False
+
+
+def safe_is_dir(path: Path) -> bool:
+    """Check if path is a directory safely without raising PermissionError or OSError."""
+    try:
+        return path.is_dir()
+    except (PermissionError, OSError):
+        return False
+
+
 def get_base_workspace_dir() -> Path:
     """Return workspace base directory based on environment variable or repository root."""
     env_dir = os.environ.get(ENV_WORKSPACE_DIR, "").strip()
@@ -32,22 +48,22 @@ def resolve_project_root(root_path: str) -> Path:
     Rules:
     1. Relative paths resolve relative to get_base_workspace_dir().
     2. Absolute paths that exist resolve directly.
-    3. Nonexistent absolute paths do not silently guess alternative locations,
+    3. Nonexistent/inaccessible absolute paths do not silently guess alternative locations,
        except preserving explicit legacy fallback for the Cuu-Gioi workspace path.
     """
     path_obj = Path(root_path)
     base_ws = get_base_workspace_dir()
 
     if path_obj.is_absolute():
-        if path_obj.exists():
+        if safe_path_exists(path_obj):
             return path_obj
         # Legacy fallback for Cuu-Gioi workspace path
         if "Cuu-Gioi" in path_obj.parts or "cuu-gioi" in path_obj.parts:
             fallback = base_ws / "workspace" / "Cuu-Gioi"
-            if fallback.exists():
+            if safe_path_exists(fallback):
                 return fallback
             fallback_direct = base_ws / "Cuu-Gioi"
-            if fallback_direct.exists():
+            if safe_path_exists(fallback_direct):
                 return fallback_direct
         return path_obj
 
@@ -154,9 +170,9 @@ class ProjectManager:
             return False, f"Project '{project_id}' not found in registry"
 
         root = resolve_project_root(project.root_path)
-        if not root.exists():
-            return False, f"root_path does not exist: {root}"
-        if not root.is_dir():
+        if not safe_path_exists(root):
+            return False, f"root_path does not exist or is inaccessible: {root}"
+        if not safe_is_dir(root):
             return False, f"root_path is not a directory: {root}"
 
         return True, "ok"
@@ -179,7 +195,7 @@ class ProjectManager:
 
         root = resolve_project_root(project.root_path)
         abs_path = root / rel_path
-        return str(abs_path) if abs_path.exists() else None
+        return str(abs_path) if safe_path_exists(abs_path) else None
 
     def locate_agent_md(self, project_id: str) -> Optional[str]:
         """Find AGENT.md for a project."""
@@ -221,7 +237,7 @@ class ProjectManager:
             "project_id": project.project_id,
             "name": project.name,
             "root_path": str(root),
-            "path_valid": root.exists(),
+            "path_valid": safe_path_exists(root),
             "status": project.status,
             "documents": {},
             "agent_contract": None,
@@ -232,7 +248,7 @@ class ProjectManager:
         docs = self.locate_all_documents(project_id)
 
         for key, path in docs.items():
-            if path and Path(path).exists():
+            if path and safe_path_exists(Path(path)):
                 with open(path, "r", encoding="utf-8") as f:
                     content = f.read()
                 doc_key = {
@@ -265,7 +281,7 @@ class ProjectManager:
             return
         for p in projects:
             root = resolve_project_root(p.root_path)
-            status_flag = "✓" if root.exists() else "✗"
+            status_flag = "✓" if safe_path_exists(root) else "✗"
             print(f"{status_flag} {p.project_id}  ({p.name})  [{p.status}]  — {root}")
 
     def cli_inspect(self, project_id: str) -> None:
@@ -276,7 +292,7 @@ class ProjectManager:
             sys.exit(1)
 
         root = resolve_project_root(project.root_path)
-        path_ok = root.exists()
+        path_ok = safe_path_exists(root)
 
         print(f"Project ID   : {project.project_id}")
         print(f"Name         : {project.name}")
@@ -287,8 +303,11 @@ class ProjectManager:
 
         docs = self.locate_all_documents(project_id)
         for key, path in docs.items():
-            if path and Path(path).exists():
-                size = Path(path).stat().st_size
+            if path and safe_path_exists(Path(path)):
+                try:
+                    size = Path(path).stat().st_size
+                except (PermissionError, OSError):
+                    size = 0
                 print(f"  ✓ {key}: {path}  ({size} bytes)")
             else:
                 print(f"  ✗ {key}: (not found)")
