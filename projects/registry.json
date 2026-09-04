@@ -1,6 +1,15 @@
 {
   "version": "1.0",
   "projects": {
+    "default": {
+      "project_id": "default",
+      "name": "Default Workspace",
+      "root_path": ".",
+      "agent_contract": "",
+      "architecture": "",
+      "source_of_truth": "",
+      "status": "active"
+    },
     "cuu-gioi": {
       "project_id": "cuu-gioi",
       "name": "Cửu Giới (Nine Realms)",

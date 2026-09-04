@@ -73,7 +73,7 @@ def cmd_run(args) -> int:
 
 
 def cmd_inspect(args) -> int:
-    agent = Agent(project_id="cuu-gioi")
+    agent = Agent(project_id="default")
     info = agent.inspect_run(args.run_id)
 
     if not info:
@@ -101,7 +101,7 @@ def cmd_inspect(args) -> int:
 
 
 def cmd_history(args) -> int:
-    agent = Agent(project_id="cuu-gioi")
+    agent = Agent(project_id="default")
     hist = agent.history()
 
     if not hist:
@@ -138,7 +138,7 @@ def main(argv: list[str] | None = None) -> int:
     # run
     p_run = subparsers.add_parser("run", help="Run a task on Agent-Core")
     p_run.add_argument("goal", type=str, help="Task objective/goal")
-    p_run.add_argument("--project", "-p", type=str, default="cuu-gioi", help="Project ID")
+    p_run.add_argument("--project", "-p", type=str, default="default", help="Project ID")
     p_run.add_argument("--provider", type=str, default=None, help="LLM planner provider (mock | openrouter | openai | local)")
     p_run.set_defaults(func=cmd_run)
 

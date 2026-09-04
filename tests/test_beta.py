@@ -50,15 +50,19 @@ class TestReferenceAgent(unittest.TestCase):
 
     def setUp(self):
         os.environ["AGENTCORE_PLANNER_PROVIDER"] = "mock"
-        self.agent = Agent(project_id="cuu-gioi")
+        self.agent = Agent(project_id="default")
+
+    def test_default_project_is_not_cuu_gioi(self):
+        self.assertEqual(self.agent.project_id, "default")
+        self.assertNotEqual(self.agent.project_id, "cuu-gioi")
 
     def test_agent_run_success(self):
-        res: AgentRunResult = self.agent.run("Inspect cuu-gioi architecture and verify documents")
+        res: AgentRunResult = self.agent.run("Inspect workspace architecture and verify documents")
 
         self.assertTrue(res.success)
         self.assertEqual(res.status, "COMPLETED")
         self.assertEqual(res.verification_verdict, "PASS")
-        self.assertEqual(res.project_id, "cuu-gioi")
+        self.assertEqual(res.project_id, "default")
         self.assertTrue(res.authorized)
         self.assertTrue(res.experience_recorded)
         self.assertTrue(len(res.plan_steps) > 0)
@@ -71,6 +75,25 @@ class TestReferenceAgent(unittest.TestCase):
         self.assertEqual(res.status, "FAILED")
         self.assertEqual(res.verification_verdict, "FAIL")
         self.assertIn("not found in registry", res.errors[0])
+
+    def test_experience_recording_failure_behavior(self):
+        """Verify that when experience persistence fails, experience_recorded is False and error is captured."""
+        from unittest.mock import patch
+        with patch.object(self.agent._experience_engine, "get_experience", return_value=None), \
+             patch.object(self.agent._experience_engine, "record_experience", side_effect=IOError("Disk full error")):
+            res = self.agent.run("Test goal with failing experience engine")
+            self.assertFalse(res.experience_recorded)
+            self.assertTrue(any("Experience recording failed" in err for err in res.errors))
+
+    def test_policy_denial_blocks_execution(self):
+        """Verify Kernel Policy denial blocks execution before philosophy or task steps."""
+        from unittest.mock import patch
+        with patch.object(self.agent._policy, "should_execute", return_value=False):
+            res = self.agent.run("Goal blocked by policy")
+            self.assertFalse(res.authorized)
+            self.assertEqual(res.status, "FAILED")
+            self.assertEqual(res.phase, "AUTHORITY")
+            self.assertIn("Kernel policy prohibits execution", res.errors)
 
     def test_inspect_and_history(self):
         res = self.agent.run("Inspect architecture for history test")

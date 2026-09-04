@@ -11,11 +11,8 @@ Precedence Hierarchy:
 from __future__ import annotations
 
 import os
-import sys
 import time
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
-from pathlib import Path
 from typing import Optional
 
 from core.kernel.kernel import Kernel, KernelResult
@@ -25,8 +22,6 @@ from core.philosophy.engine import PhilosophyEngine
 from core.experience.engine import ExperienceEngine
 from core.experience.schema import Experience
 from core.tasks.manager import TaskManager
-from core.tasks.runner import TaskRunner
-from core.tasks.schema import Task, TaskStep, StepType, TaskStatus
 
 
 @dataclass
@@ -73,7 +68,7 @@ class Agent:
     """Reference Agent — developer-facing preview runtime.
 
     Usage:
-        agent = Agent(project_id="cuu-gioi")
+        agent = Agent(project_id="default")
         result = agent.run("Inspect the project architecture")
     """
 
@@ -81,7 +76,7 @@ class Agent:
 
     def __init__(
         self,
-        project_id: str = "cuu-gioi",
+        project_id: str = "default",
         provider: Optional[str] = None,
         budget: Optional[Budget] = None,
     ):
@@ -128,6 +123,24 @@ class Agent:
                 llm_calls=0,
                 experience_recorded=False,
                 errors=[f"Project '{pid}' not found in registry"],
+            )
+
+        # 2. AUTHORITY: PolicyEngine check
+        if not self._policy.should_execute():
+            elapsed = time.time() - t0
+            return AgentRunResult(
+                run_id=f"ERR-{int(time.time()*1000):05d}",
+                project_id=pid,
+                goal=goal,
+                status="FAILED",
+                phase="AUTHORITY",
+                plan_steps=[],
+                authorized=False,
+                verification_verdict="FAIL",
+                duration_seconds=elapsed,
+                llm_calls=0,
+                experience_recorded=False,
+                errors=["Kernel policy prohibits execution"],
             )
 
         # Consult philosophy soft preferences (non-binding preferences)
@@ -179,23 +192,28 @@ class Agent:
             if tasks:
                 plan_steps = [f"{t.task_id}: {t.title}" for t in tasks[:5]]
 
-        # Record Experience
+        # Record Experience / Verify Experience Persistence
         exp_recorded = False
-        try:
-            exp = Experience(
-                run_id=res.run_id,
-                goal=goal,
-                project_id=pid,
-                action=f"Agent.run('{goal}')",
-                observation=f"Kernel status={res.status}, phase={res.phase}",
-                outcome="success" if res.success else "failure",
-                llm_calls=res.llm_calls,
-                estimated_tokens=res.estimated_tokens,
-            )
-            self._experience_engine.record_experience(exp)
+        run_errors = list(res.errors) if res.errors else []
+        if self._experience_engine.get_experience(res.run_id) is not None:
             exp_recorded = True
-        except Exception:
-            exp_recorded = True  # Already recorded by kernel loop
+        else:
+            try:
+                exp = Experience(
+                    run_id=res.run_id,
+                    goal=goal,
+                    project_id=pid,
+                    action=f"Agent.run('{goal}')",
+                    observation=f"Kernel status={res.status}, phase={res.phase}",
+                    outcome="success" if res.success else "failure",
+                    llm_calls=res.llm_calls,
+                    estimated_tokens=res.estimated_tokens,
+                )
+                self._experience_engine.record_experience(exp)
+                exp_recorded = True
+            except Exception as exc:
+                exp_recorded = False
+                run_errors.append(f"Experience recording failed: {exc}")
 
         elapsed = time.time() - t0
         return AgentRunResult(
@@ -210,7 +228,7 @@ class Agent:
             duration_seconds=elapsed,
             llm_calls=res.llm_calls,
             experience_recorded=exp_recorded,
-            errors=res.errors,
+            errors=run_errors,
             observations=observations,
         )
 
