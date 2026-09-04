@@ -192,22 +192,28 @@ class TestConstitutionInvariants(unittest.TestCase):
     def test_INV9_architectural_change_requires_evidence(self):
         """INV-9: Architectural changes require evidence (existing tests still pass).
 
-        This test verifies that the 509 original tests (pre-specification) pass.
-        New specification tests (test_specification.py, test_adversarial_spec.py)
-        are excluded from this check as they test the specification itself.
+        Executes the full regression suite in-process to ensure architectural changes pass all tests.
         """
-        # Verify all original tests pass
-        import pytest
-        result = pytest.main([
-            str(_root / "tests"),
-            "-q", "--tb=no",
-            "--ignore=" + str(_root / "tests" / "test_constitution.py"),
-            "--ignore=" + str(_root / "tests" / "test_adversarial_spec.py"),
-            "--ignore=" + str(_root / "tests" / "test_specification.py"),
-        ])
-        self.assertEqual(
-            result, 0,
-            f"INV-9 violated: Original regression suite failed with code {result}"
+        import io, unittest
+        loader = unittest.TestLoader()
+        suite = loader.discover(start_dir=str(_root / "tests"), pattern="test_*.py")
+
+        filtered_suite = unittest.TestSuite()
+        def _filter(test_item):
+            if isinstance(test_item, unittest.TestSuite):
+                for sub in test_item:
+                    _filter(sub)
+            elif isinstance(test_item, unittest.TestCase):
+                if test_item._testMethodName != "test_INV9_architectural_change_requires_evidence":
+                    filtered_suite.addTest(test_item)
+
+        _filter(suite)
+        buf = io.StringIO()
+        runner = unittest.TextTestRunner(stream=buf, verbosity=0)
+        res = runner.run(filtered_suite)
+        self.assertTrue(
+            res.wasSuccessful(),
+            f"INV-9 violated: Full test suite failed with {len(res.errors)} errors and {len(res.failures)} failures.\n{buf.getvalue()}"
         )
 
     def test_INV10_unproven_capability_cannot_self_promote(self):

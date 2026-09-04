@@ -96,6 +96,15 @@ class TestReferenceAgent(unittest.TestCase):
             self.assertTrue(res.experience_recorded)
             mock_rec.assert_not_called()
 
+    def test_learning_pipeline_exception_handling_behavior(self):
+        """Verify that exceptions (RuntimeError, TypeError, KeyError, AttributeError) in non-fatal learning pipeline do not crash Agent execution."""
+        from unittest.mock import patch
+        for exc in [RuntimeError("Pipeline parse error"), TypeError("Type mismatch"), KeyError("missing_key"), AttributeError("no attr")]:
+            with patch.object(self.agent._learning_pipeline, "process_experience", side_effect=exc):
+                res = self.agent.run("Goal with failing strategy pipeline")
+                self.assertTrue(res.success)
+                self.assertTrue(any("Strategy learning pipeline notice" in err for err in res.errors))
+
     def test_policy_denial_blocks_execution(self):
         """Verify Kernel Policy denial blocks execution before philosophy or task steps."""
         from unittest.mock import patch
