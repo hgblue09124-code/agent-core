@@ -1,40 +1,95 @@
-# Agent Core
+# Agent Core — Personal Agent Beta v0.1
 
-Personal Agent development substrate.
+Personal Agent development substrate and composition authority.
 
-## Architecture Status
+## Personal Agent Beta v0.1 Architecture & System Composition
 
-Agent-Core provides a **hardened foundational substrate** for Personal Agent development.
+Personal Agent Beta v0.1 represents the composition point for three distinct architectural layers:
 
-It implements clean core boundaries, deterministic persistence, experience-based strategy learning, and pluggable capability adapters while strictly keeping external domain logic outside the kernel.
+```
+                  ┌─────────────────────────────────────────┐
+                  │               USER REQUEST              │
+                  └────────────────────┬────────────────────┘
+                                       │
+                                       ▼
+                  ┌─────────────────────────────────────────┐
+                  │        AGENT-CORE (Authority/Kernel)    │
+                  │ Identity | Cognition | Policy | Learning│
+                  │ Orchestration | Experience | Continuity │
+                  └───────┬─────────────────────────┬───────┘
+                          │                         │
+            ┌─────────────┴───────────┐ ┌───────────┴─────────────┐
+            │  AGENT-PERSONAL-VAULT   │ │    AGENT-CAPABILITIES    │
+            │ (Storage & Personal Data│ │(Pluggable Module Framework│
+            │  via PersonalVaultAdapter)│ │ via GitHub/BridgeAdapters)│
+            └─────────────────────────┘ └─────────────────────────┘
+```
 
-### Implemented Core Subsystems
-- **Core Architecture & Kernel Loop**: Bounded orchestration pipeline (`Observe -> Retrieve -> Reason -> Plan -> Policy -> Execute -> Verify -> Record Experience -> Extract Lesson -> Strategy -> Consolidate Memory -> Continue`).
-- **Persistent Memory Subsystem**: Atomic filesystem storage for `SHORT_TERM`, `LONG_TERM`, `USER_CONTEXT`, and `IDENTITY` memory (`core/memory/`) preserving learned state across process restarts.
-- **First-Class Strategy Subsystem**: Persistent Strategy schema (`core/learning/strategy.py`) with explicit lifecycle states (`CANDIDATE`, `VALIDATED`, `SUPPORTED`, `WEAKENED`, `RETIRED`, `SUPERSEDED`), versioning, supersession, and deterministic confidence updates (+0.15 on PASS, -0.25 on FAIL).
-- **Capability Adapter Contracts**: Abstract capability specification contract (`core/capabilities/`) insulating Core from concrete external capability implementations.
-- **Autonomous Task Queue & Scheduler**: Priority queue and deterministic bounded scheduler (`core/tasks/queue.py`, `core/tasks/scheduler.py`) with state machine transitions, dependency checks, and bounded retries.
-- **Constitutional Precedence**: Strict hierarchy (`Kernel/Security/Contracts > Verification > Task Requirements > Learned Strategies > Philosophy`).
+### Architectural Ownership & Layer Delineation
 
-### Intentionally Deferred Capabilities (Future Milestones)
+1. **Agent-Core (Authority & Cognition Substrate)**:
+   - Responsible for agent identity, cognition, policy validation, kernel orchestration, experience recording, strategy learning, and state continuity across process restarts.
+   - Core maintains absolute constitutional precedence:
+     `Kernel / Security / Contracts > Verification > Task Requirements > Learned Strategies > Philosophy`
+   - Does NOT embed capability-specific business logic or personal storage implementations inside the Core.
+
+2. **agent-personal-vault (Persistent Personal Data & Storage Layer)**:
+   - Integrated into Core via `PersonalVaultAdapter` (`core/vault/adapter.py`).
+   - Responsible for persistent personal context, user preferences, and private personal storage.
+   - Falls back gracefully to local storage buffer if external Vault package is absent, ensuring Core operational autonomy.
+
+3. **agent-capabilities (Pluggable Capability Framework & Adapters)**:
+   - Integrated into Core via `CapabilityRegistry` (`core/capabilities/adapter.py`) and `ExternalCapabilityBridge` (`core/capabilities/bridge.py`).
+   - Responsible for replaceable external domain execution (e.g. GitHub API interaction, shell/tool execution).
+   - Core provides `GitHubCapabilityAdapter` (`core/capabilities/github.py`) as the primary real Beta capability target.
+   - Capability execution must pass through Policy Engine validation (`authorize_capability`) checking constraints (`read_only`, `requires_user_approval`, `allowed_domains`).
+   - Capability execution errors return structured `CapabilityResult` statuses without compromising Core integrity.
+
+## Beta v0.1 Acceptance Flow
+
+```
+User Request
+  ↳ Observe
+  ↳ Retrieve Personal Context (PersonalVaultAdapter)
+  ↳ Reason
+  ↳ Plan
+  ↳ Policy / Permission Check (authorize_capability)
+  ↳ Capability Dispatch
+  ↳ Execute
+  ↳ Verify
+  ↳ Record Experience
+  ↳ Extract Lesson
+  ↳ Update Memory & Vault
+  ↳ Continue / Resume (agent.resume(run_id))
+```
+
+## Implemented Subsystems
+
+- **Core Architecture & Kernel Loop**: Bounded orchestration loop (`Observe → Retrieve → Reason → Plan → Policy → Capability Dispatch → Execute → Verify → Experience → Lesson → Memory → Resume`).
+- **Personal Vault Integration**: Narrow storage adapter interface (`core/vault/adapter.py`) bridging Core to personal data storage.
+- **Pluggable Capability Registry & Bridge**: External capability bridge (`core/capabilities/bridge.py`) and GitHub capability target (`core/capabilities/github.py`).
+- **Policy Engine Permissions**: Explicit capability constraint checks (`read_only`, `requires_user_approval`, `allowed_domains`) enforcing constitutional boundaries.
+- **Continuity & Resumption**: Checkpoint persistence (`core/runtime/checkpoint.py`) supporting run state restoration (`agent.resume(run_id)`).
+- **First-Class Strategy Subsystem**: Strategy lifecycle management (`CANDIDATE`, `VALIDATED`, `SUPPORTED`, `WEAKENED`, `RETIRED`, `SUPERSEDED`) with confidence scoring.
+
+## Developer Preview Status
+
+> **Note**: Personal Agent Beta v0.1 is a **Developer Preview & Reference Architecture**. It is not claimed to be production-ready.
+
+### Intentionally Deferred Features
 - Vector database / embedding-based semantic retrieval.
-- Autonomous web browser agents or unrestricted internet execution.
-- Autonomous self-modifying code generation.
-- Production external API integrations.
+- Autonomous 24/7 web browser agents or unrestricted internet execution.
+- Multi-agent swarm architectures.
+- Fine-tuning or complex cloud infrastructure.
+- Native iCloud synchronization.
 
 ## Principles
 
 - Build from small verified primitives.
-- Separate knowledge, memory, skills, tools, and execution.
-- Every important capability should be testable.
-- Successful experience should become reusable knowledge.
-- Prefer measurable improvement over complexity.
-
-## Architecture
-
-Runtime → Context → Intelligence → Skills → Tools → Execution → Verification → Experience → Philosophy
-
-The system is designed as a foundational Core. External applications and domain capabilities integrate as replaceable consumers via stable contracts.
+- Core remains authority; Vault remains persistence; capabilities remain replaceable modules.
+- Every capability execution passes through policy and permission checks.
+- Successful experiences become reusable learned strategies.
+- Capability failures must never compromise Core integrity.
 
 ## CLI Usage
 
@@ -47,4 +102,7 @@ agent-core benchmark
 
 # Inspect run lifecycle
 agent-core inspect KRUN-12345
+
+# View run history
+agent-core history
 ```
