@@ -20,12 +20,21 @@ class StrategyRanker:
         goal: str,
         context: Optional[dict] = None,
         limit: int = 3,
+        include_candidates: bool = False,
     ) -> list[Strategy]:
-        """Retrieve and rank active strategies for a given goal/context."""
+        """Retrieve and rank active strategies for a given goal/context.
+
+        By default (include_candidates=False), only VALIDATED and SUPPORTED strategies
+        are returned to ensure unvalidated CANDIDATE strategies do not influence default runtime.
+        """
         all_strategies = self.store.list_all()
+        allowed_statuses = {StrategyStatus.VALIDATED.value, StrategyStatus.SUPPORTED.value}
+        if include_candidates:
+            allowed_statuses.add(StrategyStatus.CANDIDATE.value)
+
         active_strategies = [
             s for s in all_strategies
-            if s.status in (StrategyStatus.CANDIDATE.value, StrategyStatus.VALIDATED.value, StrategyStatus.SUPPORTED.value)
+            if s.status in allowed_statuses
         ]
 
         scored_strategies = []

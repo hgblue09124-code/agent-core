@@ -117,7 +117,7 @@ class TestStrategyLifecycleAndEvaluator(unittest.TestCase):
         self.assertAlmostEqual(s.confidence, 0.60)
         self.assertEqual(s.inconclusive_count, 1)
 
-    def test_supersede_strategy_preserves_version_and_history(self):
+    def test_supersede_strategy_creates_candidate_and_preserves_superseded_old(self):
         old_strat = Strategy(
             strategy_id="STRAT-OLD",
             name="Old Strategy v1",
@@ -132,12 +132,47 @@ class TestStrategyLifecycleAndEvaluator(unittest.TestCase):
         new_strat = self.evaluator.supersede_strategy("STRAT-OLD", "New improved rule v2")
         self.assertIsNotNone(new_strat)
         self.assertEqual(new_strat.version, 2)
+        self.assertEqual(new_strat.status, StrategyStatus.CANDIDATE.value)
+        self.assertEqual(new_strat.confidence, 0.35)
         self.assertEqual(new_strat.supersedes, "STRAT-OLD")
 
         # Verify old strategy state
         reloaded_old = self.store.get("STRAT-OLD")
         self.assertEqual(reloaded_old.status, StrategyStatus.SUPERSEDED.value)
         self.assertEqual(reloaded_old.superseded_by, new_strat.strategy_id)
+
+    def test_ranker_excludes_candidates_by_default(self):
+        cand = Strategy(
+            strategy_id="STRAT-CAND",
+            name="Candidate Strategy",
+            description="Desc",
+            rule="Rule cand",
+            applicable_context="test goal",
+            confidence=0.35,
+            status=StrategyStatus.CANDIDATE.value,
+        )
+        val = Strategy(
+            strategy_id="STRAT-VAL",
+            name="Validated Strategy",
+            description="Desc",
+            rule="Rule val",
+            applicable_context="test goal",
+            confidence=0.55,
+            status=StrategyStatus.VALIDATED.value,
+        )
+        self.store.create(cand)
+        self.store.create(val)
+
+        ranker = StrategyRanker(store=self.store)
+
+        # Default ranking excludes CANDIDATE strategies
+        default_strats = ranker.select_applicable_strategies("test goal")
+        self.assertEqual(len(default_strats), 1)
+        self.assertEqual(default_strats[0].strategy_id, "STRAT-VAL")
+
+        # Explicit request includes CANDIDATE strategies
+        all_strats = ranker.select_applicable_strategies("test goal", include_candidates=True)
+        self.assertEqual(len(all_strats), 2)
 
 
 class TestLearningPipelineAndConsolidation(unittest.TestCase):
@@ -230,8 +265,11 @@ class TestProcessRestartContinuity(unittest.TestCase):
             # 5. Process restart simulation: new Agent instance retrieves strategy
             agent2 = Agent(project_id="default")
             ranker2 = StrategyRanker(store=agent2._strategy_store)
-            retrieved = ranker2.select_applicable_strategies("Verify first execution strategy creation")
-            self.assertTrue(len(retrieved) > 0, "Strategy must survive process restart")
+            # Include candidates or query all stored strategies for inspection
+            all_stored = agent2._strategy_store.list_all()
+            self.assertTrue(len(all_stored) > 0, "Strategy must survive process restart")
+            retrieved = ranker2.select_applicable_strategies("Verify first execution strategy creation", include_candidates=True)
+            self.assertTrue(len(retrieved) > 0, "Strategy must be inspectable and retrievable")
 
     def test_learned_strategy_survives_restart_and_affects_future_runs(self):
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -257,7 +295,7 @@ class TestProcessRestartContinuity(unittest.TestCase):
 
             # Retrieve strategy in Session 2
             ranker2 = StrategyRanker(store=agent2._strategy_store)
-            retrieved_strats = ranker2.select_applicable_strategies("Audit code security boundaries")
+            retrieved_strats = ranker2.select_applicable_strategies("Audit code security boundaries", include_candidates=True)
             self.assertTrue(len(retrieved_strats) > 0)
 
             # Execute task in Session 2
