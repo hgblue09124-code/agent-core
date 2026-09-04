@@ -33,19 +33,27 @@ from typing import Optional
 class TaskStatus(str, Enum):
     """Task lifecycle states."""
     PENDING    = "PENDING"
+    PLANNING   = "PLANNING"
     RUNNING    = "RUNNING"
+    VERIFYING  = "VERIFYING"
     COMPLETED  = "COMPLETED"
     FAILED     = "FAILED"
+    RETRY      = "RETRY"
+    PAUSED     = "PAUSED"
     CANCELLED  = "CANCELLED"
 
     @classmethod
     def valid_transition(cls, from_: "TaskStatus", to: "TaskStatus") -> bool:
         """Allowed transitions."""
         table = {
-            cls.PENDING:   {cls.RUNNING, cls.CANCELLED},
-            cls.RUNNING:   {cls.COMPLETED, cls.FAILED, cls.CANCELLED},
+            cls.PENDING:   {cls.PLANNING, cls.RUNNING, cls.PAUSED, cls.CANCELLED},
+            cls.PLANNING:  {cls.RUNNING, cls.FAILED, cls.PAUSED, cls.CANCELLED},
+            cls.RUNNING:   {cls.VERIFYING, cls.COMPLETED, cls.FAILED, cls.RETRY, cls.PAUSED, cls.CANCELLED},
+            cls.VERIFYING: {cls.COMPLETED, cls.FAILED, cls.RETRY, cls.CANCELLED},
+            cls.RETRY:     {cls.PENDING, cls.RUNNING, cls.FAILED, cls.CANCELLED},
+            cls.PAUSED:    {cls.PENDING, cls.RUNNING, cls.CANCELLED},
             cls.COMPLETED: set(),
-            cls.FAILED:    set(),
+            cls.FAILED:    {cls.PENDING, cls.RETRY},
             cls.CANCELLED: set(),
         }
         return to in table.get(from_, set())
@@ -291,6 +299,10 @@ class Task:
     title: str
     description: str = ""
     status: TaskStatus = TaskStatus.PENDING
+    priority: int = 100            # lower number = higher priority (e.g. 10 highest, 100 normal)
+    retry_count: int = 0
+    max_retries: int = 3
+    dependencies: list[str] = field(default_factory=list)  # task_ids that must be COMPLETED
     created_at: str = ""   # ISO 8601
     started_at: str = ""
     completed_at: str = ""
@@ -298,9 +310,7 @@ class Task:
     result: Optional[str] = None   # human-readable summary of all steps
     verification: Optional[VerificationResult] = None
     error: Optional[str] = None    # fatal error (task itself failed to start)
-    # Optional structured construction contract (Task Construction layer).
-    # When present, this defines WHAT must be built before execution begins.
-    # It does NOT change existing Task semantics — purely additive.
+    metadata: dict = field(default_factory=dict)
     construction: Optional["TaskConstructionContract"] = None
 
     # ── Serialization ─────────────────────────────────────────────────────

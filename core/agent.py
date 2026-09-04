@@ -22,6 +22,12 @@ from core.philosophy.engine import PhilosophyEngine, PhilosophyPrecedenceError
 from core.experience.engine import ExperienceEngine
 from core.experience.schema import Experience
 from core.tasks.manager import TaskManager
+from core.memory.manager import MemoryManager
+from core.memory.schema import MemoryQuery, MemoryType
+from core.capabilities.adapter import CapabilityRegistry
+from core.capabilities.mock_adapter import MockEchoCapabilityAdapter
+from core.events.bus import EventBus
+from core.events.schema import new_event, EventPhase, EventStatus
 
 
 @dataclass
@@ -91,6 +97,10 @@ class Agent:
         self._policy = PolicyEngine()
         self._philosophy = PhilosophyEngine()
         self._experience_engine = ExperienceEngine()
+        self._memory = MemoryManager()
+        self._capabilities = CapabilityRegistry()
+        self._capabilities.register(MockEchoCapabilityAdapter())
+        self._event_bus = EventBus()
         self._kernel = Kernel(project_id=self.project_id, budget=self.budget)
 
     def run(
@@ -168,13 +178,29 @@ class Agent:
                 errors=[f"Authority violation: {exc}"],
             )
 
+        # 3. MEMORY RETRIEVAL: Retrieve relevant context and identity
+        identity_mem = self._memory.get_identity()
+        relevant_mems = self._memory.retrieve(MemoryQuery(query=goal, limit=3))
+
+        # Emit TASK_STARTED Event
+        self._event_bus.publish(
+            new_event(
+                run_id=f"RUN-{int(t0*1000):05d}",
+                phase=EventPhase.TASK_STARTED.value,
+                action=f"Started run for goal '{goal}'",
+            )
+        )
+
         # Execute through Kernel Orchestrator Loop
         res: KernelResult = self._kernel.run(goal=goal, project_id=pid)
         ctx = self._kernel.get_run(res.run_id)
 
         # Extract observations & plan steps
         plan_steps = []
-        observations = []
+        observations = [f"Identity: {identity_mem.content[:60]}..."]
+        if relevant_mems:
+            observations.extend([f"Memory context: {m.content[:50]}" for m in relevant_mems])
+
         if ctx:
             if ctx.plan and hasattr(ctx.plan, "steps"):
                 plan_steps = [f"{s.step_id}: {s.title}" for s in ctx.plan.steps]
@@ -218,6 +244,23 @@ class Agent:
             except (ValueError, OSError, RuntimeError) as exc:
                 exp_recorded = False
                 run_errors.append(f"Experience recording failed: {exc}")
+
+        # 4. UPDATE MEMORY
+        if res.success:
+            self._memory.remember(
+                content=f"Successfully executed goal '{goal}' on project '{pid}'",
+                memory_type=MemoryType.SHORT_TERM.value,
+                source_run_id=res.run_id,
+                importance=0.6,
+            )
+            self._event_bus.publish(
+                new_event(
+                    run_id=res.run_id,
+                    phase=EventPhase.MEMORY_UPDATED.value,
+                    action=f"Remembered successful run '{res.run_id}'",
+                    status=EventStatus.PASS.value,
+                )
+            )
 
         elapsed = time.time() - t0
         return AgentRunResult(

@@ -10,13 +10,11 @@ All notable changes to Agent-Core will be documented in this file.
 Initial Developer Preview Release of **Agent-Core** (`v0.1.0-beta`), establishing a project-aware reference Agent runtime, CLI inspection tools, deterministic benchmarking, and Agent Philosophy foundation.
 
 ### Added
-- **Reference Agent (`Agent`)**: Developer-facing preview runtime (`core/agent.py`) orchestrating Task $\rightarrow$ Plan $\rightarrow$ Authority $\rightarrow$ Execution $\rightarrow$ Observation $\rightarrow$ Verification $\rightarrow$ Result $\rightarrow$ Experience.
-- **CLI Beta Entrypoint (`agent-core`)**: CLI tool with commands:
-  - `agent-core run "<goal>"`
-  - `agent-core inspect <run_id>`
-  - `agent-core history`
-  - `agent-core benchmark`
-  - `agent-core version`
+- **Personal Agent Runtime Foundation**: Coherent runtime loop (`Observe -> Understand -> Retrieve Memory -> Reason -> Plan -> Policy Check -> Capability Execution -> Verify -> Record Experience -> Update Memory -> Continue`).
+- **Persistent Memory & Identity Subsystem (`core/memory/`)**: Persistent short-term, long-term, user context, and identity memory with atomic filesystem storage.
+- **Autonomous Task Queue & Scheduler (`core/tasks/queue.py`, `core/tasks/scheduler.py`)**: Priority-based task queue, explicit state machine (`PENDING`, `PLANNING`, `RUNNING`, `VERIFYING`, `COMPLETED`, `FAILED`, `RETRY`, `PAUSED`, `CANCELLED`), task dependencies, bounded autonomous scheduler, and retry limit handling.
+- **Capability Adapter Interface (`core/capabilities/`)**: Formal capability contract specification, registry, and mock adapter insulating Core from external capability implementations.
+- **CLI Subcommands (`agent-core queue`, `agent-core schedule`)**: Command-line support for autonomous task enqueueing and bounded scheduling.
 - **Agent Philosophy Foundation (`core/philosophy`)**: Soft behavioral tendencies derived from experience and human teaching, obeying strict precedence (`Kernel/Security/Contracts > Verification > Task > Philosophy`).
 - **Cửu Giới Benchmark Suite (`verification/benchmarks/benchmark_cuu_gioi.py`)**: Real-time performance measurements for context loading, task engine execution, knowledge retrieval, and kernel loop.
 - **Public API Exports (`agent_core`)**: Developer package exports for embedding Agent-Core in Python applications.
