@@ -1,0 +1,91 @@
+{
+  "benchmark_id": "personal_agent_beta_v01",
+  "description": "Personal Agent Beta v0.1 End-to-End Performance Benchmark",
+  "timestamp": "2026-09-04T16:26:19Z",
+  "test_mode": "MOCK/LOCAL",
+  "environment": {
+    "platform": "linux",
+    "python_version": "3.12.13",
+    "planner_provider": "mock",
+    "has_github_token": false
+  },
+  "overall_summary": {
+    "total_benchmark_duration_seconds": 12.809,
+    "success_rate_percent": 100.0,
+    "failure_rate_percent": 0.0
+  },
+  "metrics": {
+    "e2e_latency_avg_ms": 194.52,
+    "e2e_latency_min_ms": 182.56,
+    "e2e_latency_max_ms": 211.5,
+    "vault_op_latency_avg_ms": 0.0,
+    "vault_op_latency_min_ms": 0.0,
+    "vault_op_latency_max_ms": 0.01,
+    "context_retrieval_latency_avg_ms": 0.04,
+    "capability_dispatch_latency_avg_ms": 507.15,
+    "experience_recording_latency_avg_ms": 3.93,
+    "resume_latency_avg_ms": 0.17
+  },
+  "benchmarks": [
+    {
+      "name": "personal_agent_e2e_run",
+      "iterations": 10,
+      "total_seconds": 1.945223,
+      "avg_seconds": 0.194522,
+      "min_seconds": 0.18256,
+      "max_seconds": 0.2115,
+      "ops_per_second": 5.14,
+      "notes": ""
+    },
+    {
+      "name": "vault_operations",
+      "iterations": 20,
+      "total_seconds": 8.6e-05,
+      "avg_seconds": 4e-06,
+      "min_seconds": 4e-06,
+      "max_seconds": 6e-06,
+      "ops_per_second": 232517.58,
+      "notes": ""
+    },
+    {
+      "name": "context_retrieval",
+      "iterations": 20,
+      "total_seconds": 0.00079,
+      "avg_seconds": 3.9e-05,
+      "min_seconds": 3.1e-05,
+      "max_seconds": 9e-05,
+      "ops_per_second": 25321.49,
+      "notes": ""
+    },
+    {
+      "name": "capability_dispatch_execution",
+      "iterations": 20,
+      "total_seconds": 10.143021,
+      "avg_seconds": 0.507151,
+      "min_seconds": 0.082705,
+      "max_seconds": 7.296113,
+      "ops_per_second": 1.97,
+      "notes": ""
+    },
+    {
+      "name": "experience_recording",
+      "iterations": 15,
+      "total_seconds": 0.058907,
+      "avg_seconds": 0.003927,
+      "min_seconds": 0.003547,
+      "max_seconds": 0.004458,
+      "ops_per_second": 254.64,
+      "notes": ""
+    },
+    {
+      "name": "run_resume_continuity",
+      "iterations": 10,
+      "total_seconds": 0.001731,
+      "avg_seconds": 0.000173,
+      "min_seconds": 0.000155,
+      "max_seconds": 0.000224,
+      "ops_per_second": 5775.76,
+      "notes": ""
+    }
+  ]
+}
