@@ -683,6 +683,42 @@ An improvement candidate without a baseline evaluation_id MUST be REJECTED.
 
 ---
 
+## 16. Agent Philosophy Architecture
+
+### 16.1 Conceptual Hierarchy & Distinctions
+
+Agent Core maintains strict conceptual separation across architectural abstractions:
+
+| Abstraction | Core Question | Description |
+|---|---|---|
+| **Kernel** | *What the Agent fundamentally is* | Stateless orchestrator, safety invariants, policy budgets, and orchestration loop guarantees. |
+| **Rules / Contracts** | *What the system requires* | Machine-checkable task contracts, schemas, verification criteria, and acceptance gates. |
+| **Experience** | *What happened* | Immutable append-only logs of execution runs, step actions, outcomes, and observations. |
+| **Lesson** | *What was learned from what happened* | Extracted patterns or observations from experience. |
+| **Philosophy** | *How the Agent tends to work* | Soft behavioral tendencies, operational self-knowledge, and preferences derived from learning & human teaching. |
+| **Knowledge** | *What the Agent believes/knows* | Verified primitives, domain concepts, and proven facts about projects or systems. |
+
+These abstractions MUST NOT be collapsed into a single layer.
+
+### 16.2 Core Behavioral Pipeline
+
+```
+Kernel → Experience → Lesson → Philosophy Candidate → Evidence → Tendency → Behavior → Result → new Evidence
+```
+
+1. Experiences produce Lessons via `LessonEngine`.
+2. Lessons propose `PhilosophyTendency` candidates with explicit provenance (`PhilosophyEngine.propose_candidate_from_lesson()`).
+3. Humans/operators teach, support, challenge, modify, reject, or retire tendencies via `PhilosophyEngine`.
+4. Planners consult active tendencies as **SOFT PREFERENCES**.
+
+### 16.3 Absolute Precedence Rule
+
+$$\text{Kernel / Security / Contracts} > \text{Verification Requirements} > \text{Explicit Task Requirements} > \text{Philosophy / Tendencies}$$
+
+Philosophy represents soft tendencies only. Philosophy MUST NOT override Kernel constraints, bypass verification requirements, or violate explicit task contracts.
+
+---
+
 ## Appendix A: Existing Code Assessment
 
 ### KEEP (proven architectural value)
