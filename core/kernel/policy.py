@@ -156,3 +156,42 @@ class PolicyEngine:
 
     def can_llm_bypass_validator(self) -> bool:
         return self.policy.llm_can_bypass_validator
+
+    # ── Capability Authorization ────────────────────────────────────
+
+    def authorize_capability(
+        self,
+        capability_spec: Any,
+        action: Optional[str] = None,
+        inputs: Optional[dict] = None,
+        user_approved: bool = False,
+    ) -> tuple[bool, Optional[str]]:
+        """Validate whether capability execution is permitted under current policy & constraints.
+
+        Returns (authorized: bool, reason: Optional[str]).
+        """
+        if not self.should_execute():
+            return False, "Policy prohibits overall execution"
+
+        constraints = getattr(capability_spec, "constraints", None)
+        if constraints:
+            # Explicit user approval requirement check
+            req_approval = getattr(constraints, "requires_user_approval", False)
+            if req_approval and not user_approved:
+                return False, f"Capability '{getattr(capability_spec, 'capability_id', 'unknown')}' requires explicit user approval"
+
+            # Read-only constraint check
+            read_only = getattr(constraints, "read_only", False)
+            act_str = str(action or (inputs or {}).get("action", "")).lower()
+            write_keywords = ("create", "update", "delete", "post", "put", "patch", "write", "comment")
+            if read_only and any(kw in act_str for kw in write_keywords):
+                return False, f"Capability '{getattr(capability_spec, 'capability_id', 'unknown')}' is restricted to read-only actions (requested: '{act_str}')"
+
+            # Domain restriction check
+            allowed_domains = getattr(constraints, "allowed_domains", [])
+            target_domain = (inputs or {}).get("domain") or (inputs or {}).get("url")
+            if allowed_domains and target_domain:
+                if not any(dom in str(target_domain) for dom in allowed_domains):
+                    return False, f"Target domain '{target_domain}' is not in allowed domains list {allowed_domains}"
+
+        return True, None
