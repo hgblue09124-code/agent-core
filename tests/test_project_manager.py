@@ -82,6 +82,14 @@ class TestWorkspacePathResolution(unittest.TestCase):
         self.assertTrue(resolved.exists(), f"Resolved path {resolved} should exist via fallback")
         self.assertTrue(resolved.name == "Cuu-Gioi")
 
+    def test_inaccessible_permission_denied_path_does_not_raise(self):
+        """Verify PermissionError on path existence check is safely caught and falls back."""
+        from unittest.mock import patch
+        fake_abs = "/root/.nanobot/workspace/Cuu-Gioi"
+        with patch("pathlib.Path.exists", side_effect=PermissionError(13, "Permission denied")):
+            resolved = resolve_project_root(fake_abs)
+            self.assertEqual(resolved, Path(fake_abs))
+
 
 class TestRegistryLoading(unittest.TestCase):
     """Test registry read/write operations."""
