@@ -274,7 +274,7 @@ class Agent:
                         verification_result=verdict,
                         actual_outcome=f"status={res.status}, phase={res.phase}",
                     )
-            except Exception as exc:
+            except (ValueError, OSError, RuntimeError) as exc:
                 run_errors.append(f"Strategy learning pipeline notice: {exc}")
                 self._event_bus.publish(
                     new_event(
