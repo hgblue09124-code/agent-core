@@ -88,33 +88,47 @@ class TaskManager:
 
     def create_task(
         self,
-        project_id: str,
-        title: str,
+        project_id: str | Task,
+        title: str = "",
         description: str = "",
         steps: Optional[list] = None,
     ) -> Task:
-        """Create and persist a new task. Returns the Task with its assigned ID."""
-        task_id = new_task_id(self._index["next_id"])
-        now = self._now()
-
-        task = Task(
-            task_id=task_id,
-            project_id=project_id,
-            title=title,
-            description=description,
-            status=TaskStatus.PENDING,
-            created_at=now,
-            steps=list(steps) if steps else [],
-        )
+        """Create and persist a new task. Accepts either (project_id, title) or a Task instance."""
+        if isinstance(project_id, Task):
+            task = project_id
+            if not task.task_id:
+                task.task_id = new_task_id(self._index["next_id"])
+                self._index["next_id"] += 1
+            if not task.created_at:
+                task.created_at = self._now()
+        else:
+            task_id = new_task_id(self._index["next_id"])
+            now = self._now()
+            task = Task(
+                task_id=task_id,
+                project_id=project_id,
+                title=title,
+                description=description,
+                status=TaskStatus.PENDING,
+                created_at=now,
+                steps=list(steps) if steps else [],
+            )
+            self._index["next_id"] += 1
 
         # Persist
         self._save_task_file(task)
 
         # Update index
-        self._index["tasks"][task_id] = task_id.lower()
-        self._index["next_id"] += 1
+        self._index["tasks"][task.task_id] = task.task_id.lower()
         self._save_index()
 
+        return task
+
+    def save_task(self, task: Task) -> Task:
+        """Save/upsert an existing task."""
+        self._save_task_file(task)
+        self._index["tasks"][task.task_id] = task.task_id.lower()
+        self._save_index()
         return task
 
     def get_task(self, task_id: str) -> Optional[Task]:

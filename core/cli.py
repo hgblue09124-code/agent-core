@@ -33,10 +33,60 @@ BANNER = """
 """
 
 
+from core.tasks.queue import TaskQueue
+from core.tasks.scheduler import TaskScheduler
+from core.tasks.schema import Task
+
+
 def cmd_version(args) -> int:
     print("Agent-Core v0.1.0-beta (Developer Preview)")
     print("Kernel Version: v1.0")
     print("Constitution Version: 1.0.0")
+    return 0
+
+
+def cmd_queue(args) -> int:
+    q = TaskQueue()
+    if args.add:
+        t = Task(
+            task_id=f"TASK-{int(time.time()*1000)%10000:04d}",
+            project_id=args.project,
+            title=args.add,
+            priority=args.priority,
+        )
+        q.enqueue(t)
+        print(f"Enqueued task: {t.task_id} [{t.title}] (Priority: {t.priority})")
+        return 0
+
+    tasks = q.list_queue()
+    print(BANNER)
+    print(f"{'TASK ID':<12} {'PRIORITY':<10} {'STATUS':<12} {'TITLE'}")
+    print("-" * 65)
+    for t in tasks:
+        print(f"{t.task_id:<12} {t.priority:<10} {t.status.value:<12} {t.title[:25]}")
+    print()
+    return 0
+
+
+def cmd_schedule(args) -> int:
+    print(BANNER)
+    print(f"Running autonomous task scheduler (max_steps={args.max_steps})...")
+    print("-" * 65)
+
+    sched = TaskScheduler()
+    agent = Agent()
+
+    def _exec(task: Task) -> Task:
+        print(f"Executing task [{task.task_id}]: {task.title}")
+        res = agent.run(goal=task.title, project_id=task.project_id)
+        if res.success:
+            task.mark_completed()
+        else:
+            task.mark_failed(res.errors[0] if res.errors else "Execution failed")
+        return task
+
+    processed = sched.run_until_empty(_exec, max_steps=args.max_steps)
+    print(f"Scheduler finished. Processed {len(processed)} tasks.")
     return 0
 
 
@@ -141,6 +191,18 @@ def main(argv: list[str] | None = None) -> int:
     p_run.add_argument("--project", "-p", type=str, default="default", help="Project ID")
     p_run.add_argument("--provider", type=str, default=None, help="LLM planner provider (mock | openrouter | openai | local)")
     p_run.set_defaults(func=cmd_run)
+
+    # queue
+    p_queue = subparsers.add_parser("queue", help="Enqueue or list autonomous task queue")
+    p_queue.add_argument("--add", "-a", type=str, default=None, help="Goal to enqueue")
+    p_queue.add_argument("--project", "-p", type=str, default="default", help="Project ID")
+    p_queue.add_argument("--priority", type=int, default=100, help="Priority (lower = higher priority)")
+    p_queue.set_defaults(func=cmd_queue)
+
+    # schedule
+    p_sched = subparsers.add_parser("schedule", help="Run autonomous task scheduler")
+    p_sched.add_argument("--max-steps", "-s", type=int, default=5, help="Max steps to execute")
+    p_sched.set_defaults(func=cmd_schedule)
 
     # inspect
     p_inspect = subparsers.add_parser("inspect", help="Inspect a run lifecycle state")

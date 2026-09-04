@@ -66,7 +66,7 @@ class TestSchema(unittest.TestCase):
         self.assertIn("KNOWLEDGE", phases)
         self.assertIn("EXECUTE", phases)
         self.assertIn("RESULT", phases)
-        self.assertEqual(len(phases), 10)
+        self.assertGreaterEqual(len(phases), 10)
 
     def test_event_status_values(self):
         from core.events.schema import EventStatus

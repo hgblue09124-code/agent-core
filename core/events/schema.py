@@ -16,16 +16,26 @@ from typing import Optional
 
 
 class EventPhase(str, Enum):
-    PLAN         = "PLAN"
-    KNOWLEDGE    = "KNOWLEDGE"
-    EXECUTE      = "EXECUTE"
-    OBSERVE      = "OBSERVE"
-    VERIFY       = "VERIFY"
-    RECOVERY     = "RECOVERY"
-    CHECKPOINT   = "CHECKPOINT"
-    EXPERIENCE   = "EXPERIENCE"
-    EVALUATION   = "EVALUATION"
-    RESULT       = "RESULT"
+    TASK_CREATED       = "TASK_CREATED"
+    TASK_STARTED       = "TASK_STARTED"
+    PLAN               = "PLAN"
+    PLAN_CREATED       = "PLAN_CREATED"
+    KNOWLEDGE          = "KNOWLEDGE"
+    MEMORY_UPDATED     = "MEMORY_UPDATED"
+    ACTION_STARTED     = "ACTION_STARTED"
+    EXECUTE            = "EXECUTE"
+    ACTION_COMPLETED   = "ACTION_COMPLETED"
+    OBSERVE            = "OBSERVE"
+    VERIFY             = "VERIFY"
+    VERIFICATION_FAILED = "VERIFICATION_FAILED"
+    RECOVERY           = "RECOVERY"
+    CHECKPOINT         = "CHECKPOINT"
+    EXPERIENCE         = "EXPERIENCE"
+    EXPERIENCE_RECORDED = "EXPERIENCE_RECORDED"
+    EVALUATION         = "EVALUATION"
+    TASK_COMPLETED     = "TASK_COMPLETED"
+    TASK_FAILED        = "TASK_FAILED"
+    RESULT             = "RESULT"
 
 
 class EventStatus(str, Enum):

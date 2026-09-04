@@ -4,12 +4,13 @@ Personal Agent development substrate.
 
 ## Key Features
 
-- **Core/Kernel Foundation**: Strong foundational substrate managing identity, memory, experience, philosophy, continuity, and constitutional execution. External capabilities (e.g., Cửu Giới domain) remain pluggable, replaceable target consumers interacting via contracts/adapters.
-- **Centralized Storage & Path Resolution**: Deterministic storage hierarchy (`AGENTCORE_STORAGE_DIR`) and workspace root isolation.
+- **Personal Agent Runtime Foundation**: Coherent runtime loop (`Observe -> Understand -> Retrieve Memory -> Reason -> Plan -> Policy Check -> Capability Execution -> Verify -> Record Experience -> Update Memory -> Continue`).
+- **Persistent Memory & Identity Subsystem**: Short-term, long-term, user context, and cross-session identity memory model (`core/memory/`).
+- **Autonomous Task Queue & Scheduler**: Priority-based task queue and deterministic bounded scheduler supporting dependencies, state machine transitions, bounded retries, pause/resume, and cancellation (`core/tasks/queue.py`, `core/tasks/scheduler.py`).
+- **Pluggable Capability Adapters**: Strict capability specification contract (`core/capabilities/`) insulating Core from external implementations.
 - **Constitutional Execution & Independent Verifier**: Enforces invariants INV-1 through INV-10 with strict separation of executor and verifier authority.
-- **Agent Philosophy Layer**: Soft behavioral preferences (`CANDIDATE`, `SUPPORTED`, `WEAKENED`, `REJECTED`, `RETIRED`) obeying strict precedence (`Kernel/Security/Contracts > Verification > Task Requirements > Philosophy`).
-- **Unified Developer Beta API**: High-level `Agent` orchestration class in `agent_core`.
-- **Command-Line Interface**: `agent-core` CLI for running tasks, inspecting history, and running performance benchmarks.
+- **Agent Philosophy Layer**: Soft behavioral preferences obeying strict precedence (`Kernel/Security/Contracts > Verification > Task Requirements > Philosophy`).
+- **Command-Line Interface & Subsystems**: `agent-core` CLI supporting `run`, `queue`, `schedule`, `inspect`, `history`, and `benchmark`.
 
 ## Principles
 
