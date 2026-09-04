@@ -47,6 +47,14 @@ class CapabilityRegistry:
         return [adapter.get_spec() for adapter in self._capabilities.values()]
 
     def invoke(self, capability_id: str, inputs: dict) -> CapabilityResult:
+        """Low-level capability invocation primitive.
+
+        Note:
+            CapabilityRegistry.invoke is an internal adapter registry method.
+            All public Agent/Kernel capability executions MUST pass through
+            Agent.execute_capability() or PolicyEngine.authorize_capability()
+            to enforce policy constraints and user approvals prior to invocation.
+        """
         adapter = self.get(capability_id)
         if not adapter:
             return CapabilityResult(
