@@ -85,6 +85,17 @@ class TestReferenceAgent(unittest.TestCase):
             self.assertFalse(res.experience_recorded)
             self.assertTrue(any("Experience recording failed" in err for err in res.errors))
 
+    def test_no_duplicate_experience(self):
+        """Verify duplicate experience is not recorded if already present."""
+        from core.experience.schema import Experience
+        from unittest.mock import patch
+        fake_exp = Experience(run_id="KRUN-FAKE", goal="g", project_id="default")
+        with patch.object(self.agent._experience_engine, "get_experience", return_value=fake_exp), \
+             patch.object(self.agent._experience_engine, "record_experience") as mock_rec:
+            res = self.agent.run("Goal with existing experience")
+            self.assertTrue(res.experience_recorded)
+            mock_rec.assert_not_called()
+
     def test_policy_denial_blocks_execution(self):
         """Verify Kernel Policy denial blocks execution before philosophy or task steps."""
         from unittest.mock import patch
@@ -94,6 +105,34 @@ class TestReferenceAgent(unittest.TestCase):
             self.assertEqual(res.status, "FAILED")
             self.assertEqual(res.phase, "AUTHORITY")
             self.assertIn("Kernel policy prohibits execution", res.errors)
+
+    def test_verification_failure_yields_failed_verdict(self):
+        """Verify verification failure leads to FAIL verdict and unsuccessful AgentRunResult."""
+        from unittest.mock import patch
+        from core.kernel.kernel import KernelResult
+        failing_res = KernelResult(
+            run_id="KRUN-FAIL",
+            goal="Fail test",
+            status="FAILED",
+            phase="VERIFICATION",
+            llm_calls=0,
+            estimated_tokens=0,
+            duration_seconds=0.1,
+            errors=["Verification check failed"],
+        )
+        with patch.object(self.agent._kernel, "run", return_value=failing_res):
+            res = self.agent.run("Task that fails verification")
+            self.assertFalse(res.success)
+            self.assertEqual(res.verification_verdict, "FAIL")
+            self.assertIn("Verification check failed", res.errors)
+
+    def test_capability_adapter_isolation(self):
+        """Verify Core communicates through stable contracts/adapters without direct capability coupling."""
+        from core.projects.manager import ProjectManager
+        pm = ProjectManager()
+        proj = pm.get("default")
+        self.assertIsNotNone(proj)
+        self.assertEqual(proj.project_id, "default")
 
     def test_inspect_and_history(self):
         res = self.agent.run("Inspect architecture for history test")

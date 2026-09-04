@@ -18,7 +18,7 @@ from typing import Optional
 from core.kernel.kernel import Kernel, KernelResult
 from core.kernel.policy import PolicyEngine, Budget
 from core.projects.manager import ProjectManager
-from core.philosophy.engine import PhilosophyEngine
+from core.philosophy.engine import PhilosophyEngine, PhilosophyPrecedenceError
 from core.experience.engine import ExperienceEngine
 from core.experience.schema import Experience
 from core.tasks.manager import TaskManager
@@ -151,7 +151,7 @@ class Agent:
         # Enforce strict precedence hierarchy: Kernel/Security > Verification > Task > Philosophy
         try:
             self._philosophy.enforce_precedence_policy(requested_action=goal)
-        except Exception as exc:
+        except PhilosophyPrecedenceError as exc:
             elapsed = time.time() - t0
             return AgentRunResult(
                 run_id=f"ERR-{int(time.time()*1000):05d}",
@@ -186,6 +186,10 @@ class Agent:
             elif ctx.plan and isinstance(ctx.plan, str) and ctx.plan.strip():
                 plan_steps = [ctx.plan.strip()]
 
+            if ctx.knowledge_retrieved:
+                observations.extend([f"Retrieved: {k}" for k in ctx.knowledge_retrieved[:3]])
+            observations.append(f"Kernel phase: {ctx.kernel_phase}, status: {ctx.kernel_status}")
+
         if not plan_steps:
             tm = TaskManager()
             tasks = tm.list_tasks(project_id=pid)
@@ -211,7 +215,7 @@ class Agent:
                 )
                 self._experience_engine.record_experience(exp)
                 exp_recorded = True
-            except Exception as exc:
+            except (ValueError, OSError, RuntimeError, Exception) as exc:
                 exp_recorded = False
                 run_errors.append(f"Experience recording failed: {exc}")
 
