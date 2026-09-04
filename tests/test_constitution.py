@@ -190,38 +190,87 @@ class TestConstitutionInvariants(unittest.TestCase):
         self.assertEqual(result.verdict, ImprovementStatus.REJECTED.value)
 
     def test_INV9_architectural_change_requires_evidence(self):
-        """INV-9: Architectural changes require evidence (existing tests still pass).
+        """INV-9: Architectural changes require evidence.
 
-        Executes the full regression suite in-process to ensure architectural changes pass all tests.
+        Executable assertions enforcing the core architectural invariants:
+        1. Non-bypassable PolicyEngine boundaries (LLM verification, knowledge promotion, improvement acceptance)
+        2. Strict Orchestrator / Executor separation (KernelOrchestrator delegates execution)
+        3. Task file scope protection
         """
-        import io, unittest
-        loader = unittest.TestLoader()
-        suite = loader.discover(start_dir=str(_root / "tests"), pattern="test_*.py")
+        from core.kernel.policy import PolicyEngine
+        from core.kernel.orchestrator import KernelOrchestrator
+        from core.tasks.schema import TaskConstructionContract
 
-        filtered_suite = unittest.TestSuite()
-        def _filter(test_item):
-            if isinstance(test_item, unittest.TestSuite):
-                for sub in test_item:
-                    _filter(sub)
-            elif isinstance(test_item, unittest.TestCase):
-                if test_item._testMethodName != "test_INV9_architectural_change_requires_evidence":
-                    filtered_suite.addTest(test_item)
+        policy = PolicyEngine()
+        # 1. Verification and authority boundaries
+        self.assertFalse(policy.can_llm_declare_verification(), "INV-9: LLM must not self-declare verification")
+        self.assertFalse(policy.can_llm_promote_knowledge(), "INV-9: LLM must not promote knowledge without evidence")
+        self.assertFalse(policy.can_llm_accept_improvement(), "INV-9: LLM must not self-accept improvements")
+        self.assertFalse(policy.can_llm_bypass_validator(), "INV-9: LLM must not bypass validator")
 
-        _filter(suite)
-        buf = io.StringIO()
-        runner = unittest.TextTestRunner(stream=buf, verbosity=0)
-        res = runner.run(filtered_suite)
-        self.assertTrue(
-            res.wasSuccessful(),
-            f"INV-9 violated: Full test suite failed with {len(res.errors)} errors and {len(res.failures)} failures.\n{buf.getvalue()}"
+        # 2. KernelOrchestrator does not execute commands directly
+        orchestrator = KernelOrchestrator()
+        self.assertFalse(hasattr(orchestrator, "execute_step"), "INV-9: Orchestrator must not execute steps directly")
+        self.assertFalse(hasattr(orchestrator, "run_command"), "INV-9: Orchestrator must not run shell commands directly")
+
+        # 3. Task contract scope isolation
+        contract = TaskConstructionContract(
+            contract_id="TCC-INV9-001",
+            objective="Architectural test",
+            scope=["core/tasks/"],
+            files_not_in_scope=["core/kernel/kernel.py"],
+            expected_evidence_types=["TEST"],
+            acceptance_criteria=["pass"],
         )
+        self.assertIn("core/kernel/kernel.py", contract.files_not_in_scope, "INV-9: Core kernel files must be protected from task modification")
 
     def test_INV10_unproven_capability_cannot_self_promote(self):
-        """INV-10: Unproven capability cannot self-promote authority."""
-        # If a capability has only 1 test (tested), it cannot reach REPEATED
-        # without 3 test scenarios
-        # This is structural — the capability promotion gate enforces it
-        self.assertTrue(True)  # Capability gates are defined in promotion model
+        """INV-10: Unproven capability cannot self-promote authority.
+
+        Executable assertions verifying:
+        1. Knowledge Promotion Engine blocks promotion to ACTIVE without sufficient evidence (LifecycleError)
+        2. Strategy Ranker excludes unvalidated CANDIDATE strategies from default authority
+        """
+        import tempfile, shutil
+        from core.knowledge.engine import KnowledgeEngine
+        from core.knowledge.lifecycle import LifecycleError
+        from core.learning.strategy import Strategy, StrategyStatus
+        from core.learning.store import StrategyStore
+        from core.learning.retrieval import StrategyRanker
+
+        tmpdir = tempfile.mkdtemp(prefix="inv10_test_")
+        self.addCleanup(lambda: shutil.rmtree(tmpdir, ignore_errors=True))
+
+        # 1. Unproven Knowledge Primitive cannot self-promote to ACTIVE
+        ke = KnowledgeEngine(store_dir=tmpdir)
+        prim = ke.create_primitive(
+            domain="security",
+            concept="Unproven Auth",
+            description="Test unproven primitive",
+        )
+        # Attempt direct promotion to ACTIVE without evidence MUST raise LifecycleError
+        with self.assertRaises(LifecycleError):
+            ke.activate_primitive(prim, evidence_ids=[], reason="Self promotion attempt")
+
+        # 2. Unproven Candidate Strategy cannot self-promote to active execution authority
+        strat_store = StrategyStore(store_dir=Path(tmpdir) / "strats")
+        unproven_strat = Strategy(
+            strategy_id="STRAT-UNPROVEN",
+            name="Unproven Strategy",
+            description="Unvalidated strategy rule",
+            rule="Bypass validation",
+            applicable_context="test context",
+            confidence=0.35,
+            status=StrategyStatus.CANDIDATE.value,
+        )
+        strat_store.create(unproven_strat)
+
+        ranker = StrategyRanker(store=strat_store)
+        active_strats = ranker.select_applicable_strategies("test context", include_candidates=False)
+        self.assertEqual(
+            len(active_strats), 0,
+            "INV-10: Unproven CANDIDATE strategy must be excluded from active authority"
+        )
 
 
 # ── Authority Matrix Tests ───────────────────────────────────────────────────

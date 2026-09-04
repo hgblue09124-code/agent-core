@@ -96,14 +96,36 @@ class TestReferenceAgent(unittest.TestCase):
             self.assertTrue(res.experience_recorded)
             mock_rec.assert_not_called()
 
-    def test_learning_pipeline_exception_handling_behavior(self):
-        """Verify that exceptions (RuntimeError, TypeError, KeyError, AttributeError) in non-fatal learning pipeline do not crash Agent execution."""
+    def test_approved_recoverable_exceptions_do_not_crash_run(self):
+        """Verify approved recoverable exceptions (ExperienceStoreError, ValueError, OSError, RuntimeError) do not crash Agent execution."""
         from unittest.mock import patch
-        for exc in [RuntimeError("Pipeline parse error"), TypeError("Type mismatch"), KeyError("missing_key"), AttributeError("no attr")]:
+        from core.experience.store import ExperienceStoreError
+
+        recoverable_exceptions = [
+            ExperienceStoreError("Duplicate entry"),
+            ValueError("Invalid score value"),
+            OSError("Temporary I/O glitch"),
+            RuntimeError("Pipeline parsing notice"),
+        ]
+        for exc in recoverable_exceptions:
             with patch.object(self.agent._learning_pipeline, "process_experience", side_effect=exc):
-                res = self.agent.run("Goal with failing strategy pipeline")
+                res = self.agent.run("Goal with recoverable learning pipeline notice")
                 self.assertTrue(res.success)
                 self.assertTrue(any("Strategy learning pipeline notice" in err for err in res.errors))
+
+    def test_unexpected_programming_exceptions_are_not_swallowed(self):
+        """Verify unexpected programming errors (TypeError, AttributeError, KeyError) propagate and are not swallowed."""
+        from unittest.mock import patch
+
+        programming_exceptions = [
+            TypeError("NoneType object is not subscriptable"),
+            AttributeError("'Agent' object has no attribute 'foo'"),
+            KeyError("missing_required_key"),
+        ]
+        for exc in programming_exceptions:
+            with patch.object(self.agent._learning_pipeline, "process_experience", side_effect=exc):
+                with self.assertRaises(type(exc)):
+                    self.agent.run("Goal with programming error in learning pipeline")
 
     def test_policy_denial_blocks_execution(self):
         """Verify Kernel Policy denial blocks execution before philosophy or task steps."""
