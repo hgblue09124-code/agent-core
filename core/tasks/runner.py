@@ -96,7 +96,7 @@ class TaskRunner:
             self._verify(task, tc)
             mgr.update_task(task)
 
-        except Exception as exc:
+        except (ValueError, OSError, RuntimeError, subprocess.SubprocessError) as exc:
             task.mark_failed(str(exc))
             mgr.update_task(task)
 
