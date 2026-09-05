@@ -1,5 +1,5 @@
 // ios/Tests/LocalAgentServiceTests.swift
-// Native XCTest Suite for LocalAgentService, Policy Boundaries & GitHub Data Update v0.1
+// Native XCTest Suite for LocalAgentService, Policy Boundaries, SwiftUI ViewModel & GitHub Data Update v0.1
 
 import XCTest
 @testable import AgentCoreIOS
@@ -219,5 +219,30 @@ final class LocalAgentServiceTests: XCTestCase {
         // Local Agent Core run continues normally
         let runRes = await service.run(goal: "Offline operation after failed update check")
         XCTAssertEqual(runRes.status, .success)
+    }
+
+    @MainActor
+    func test12_appViewModelStateMachineAndCancellation() async {
+        let vm = AgentAppViewModel(service: service, updateManager: updateManager)
+        XCTAssertEqual(vm.state, .idle)
+
+        // Run task -> transitions through states
+        vm.runTask(goal: "Test state machine transition")
+        XCTAssertTrue(vm.state == .thinking || vm.state == .running)
+
+        // Cancel task -> transitions to cancelling / idle
+        vm.cancelTask()
+        XCTAssertEqual(vm.state, .cancelling)
+    }
+
+    @MainActor
+    func test13_appViewModelMemoryAndVaultActions() async {
+        let vm = AgentAppViewModel(service: service, updateManager: updateManager)
+
+        await vm.rememberFact(key: "ui_theme", value: "Dark")
+        XCTAssertTrue(vm.memories.contains(where: { $0.key == "ui_theme" }))
+
+        await vm.deleteMemory(key: "ui_theme")
+        XCTAssertFalse(vm.memories.contains(where: { $0.key == "ui_theme" }))
     }
 }
