@@ -1,0 +1,492 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 56;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		001001 /* AgentAPIModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 001000 /* AgentAPIModels.swift */; };
+		001003 /* AgentRuntimeContract.swift in Sources */ = {isa = PBXBuildFile; fileRef = 001002 /* AgentRuntimeContract.swift */; };
+		001005 /* LocalAgentService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 001004 /* LocalAgentService.swift */; };
+		001007 /* AgentCoreIOSApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 001006 /* AgentCoreIOSApp.swift */; };
+		001009 /* AgentModelProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 001008 /* AgentModelProvider.swift */; };
+		001011 /* LocalDeterministicPlanner.swift in Sources */ = {isa = PBXBuildFile; fileRef = 001010 /* LocalDeterministicPlanner.swift */; };
+		001013 /* AgentRuntime.swift in Sources */ = {isa = PBXBuildFile; fileRef = 001012 /* AgentRuntime.swift */; };
+		001015 /* LocalCheckpointStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 001014 /* LocalCheckpointStore.swift */; };
+		001017 /* LocalExperienceStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 001016 /* LocalExperienceStore.swift */; };
+		001019 /* LocalMemoryStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 001018 /* LocalMemoryStore.swift */; };
+		001021 /* LocalVaultStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 001020 /* LocalVaultStore.swift */; };
+		001023 /* AppDataUpdateModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 001022 /* AppDataUpdateModels.swift */; };
+		001025 /* DataUpdateValidator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 001024 /* DataUpdateValidator.swift */; };
+		001027 /* GitHubDataUpdateConfiguration.swift in Sources */ = {isa = PBXBuildFile; fileRef = 001026 /* GitHubDataUpdateConfiguration.swift */; };
+		001029 /* GitHubDataUpdateManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 001028 /* GitHubDataUpdateManager.swift */; };
+		001031 /* LocalAgentServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 001030 /* LocalAgentServiceTests.swift */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		001040 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 001000000000000000000001 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 001050 /* AgentCoreIOS */;
+			remoteInfo = AgentCoreIOS;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXFileReference section */
+		001000 /* AgentAPIModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentAPIModels.swift; sourceTree = "<group>"; };
+		001002 /* AgentRuntimeContract.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentRuntimeContract.swift; sourceTree = "<group>"; };
+		001004 /* LocalAgentService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalAgentService.swift; sourceTree = "<group>"; };
+		001006 /* AgentCoreIOSApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentCoreIOSApp.swift; sourceTree = "<group>"; };
+		001008 /* AgentModelProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentModelProvider.swift; sourceTree = "<group>"; };
+		001010 /* LocalDeterministicPlanner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalDeterministicPlanner.swift; sourceTree = "<group>"; };
+		001012 /* AgentRuntime.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentRuntime.swift; sourceTree = "<group>"; };
+		001014 /* LocalCheckpointStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalCheckpointStore.swift; sourceTree = "<group>"; };
+		001016 /* LocalExperienceStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalExperienceStore.swift; sourceTree = "<group>"; };
+		001018 /* LocalMemoryStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalMemoryStore.swift; sourceTree = "<group>"; };
+		001020 /* LocalVaultStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalVaultStore.swift; sourceTree = "<group>"; };
+		001022 /* AppDataUpdateModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDataUpdateModels.swift; sourceTree = "<group>"; };
+		001024 /* DataUpdateValidator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DataUpdateValidator.swift; sourceTree = "<group>"; };
+		001026 /* GitHubDataUpdateConfiguration.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GitHubDataUpdateConfiguration.swift; sourceTree = "<group>"; };
+		001028 /* GitHubDataUpdateManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GitHubDataUpdateManager.swift; sourceTree = "<group>"; };
+		001030 /* LocalAgentServiceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalAgentServiceTests.swift; sourceTree = "<group>"; };
+		001032 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		001051 /* AgentCoreIOS.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = AgentCoreIOS.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		001052 /* AgentCoreIOSTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = AgentCoreIOSTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		001060 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		001061 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		001070 /* Main Group */ = {
+			isa = PBXGroup;
+			children = (
+				001071 /* AgentCoreIOS */,
+				001078 /* Tests */,
+				001079 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		001071 /* AgentCoreIOS */ = {
+			isa = PBXGroup;
+			children = (
+				001072 /* API */,
+				001073 /* App */,
+				001074 /* Providers */,
+				001075 /* Runtime */,
+				001076 /* Storage */,
+				001077 /* Update */,
+			);
+			path = AgentCoreIOS;
+			sourceTree = "<group>";
+		};
+		001072 /* API */ = {
+			isa = PBXGroup;
+			children = (
+				001000 /* AgentAPIModels.swift */,
+				001002 /* AgentRuntimeContract.swift */,
+				001004 /* LocalAgentService.swift */,
+			);
+			path = API;
+			sourceTree = "<group>";
+		};
+		001073 /* App */ = {
+			isa = PBXGroup;
+			children = (
+				001006 /* AgentCoreIOSApp.swift */,
+				001032 /* Info.plist */,
+			);
+			path = App;
+			sourceTree = "<group>";
+		};
+		001074 /* Providers */ = {
+			isa = PBXGroup;
+			children = (
+				001008 /* AgentModelProvider.swift */,
+				001010 /* LocalDeterministicPlanner.swift */,
+			);
+			path = Providers;
+			sourceTree = "<group>";
+		};
+		001075 /* Runtime */ = {
+			isa = PBXGroup;
+			children = (
+				001012 /* AgentRuntime.swift */,
+			);
+			path = Runtime;
+			sourceTree = "<group>";
+		};
+		001076 /* Storage */ = {
+			isa = PBXGroup;
+			children = (
+				001014 /* LocalCheckpointStore.swift */,
+				001016 /* LocalExperienceStore.swift */,
+				001018 /* LocalMemoryStore.swift */,
+				001020 /* LocalVaultStore.swift */,
+			);
+			path = Storage;
+			sourceTree = "<group>";
+		};
+		001077 /* Update */ = {
+			isa = PBXGroup;
+			children = (
+				001022 /* AppDataUpdateModels.swift */,
+				001024 /* DataUpdateValidator.swift */,
+				001026 /* GitHubDataUpdateConfiguration.swift */,
+				001028 /* GitHubDataUpdateManager.swift */,
+			);
+			path = Update;
+			sourceTree = "<group>";
+		};
+		001078 /* Tests */ = {
+			isa = PBXGroup;
+			children = (
+				001030 /* LocalAgentServiceTests.swift */,
+			);
+			path = Tests;
+			sourceTree = "<group>";
+		};
+		001079 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				001051 /* AgentCoreIOS.app */,
+				001052 /* AgentCoreIOSTests.xctest */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		001050 /* AgentCoreIOS */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 001080 /* Build configuration list for PBXNativeTarget "AgentCoreIOS" */;
+			buildPhases = (
+				001090 /* Sources */,
+				001060 /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = AgentCoreIOS;
+			productName = AgentCoreIOS;
+			productReference = 001051 /* AgentCoreIOS.app */;
+			productType = "com.apple.product-type.application";
+		};
+		001053 /* AgentCoreIOSTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 001083 /* Build configuration list for PBXNativeTarget "AgentCoreIOSTests" */;
+			buildPhases = (
+				001091 /* Sources */,
+				001061 /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				001041 /* PBXTargetDependency */,
+			);
+			name = AgentCoreIOSTests;
+			productName = AgentCoreIOSTests;
+			productReference = 001052 /* AgentCoreIOSTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		001000000000000000000001 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = 1;
+				LastSwiftUpdateCheck = 1500;
+				LastUpgradeCheck = 1500;
+				TargetAttributes = {
+					001050 = {
+						CreatedOnToolsVersion = 15.0;
+					};
+					001053 = {
+						CreatedOnToolsVersion = 15.0;
+						TestTargetID = 001050;
+					};
+				};
+			};
+			buildConfigurationList = 001086 /* Build configuration list for PBXProject "AgentCoreIOS" */;
+			compatibilityVersion = "Xcode 14.0";
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+				Base,
+			);
+			mainGroup = 001070 /* Main Group */;
+			productRefGroup = 001079 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				001050 /* AgentCoreIOS */,
+				001053 /* AgentCoreIOSTests */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXSourcesBuildPhase section */
+		001090 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				001001 /* AgentAPIModels.swift in Sources */,
+				001003 /* AgentRuntimeContract.swift in Sources */,
+				001005 /* LocalAgentService.swift in Sources */,
+				001007 /* AgentCoreIOSApp.swift in Sources */,
+				001009 /* AgentModelProvider.swift in Sources */,
+				001011 /* LocalDeterministicPlanner.swift in Sources */,
+				001013 /* AgentRuntime.swift in Sources */,
+				001015 /* LocalCheckpointStore.swift in Sources */,
+				001017 /* LocalExperienceStore.swift in Sources */,
+				001019 /* LocalMemoryStore.swift in Sources */,
+				001021 /* LocalVaultStore.swift in Sources */,
+				001023 /* AppDataUpdateModels.swift in Sources */,
+				001025 /* DataUpdateValidator.swift in Sources */,
+				001027 /* GitHubDataUpdateConfiguration.swift in Sources */,
+				001029 /* GitHubDataUpdateManager.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		001091 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				001031 /* LocalAgentServiceTests.swift in Sources */,
+				001001 /* AgentAPIModels.swift in Sources */,
+				001003 /* AgentRuntimeContract.swift in Sources */,
+				001005 /* LocalAgentService.swift in Sources */,
+				001009 /* AgentModelProvider.swift in Sources */,
+				001011 /* LocalDeterministicPlanner.swift in Sources */,
+				001013 /* AgentRuntime.swift in Sources */,
+				001015 /* LocalCheckpointStore.swift in Sources */,
+				001017 /* LocalExperienceStore.swift in Sources */,
+				001019 /* LocalMemoryStore.swift in Sources */,
+				001021 /* LocalVaultStore.swift in Sources */,
+				001023 /* AppDataUpdateModels.swift in Sources */,
+				001025 /* DataUpdateValidator.swift in Sources */,
+				001027 /* GitHubDataUpdateConfiguration.swift in Sources */,
+				001029 /* GitHubDataUpdateManager.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		001041 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 001050 /* AgentCoreIOS */;
+			targetProxy = 001040 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
+/* Begin XCBuildConfiguration section */
+		001081 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CLANG_ENABLE_MODULES = YES;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = AgentCoreIOS/App/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 0.1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.agentcore.AgentCoreIOS;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		001082 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CLANG_ENABLE_MODULES = YES;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = AgentCoreIOS/App/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 0.1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.agentcore.AgentCoreIOS;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+		001084 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ENABLE_MODULES = YES;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				MARKETING_VERSION = 0.1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.agentcore.AgentCoreIOSTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/AgentCoreIOS.app/AgentCoreIOS";
+			};
+			name = Debug;
+		};
+		001085 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ENABLE_MODULES = YES;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				MARKETING_VERSION = 0.1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.agentcore.AgentCoreIOSTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/AgentCoreIOS.app/AgentCoreIOS";
+			};
+			name = Release;
+		};
+		001087 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"DEBUG=1",
+					"$(inherited)",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				ONLY_ACTIVE_ARCH = YES;
+				SDKROOT = iphoneos;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+			};
+			name = Debug;
+		};
+		001088 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MTL_FAST_MATH = YES;
+				SDKROOT = iphoneos;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		001080 /* Build configuration list for PBXNativeTarget "AgentCoreIOS" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				001081 /* Debug */,
+				001082 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		001083 /* Build configuration list for PBXNativeTarget "AgentCoreIOSTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				001084 /* Debug */,
+				001085 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		001086 /* Build configuration list for PBXProject "AgentCoreIOS" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				001087 /* Debug */,
+				001088 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = 001000000000000000000001 /* Project object */;
+}
