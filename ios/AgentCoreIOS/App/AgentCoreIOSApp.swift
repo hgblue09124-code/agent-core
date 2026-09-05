@@ -65,7 +65,7 @@ public enum ExecutionLifecycleState: String {
     }
 }
 
-public enum ReviewCheckStatus: String, Codable {
+public enum ReviewCheckStatus: String, Codable, Equatable, Sendable {
     case pass = "PASS"
     case fail = "FAIL"
     case warning = "WARNING"

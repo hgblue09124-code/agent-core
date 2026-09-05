@@ -246,10 +246,10 @@ final class LocalAgentServiceTests: XCTestCase {
         XCTAssertEqual(viewModel.passCount, 10)
         XCTAssertEqual(viewModel.failCount, 0)
         XCTAssertEqual(viewModel.blockerDetails.count, 0)
-        XCTAssertEqual(viewModel.agentCoreStatus, .pass)
-        XCTAssertEqual(viewModel.agentRuntimeStatus, .pass)
-        XCTAssertEqual(viewModel.localStorageStatus, .pass)
-        XCTAssertEqual(viewModel.memoryVaultStatus, .pass)
-        XCTAssertEqual(viewModel.connectionStatus, .pass)
+        XCTAssertEqual(viewModel.agentCoreStatus, ReviewCheckStatus.pass)
+        XCTAssertEqual(viewModel.agentRuntimeStatus, ReviewCheckStatus.pass)
+        XCTAssertEqual(viewModel.localStorageStatus, ReviewCheckStatus.pass)
+        XCTAssertEqual(viewModel.memoryVaultStatus, ReviewCheckStatus.pass)
+        XCTAssertEqual(viewModel.connectionStatus, ReviewCheckStatus.pass)
     }
 }
