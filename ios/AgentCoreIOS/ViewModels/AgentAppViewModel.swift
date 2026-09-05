@@ -121,7 +121,8 @@ public final class AgentAppViewModel: ObservableObject {
             self.lastOutput = result.output ?? "-"
 
             // Populate liveSteps directly from real planSteps from runtime/planner
-            if let steps = result.planSteps, !steps.isEmpty {
+            let steps = result.planSteps
+            if !steps.isEmpty {
                 let isSuccess = (result.status == .success)
                 self.liveSteps = steps.enumerated().map { idx, stepTitle in
                     let stepStatus: String
