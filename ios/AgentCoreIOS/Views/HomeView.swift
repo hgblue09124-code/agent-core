@@ -11,7 +11,7 @@ public struct HomeView: View {
     }
 
     public var body: some View {
-        ScrollView {
+        ScrollView(.vertical, showsIndicators: true) {
             VStack(spacing: 20) {
                 // Header Bar with Local Badge
                 HStack {

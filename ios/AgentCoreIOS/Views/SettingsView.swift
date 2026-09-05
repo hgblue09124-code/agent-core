@@ -11,7 +11,7 @@ public struct SettingsView: View {
     }
 
     public var body: some View {
-        ScrollView {
+        ScrollView(.vertical, showsIndicators: true) {
             VStack(spacing: 16) {
                 // Header Bar
                 HStack {
