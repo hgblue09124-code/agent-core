@@ -203,21 +203,7 @@ final class DiagnosticViewModel: ObservableObject {
     }
 
     func syncDataNow() async {
-        // Trigger check then sync if update available
-        let check = await updateManager.checkForUpdates()
-        if check.status == .updateAvailable {
-            let sampleManifest = AppDataManifest(
-                schemaVersion: 1,
-                dataVersion: "2026.09.05.001",
-                minimumClientVersion: "0.1.0",
-                files: [
-                    ManifestFileEntry(path: "agent-config/default.json", sha256: "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855", size: 0)
-                ]
-            )
-            updateReport = await updateManager.performUpdate(manifest: sampleManifest, fileDataMap: ["agent-config/default.json": Data()])
-        } else {
-            updateReport = check
-        }
+        updateReport = await updateManager.syncNow()
     }
 
     private func refresh() async {

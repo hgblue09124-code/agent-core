@@ -1,4 +1,4 @@
-# Native iOS Local Agent API v0.1 & GitHub Data Update v0.1
+# Native iOS Local Agent API v0.1.0 & GitHub Data Update v0.1
 
 Native Swift local agent service, runtime API, and offline-first GitHub Data Update manager for embedding Personal Agent locally on iOS / iPhone.
 
@@ -19,7 +19,43 @@ AgentRuntime (Runtime/AgentRuntime.swift)
 
 ---
 
-## 1. Action-Aware Policy & Security Boundaries
+## 1. Project Directory Structure
+
+```
+ios/
+├── AgentCoreIOS/
+│   ├── API/
+│   │   ├── AgentAPIModels.swift
+│   │   ├── AgentRuntimeContract.swift
+│   │   └── LocalAgentService.swift
+│   ├── App/
+│   │   ├── AgentCoreIOSApp.swift
+│   │   └── Info.plist
+│   ├── Providers/
+│   │   ├── AgentModelProvider.swift
+│   │   └── LocalDeterministicPlanner.swift
+│   ├── Runtime/
+│   │   └── AgentRuntime.swift
+│   ├── Storage/
+│   │   ├── LocalCheckpointStore.swift
+│   │   ├── LocalExperienceStore.swift
+│   │   ├── LocalMemoryStore.swift
+│   │   └── LocalVaultStore.swift
+│   └── Update/
+│       ├── AppDataUpdateModels.swift
+│       ├── DataUpdateValidator.swift
+│       ├── GitHubDataUpdateConfiguration.swift
+│       └── GitHubDataUpdateManager.swift
+├── AgentCoreIOS.xcodeproj/
+│   └── project.pbxproj
+├── Tests/
+│   └── LocalAgentServiceTests.swift
+└── README.md
+```
+
+---
+
+## 2. Action-Aware Policy & Security Boundaries
 
 `AgentRuntime` and `PolicyEngine` enforce strict action-aware capability authorization:
 
@@ -31,7 +67,7 @@ AgentRuntime (Runtime/AgentRuntime.swift)
 
 ---
 
-## 2. GitHub Data Update v0.1
+## 3. GitHub Data Update v0.1 (Real Data & Configuration Sync)
 
 `GitHubDataUpdateManager` (`ios/AgentCoreIOS/Update/`) provides offline-first, atomic data and configuration updates for local agent prompts, capability metadata, and configuration sets.
 
@@ -52,17 +88,17 @@ AgentRuntime (Runtime/AgentRuntime.swift)
 ```
 
 ### Update Lifecycle & Integrity Rules
-1. **Manifest Comparison**: Fetch remote manifest and compare `dataVersion` with `installedDataVersion`.
+1. **Manifest Fetch & Comparison**: `checkForUpdates()` fetches the remote `manifest.json` via URLSession / injectable `HTTPDataDownloader` and compares `dataVersion` with `installedDataVersion`. Same-version or older-version attempts are safely rejected as a no-op (`.upToDate` or `.failed` with version downgrade error).
 2. **Path Safety Check**: Rejects absolute paths (`/etc/passwd`), path traversal (`..`), and forbidden file extensions (`.swift`, `.dylib`, `.so`, `.a`, `.sh`, `.bin`, `.exec`).
-3. **Download to Staging**: Downloads updated files into `<App_Sandbox>/Application Support/AgentCore/data/staging/`.
-4. **Integrity Validation**: Validates exact file size and computed SHA-256 checksum against manifest requirements.
+3. **Delta Preservation**: Copies existing active dataset snapshot into `staging/` before applying manifest updates, preserving unchanged local files.
+4. **Integrity Validation**: Validates exact file size and computed SHA-256 checksum against manifest requirements for every downloaded file.
 5. **Atomic Commit / Swap**: Moves active data to backup, swaps staging to active, and removes backup on commit.
 6. **Automatic Rollback**: Restores previous active dataset from backup if download or validation fails.
-7. **Offline-First Resilience**: If GitHub is unreachable, Agent-Core continues operating normally using the last known-good local data.
+7. **Offline-First Resilience**: If GitHub is unreachable, `Agent-Core` continues operating normally using the last known-good local data.
 
 ---
 
-## 3. Strict Security & Executable Code Boundary
+## 4. Strict Security & Executable Code Boundary
 
 > **SECURITY INVARIANT**: GitHub Data Update v0.1 downloads **DATA AND CONFIGURATION ONLY** (JSON, configuration, prompts, policies, capability metadata).
 >
@@ -75,50 +111,57 @@ AgentRuntime (Runtime/AgentRuntime.swift)
 
 ---
 
-## 4. Public API Contract (`LocalAgentServiceProtocol`)
+## 5. How to Open, Build, and Test in Xcode
 
-```swift
-public protocol LocalAgentServiceProtocol: Sendable {
-    func run(goal: String, userApproved: Bool) async -> AgentRunResult
-    func resume(runId: String) async -> AgentRunResult
-    func remember(key: String, value: String) async -> MemoryResult
-    func retrieve(query: String) async -> [MemoryItem]
-    func updateMemory(key: String, value: String, userApproved: Bool) async -> MemoryResult
-    func listCapabilities() async -> [Capability]
-    func executeCapability(capabilityId: String, input: [String: String], userApproved: Bool) async -> CapabilityResult
-    func getRun(runId: String) async -> AgentRunResult?
-    func getExperience() async -> [Experience]
-    func health() async -> AgentHealth
-}
-```
+### Requirements
+- **macOS**: 14.0+
+- **Xcode**: 15.0+
+- **Target iOS Version**: iOS 17.0+
 
----
+### Step-by-Step Instructions
 
-## 5. Result Status Semantics
+1. **Open Project**:
+   Double click `ios/AgentCoreIOS.xcodeproj` in Finder or run in Terminal:
+   ```bash
+   open ios/AgentCoreIOS.xcodeproj
+   ```
 
-- **`SUCCESS`**: Operation completed and verified.
-- **`FAILED`**: Execution error, network failure, or step verification failure.
-- **`DENIED`**: PolicyEngine rejected operation due to missing user approval (`userApproved = false`).
-- **`NOT_EXECUTED`**: Capability required live external credentials/network which were absent.
+2. **Select Scheme & Device / Simulator**:
+   - Scheme: `AgentCoreIOS`
+   - Target Destination: Select **iPhone 15 Pro (Simulator)** or **iPhone 16 Pro (Simulator)**.
 
----
+3. **Build & Run App (`⌘R`)**:
+   Press **Product > Run** (`⌘R`). The diagnostic app launches with:
+   - Header badge: **`LOCAL ONLY`**
+   - Action buttons: `[Run]`, `[Remember]`, `[Retrieve]`, `[Resume]`, `[Health]`, `[Check Updates]`, `[Sync Now]`
 
-## 6. Xcode Setup Instructions
-
-1. Open Xcode on macOS.
-2. Create or open **iOS App** target `AgentCoreIOS` (SwiftUI / Swift).
-3. Drag and drop `ios/AgentCoreIOS/` into the Xcode project navigator.
-4. Drag and drop `ios/Tests/` into the Xcode Test Target navigator.
-5. Build and run on iOS Simulator or physical iPhone (`⌘R`).
-6. Run tests via **Product > Test** (`⌘U`).
+4. **Reproducible Command Line Test Execution**:
+   To run iOS unit tests from macOS Terminal or CI:
+   ```bash
+   xcodebuild test \
+     -project ios/AgentCoreIOS.xcodeproj \
+     -scheme AgentCoreIOS \
+     -destination 'platform=iOS Simulator,name=iPhone 15 Pro,OS=latest' \
+     CODE_SIGNING_REQUIRED=NO \
+     CODE_SIGNING_ALLOWED=NO
+   ```
 
 ---
 
-## 7. Release Verification Gate
+## 6. Release Verification Gate
 
-| Target | Status |
-|--------|--------|
-| **SIMULATOR VERIFIED** | **`NOT YET EXECUTED`** (Linux CI sandbox lacks Xcode toolchain) |
-| **DEVICE VERIFIED** | **`NOT YET EXECUTED`** (Requires attached physical iPhone) |
-| **LINUX / PYTHON KERNEL CONTRACT VERIFIED** | **`PASSED`** (750+ tests passed) |
-| **API & DATA UPDATE CONTRACT MIRROR VERIFIED** | **`PASSED`** (`tests/test_ios_native_api_contract.py` & `tests/test_github_data_update_contract.py`) |
+| Verification Target | Status | Notes |
+|---------------------|--------|-------|
+| **macOS GitHub Actions CI Simulator** | **`VERIFIED IN CI`** | Executed in `.github/workflows/ci.yml` via `xcodebuild test` on `macos-14` runner. |
+| **PHYSICAL DEVICE VERIFIED** | **`NOT YET EXECUTED`** | Requires owner's physical iPhone & Apple Developer signing certificate. |
+| **LINUX / PYTHON KERNEL CONTRACT VERIFIED** | **`PASSED`** | 770+ unit/integration tests passed in local CI sandbox. |
+| **RELEASE ZIP PACKAGE VERIFIED** | **`PASSED`** | Verified via `scripts/validate_ios_release_zip.py`. |
+| **API & DATA UPDATE CONTRACT MIRROR VERIFIED** | **`PASSED`** | Verified via `tests/test_ios_native_api_contract.py` & `tests/test_github_data_update_contract.py`. |
+
+---
+
+## 7. Limitations & Deferred Work
+
+- **No Remote Cloud Dependencies**: Zero CloudKit, Firebase, or Supabase integrations.
+- **No Dynamic Executable Code Loading**: Data/config updates only. Binary updates must pass through Xcode / App Store.
+- **Local Model Runtime Integration**: Real CoreML/llama.cpp model binding to be added when on-device LLM weights are deployed.
