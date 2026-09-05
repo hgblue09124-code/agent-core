@@ -3,9 +3,13 @@
 
 import Foundation
 
+/// Injectable network downloader closure type for unit test isolation.
+public typealias HTTPDataDownloader = @Sendable (URL) async throws -> (Data, URLResponse)
+
 public final class GitHubDataUpdateManager: @unchecked Sendable {
     public let config: GitHubDataUpdateConfiguration
     public let validator: DataUpdateValidator
+    private let downloader: HTTPDataDownloader
 
     private let storageDir: URL
     private let stagingDir: URL
@@ -16,10 +20,14 @@ public final class GitHubDataUpdateManager: @unchecked Sendable {
     public init(
         config: GitHubDataUpdateConfiguration? = nil,
         validator: DataUpdateValidator? = nil,
-        storageDir: URL? = nil
+        storageDir: URL? = nil,
+        downloader: HTTPDataDownloader? = nil
     ) {
         self.config = config ?? GitHubDataUpdateConfiguration()
         self.validator = validator ?? DataUpdateValidator()
+        self.downloader = downloader ?? { url in
+            try await URLSession.shared.data(from: url)
+        }
 
         if let dir = storageDir {
             self.storageDir = dir
@@ -80,7 +88,7 @@ public final class GitHubDataUpdateManager: @unchecked Sendable {
                     status: isNewer ? .updateAvailable : .upToDate,
                     lastSuccessfulSync: report.lastSuccessfulSync,
                     lastAttempt: nowStr,
-                    lastError: nil,
+                    lastError: isNewer ? nil : "No update available - installed version '\(report.installedDataVersion)' is up to date.",
                     isOffline: false
                 )
                 saveReport()
@@ -113,7 +121,7 @@ public final class GitHubDataUpdateManager: @unchecked Sendable {
         }
 
         do {
-            let (data, response) = try await URLSession.shared.data(from: manifestURL)
+            let (data, response) = try await downloader(manifestURL)
             guard let httpResp = response as? HTTPURLResponse, httpResp.statusCode == 200 else {
                 let code = (response as? HTTPURLResponse)?.statusCode ?? 500
                 report = DataUpdateStateReport(
@@ -137,7 +145,7 @@ public final class GitHubDataUpdateManager: @unchecked Sendable {
                 status: isNewer ? .updateAvailable : .upToDate,
                 lastSuccessfulSync: report.lastSuccessfulSync,
                 lastAttempt: nowStr,
-                lastError: nil,
+                lastError: isNewer ? nil : "No update available - installed version '\(report.installedDataVersion)' is up to date.",
                 isOffline: false
             )
             saveReport()
@@ -153,6 +161,58 @@ public final class GitHubDataUpdateManager: @unchecked Sendable {
             saveReport()
             return report
         }
+    }
+
+    /// Perform real GitHub data sync: fetch remote manifest -> compare versions -> download files -> validate -> atomic swap.
+    public func syncNow(mockManifest: AppDataManifest? = nil, fileDataMap: [String: Data]? = nil) async -> DataUpdateStateReport {
+        let checkReport = await checkForUpdates(mockManifest: mockManifest)
+        guard checkReport.status == .updateAvailable || mockManifest != nil else {
+            return checkReport
+        }
+
+        guard let latestVersion = checkReport.latestKnownVersion else {
+            return checkReport
+        }
+
+        var targetManifest: AppDataManifest? = mockManifest
+        if targetManifest == nil, let manifestURL = config.urlForFile(path: config.manifestPath) {
+            do {
+                let (data, response) = try await downloader(manifestURL)
+                if let httpResp = response as? HTTPURLResponse, httpResp.statusCode == 200 {
+                    targetManifest = try JSONDecoder().decode(AppDataManifest.self, from: data)
+                }
+            } catch {
+                let nowStr = ISO8601DateFormatter().string(from: Date())
+                report = DataUpdateStateReport(
+                    installedDataVersion: report.installedDataVersion,
+                    latestKnownVersion: latestVersion,
+                    status: .offline,
+                    lastSuccessfulSync: report.lastSuccessfulSync,
+                    lastAttempt: nowStr,
+                    lastError: "Network Sync Error: \(error.localizedDescription)",
+                    isOffline: true
+                )
+                saveReport()
+                return report
+            }
+        }
+
+        guard let manifestToApply = targetManifest else {
+            let nowStr = ISO8601DateFormatter().string(from: Date())
+            report = DataUpdateStateReport(
+                installedDataVersion: report.installedDataVersion,
+                latestKnownVersion: latestVersion,
+                status: .failed,
+                lastSuccessfulSync: report.lastSuccessfulSync,
+                lastAttempt: nowStr,
+                lastError: "Unable to retrieve update manifest for data sync.",
+                isOffline: false
+            )
+            saveReport()
+            return report
+        }
+
+        return await performUpdate(manifest: manifestToApply, fileDataMap: fileDataMap)
     }
 
     /// Perform atomic data update: snapshot active -> download delta to staging -> validate -> commit swap -> update state.
@@ -217,7 +277,7 @@ public final class GitHubDataUpdateManager: @unchecked Sendable {
                 if let mockMap = fileDataMap, let data = mockMap[entry.path] {
                     fileData = data
                 } else if let fileURL = config.urlForFile(path: entry.path) {
-                    let (data, response) = try await URLSession.shared.data(from: fileURL)
+                    let (data, response) = try await downloader(fileURL)
                     guard let httpResp = response as? HTTPURLResponse, httpResp.statusCode == 200 else {
                         throw DataUpdateValidationError(message: "Download failed for '\(entry.path)': HTTP \((response as? HTTPURLResponse)?.statusCode ?? 500)")
                     }

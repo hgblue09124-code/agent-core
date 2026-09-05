@@ -2,7 +2,7 @@ name: Agent-Core CI
 
 on:
   push:
-    branches: [ main, master, "jules-*" ]
+    branches: [ main, master, "jules-*", "feat/*", "fix/*", "release/*" ]
   pull_request:
     branches: [ main, master ]
 
@@ -30,6 +30,10 @@ jobs:
         run: |
           pytest
 
+      - name: Verify Release ZIP Package
+        run: |
+          python scripts/validate_ios_release_zip.py
+
       - name: Verify CLI Smoke Commands
         env:
           AGENTCORE_PLANNER_PROVIDER: mock
@@ -38,3 +42,24 @@ jobs:
           python -m core.cli run "Verify CI smoke test"
           python -m core.cli history
           python -m core.cli benchmark
+
+  ios-xcode-test:
+    name: Xcode iOS Simulator Build & Test
+    runs-on: macos-14
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Select Xcode Version
+        run: |
+          sudo xcode-select -s /Applications/Xcode_15.4.app/Contents/Developer || true
+          xcodebuild -version
+
+      - name: Build & Run iOS Unit Tests via xcodebuild
+        run: |
+          xcodebuild test \
+            -project ios/AgentCoreIOS.xcodeproj \
+            -scheme AgentCoreIOS \
+            -destination 'platform=iOS Simulator,name=iPhone 15 Pro,OS=latest' \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGNING_ALLOWED=NO

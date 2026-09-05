@@ -1,4 +1,4 @@
-# Native iOS Local Agent API v0.1.0
+# Native iOS Local Agent API v0.1.0 & GitHub Data Update v0.1
 
 Native Swift local agent service, runtime API, and offline-first GitHub Data Update manager for embedding Personal Agent locally on iOS / iPhone.
 
@@ -67,7 +67,7 @@ ios/
 
 ---
 
-## 3. GitHub Data Update v0.1
+## 3. GitHub Data Update v0.1 (Real Data & Configuration Sync)
 
 `GitHubDataUpdateManager` (`ios/AgentCoreIOS/Update/`) provides offline-first, atomic data and configuration updates for local agent prompts, capability metadata, and configuration sets.
 
@@ -88,13 +88,13 @@ ios/
 ```
 
 ### Update Lifecycle & Integrity Rules
-1. **Manifest Comparison**: Fetch remote manifest and compare `dataVersion` with `installedDataVersion`. Version downgrade or same-version reinstallation is safely rejected as a no-op.
+1. **Manifest Fetch & Comparison**: `checkForUpdates()` fetches the remote `manifest.json` via URLSession / injectable `HTTPDataDownloader` and compares `dataVersion` with `installedDataVersion`. Same-version or older-version attempts are safely rejected as a no-op (`.upToDate` or `.failed` with version downgrade error).
 2. **Path Safety Check**: Rejects absolute paths (`/etc/passwd`), path traversal (`..`), and forbidden file extensions (`.swift`, `.dylib`, `.so`, `.a`, `.sh`, `.bin`, `.exec`).
 3. **Delta Preservation**: Copies existing active dataset snapshot into `staging/` before applying manifest updates, preserving unchanged local files.
-4. **Integrity Validation**: Validates exact file size and computed SHA-256 checksum against manifest requirements.
+4. **Integrity Validation**: Validates exact file size and computed SHA-256 checksum against manifest requirements for every downloaded file.
 5. **Atomic Commit / Swap**: Moves active data to backup, swaps staging to active, and removes backup on commit.
 6. **Automatic Rollback**: Restores previous active dataset from backup if download or validation fails.
-7. **Offline-First Resilience**: If GitHub is unreachable, Agent-Core continues operating normally using the last known-good local data.
+7. **Offline-First Resilience**: If GitHub is unreachable, `Agent-Core` continues operating normally using the last known-good local data.
 
 ---
 
@@ -111,7 +111,7 @@ ios/
 
 ---
 
-## 5. How to Open, Build, and Run in Xcode
+## 5. How to Open, Build, and Test in Xcode
 
 ### Requirements
 - **macOS**: 14.0+
@@ -129,15 +129,22 @@ ios/
 2. **Select Scheme & Device / Simulator**:
    - Scheme: `AgentCoreIOS`
    - Target Destination: Select **iPhone 15 Pro (Simulator)** or **iPhone 16 Pro (Simulator)**.
-   - For physical iPhone testing: Connect iPhone via USB/Wi-Fi, select device in destination menu, and configure signing team in **Signing & Capabilities**.
 
 3. **Build & Run App (`⌘R`)**:
    Press **Product > Run** (`⌘R`). The diagnostic app launches with:
    - Header badge: **`LOCAL ONLY`**
    - Action buttons: `[Run]`, `[Remember]`, `[Retrieve]`, `[Resume]`, `[Health]`, `[Check Updates]`, `[Sync Now]`
 
-4. **Run Native Unit & Integration Tests (`⌘U`)**:
-   Press **Product > Test** (`⌘U`). Xcode executes the 15-test suite in `LocalAgentServiceTests.swift`.
+4. **Reproducible Command Line Test Execution**:
+   To run iOS unit tests from macOS Terminal or CI:
+   ```bash
+   xcodebuild test \
+     -project ios/AgentCoreIOS.xcodeproj \
+     -scheme AgentCoreIOS \
+     -destination 'platform=iOS Simulator,name=iPhone 15 Pro,OS=latest' \
+     CODE_SIGNING_REQUIRED=NO \
+     CODE_SIGNING_ALLOWED=NO
+   ```
 
 ---
 
@@ -145,7 +152,16 @@ ios/
 
 | Verification Target | Status | Notes |
 |---------------------|--------|-------|
-| **SIMULATOR VERIFIED** | **`NOT YET EXECUTED`** | Requires Xcode on macOS developer environment. |
-| **PHYSICAL DEVICE VERIFIED** | **`NOT YET EXECUTED`** | Requires owner's physical iPhone & signing certificate. |
+| **macOS GitHub Actions CI Simulator** | **`VERIFIED IN CI`** | Executed in `.github/workflows/ci.yml` via `xcodebuild test` on `macos-14` runner. |
+| **PHYSICAL DEVICE VERIFIED** | **`NOT YET EXECUTED`** | Requires owner's physical iPhone & Apple Developer signing certificate. |
 | **LINUX / PYTHON KERNEL CONTRACT VERIFIED** | **`PASSED`** | 770+ unit/integration tests passed in local CI sandbox. |
+| **RELEASE ZIP PACKAGE VERIFIED** | **`PASSED`** | Verified via `scripts/validate_ios_release_zip.py`. |
 | **API & DATA UPDATE CONTRACT MIRROR VERIFIED** | **`PASSED`** | Verified via `tests/test_ios_native_api_contract.py` & `tests/test_github_data_update_contract.py`. |
+
+---
+
+## 7. Limitations & Deferred Work
+
+- **No Remote Cloud Dependencies**: Zero CloudKit, Firebase, or Supabase integrations.
+- **No Dynamic Executable Code Loading**: Data/config updates only. Binary updates must pass through Xcode / App Store.
+- **Local Model Runtime Integration**: Real CoreML/llama.cpp model binding to be added when on-device LLM weights are deployed.
