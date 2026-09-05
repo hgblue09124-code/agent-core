@@ -14,9 +14,9 @@ Executes tests for all 15 Beta Missions defined in the Beta Mission Specificatio
 - Mission 09: Policy Denial
 - Mission 10: Approval-Required Write Action
 - Mission 11: Capability Failure Handling
-- Mission 12: Resume Interrupted Task
+- Mission 12: Resume Interrupted Task (Process Restart Continuity)
 - Mission 13: End-to-End Personal-Agent Workflow
-- Mission 14: Repeated Execution / Continuity
+- Mission 14: Repeated Execution / Continuity (Process Restart Persistence)
 - Mission 15: External Capability Failure Without False Success (HTTP 401/403/404/503 -> FAILED)
 
 Evidence Classifications:
@@ -173,12 +173,16 @@ class TestPersonalAgentBeta15Missions(unittest.TestCase):
         self.assertIn("Capability execution exception", res.error)
 
     def test_mission_12_resume_interrupted_task(self):
-        """Mission 12: Resume Interrupted Task [Mode: LOCAL]."""
-        initial_res = self.agent.run("Task for resume test")
+        """Mission 12: Resume Interrupted Task Across Process Restart [Mode: LOCAL]."""
+        # Instance 1: Initial run created and saved to file storage
+        initial_res = self.agent.run("Task for process-restart resume test")
         self.assertTrue(initial_res.success)
+        run_id = initial_res.run_id
 
-        resumed_res = self.agent.resume(initial_res.run_id)
-        self.assertEqual(resumed_res.run_id, initial_res.run_id)
+        # Instance 2: New Agent instance simulating process restart
+        fresh_agent = Agent(project_id="default")
+        resumed_res = fresh_agent.resume(run_id)
+        self.assertEqual(resumed_res.run_id, run_id)
         self.assertTrue(resumed_res.success)
 
     def test_mission_13_end_to_end_personal_agent_workflow(self):
@@ -197,15 +201,24 @@ class TestPersonalAgentBeta15Missions(unittest.TestCase):
         self.assertTrue(res.experience_recorded)
 
     def test_mission_14_repeated_execution_continuity(self):
-        """Mission 14: Repeated Execution / Continuity [Mode: LOCAL]."""
-        run_ids = []
-        for i in range(3):
-            r = self.agent.run(f"Repeated execution step {i}")
-            self.assertTrue(r.success)
-            run_ids.append(r.run_id)
+        """Mission 14: Repeated Execution & Process-Restart Persistence [Mode: LOCAL]."""
+        # Instance 1: Run task and store memory
+        res1 = self.agent.run("First process run task")
+        self.assertTrue(res1.success)
+        run_id1 = res1.run_id
 
-        self.assertEqual(len(run_ids), 3)
-        self.assertEqual(len(set(run_ids)), 3)
+        # Instance 2: Fresh Agent instance simulating process restart
+        restart_agent = Agent(project_id="default")
+
+        # Verify experience persisted across process restart
+        persisted_exp = restart_agent._experience_engine.get_experience(run_id1)
+        self.assertIsNotNone(persisted_exp)
+        self.assertEqual(persisted_exp.run_id, run_id1)
+
+        # Execute subsequent task on restarted instance
+        res2 = restart_agent.run("Second process run task")
+        self.assertTrue(res2.success)
+        self.assertNotEqual(res1.run_id, res2.run_id)
 
     def test_mission_15_external_capability_failure_without_false_success(self):
         """Mission 15: External Capability Failure Without False Success [Mode: MOCK/LOCAL]."""
