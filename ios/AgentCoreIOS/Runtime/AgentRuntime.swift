@@ -68,8 +68,8 @@ public final class AgentRuntime: @unchecked Sendable {
         }
 
         let writeKeywords = ["create", "update", "delete", "post", "put", "patch", "write", "comment", "merge", "close", "remove", "forget", "drop", "clear", "modify"]
-        let lowerGoal = trimmedGoal.lowercased()
-        let isMutatingGoal = writeKeywords.contains(where: { lowerGoal.contains($0) })
+        let goalWords = trimmedGoal.lowercased().components(separatedBy: CharacterSet.alphanumerics.inverted)
+        let isMutatingGoal = writeKeywords.contains(where: { goalWords.contains($0) })
 
         if isMutatingGoal && !userApproved {
             let res = AgentRunResult(

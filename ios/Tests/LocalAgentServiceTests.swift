@@ -217,7 +217,7 @@ final class LocalAgentServiceTests: XCTestCase {
         XCTAssertTrue(report.isOffline)
 
         // Local Agent Core run continues normally
-        let runRes = await service.run(goal: "Offline operation after failed update check")
+        let runRes = await service.run(goal: "Offline operation read status", userApproved: true)
         XCTAssertEqual(runRes.status, .success)
     }
 
