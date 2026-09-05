@@ -10,9 +10,14 @@ Architectural Ownership:
 from __future__ import annotations
 
 import importlib
+import json
 import logging
+import os
 from abc import ABC, abstractmethod
+from pathlib import Path
 from typing import Any, Optional
+
+from core.config.storage import get_storage_dir
 
 logger = logging.getLogger(__name__)
 
@@ -41,15 +46,44 @@ class PersonalVaultAdapter(BaseVaultAdapter):
 
     Supports optional external vault instances or auto-discovery of
     agent_personal_vault / agent_vault modules. Falls back gracefully
-    to an in-memory/local storage buffer if no external Vault is present.
+    to an atomic file-backed local storage buffer if no external Vault is present.
     """
 
-    def __init__(self, external_vault: Optional[Any] = None):
+    def __init__(self, external_vault: Optional[Any] = None, storage_dir: Optional[str] = None):
         self._vault_client = external_vault
-        self._fallback_store: dict[str, dict[str, Any]] = {}
+        if storage_dir:
+            self._vault_dir = Path(storage_dir)
+        else:
+            self._vault_dir = get_storage_dir("vault")
+        self._vault_dir.mkdir(parents=True, exist_ok=True)
+        self._fallback_path = self._vault_dir / "fallback_vault.json"
+
+        self._fallback_store: dict[str, dict[str, Any]] = self._load_fallback_store()
 
         if self._vault_client is None:
             self._vault_client = self._auto_discover_vault()
+
+    def _load_fallback_store(self) -> dict[str, dict[str, Any]]:
+        """Load local fallback vault data from disk."""
+        if self._fallback_path.exists():
+            try:
+                with open(self._fallback_path, "r", encoding="utf-8") as f:
+                    return json.load(f)
+            except Exception as exc:
+                logger.warning(f"Failed to load fallback vault store: {exc}")
+        return {}
+
+    def _save_fallback_store(self) -> None:
+        """Atomic write fallback store to disk."""
+        tmp = self._vault_dir / "fallback_vault.json.tmp"
+        try:
+            with open(tmp, "w", encoding="utf-8") as f:
+                json.dump(self._fallback_store, f, indent=2)
+                f.flush()
+                os.fsync(f.fileno())
+            os.replace(tmp, self._fallback_path)
+        except Exception as exc:
+            logger.error(f"Failed to save fallback vault store: {exc}")
 
     def _auto_discover_vault(self) -> Optional[Any]:
         """Attempt to dynamically import external agent-personal-vault package."""
@@ -118,8 +152,9 @@ class PersonalVaultAdapter(BaseVaultAdapter):
                 logger.error(f"External Vault storage exception: {exc}")
                 success = False
 
-        # Always update local fallback store for local resilience
+        # Always update local fallback store and persist to disk for local resilience
         self._fallback_store[key] = {"data": data, "category": category}
+        self._save_fallback_store()
         return success if self._vault_client is not None else True
 
     def get_status(self) -> dict[str, Any]:

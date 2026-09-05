@@ -174,9 +174,11 @@ class PolicyEngine:
             return False, "Policy prohibits overall execution"
 
         constraints = getattr(capability_spec, "constraints", None)
-        act_str = str(action or (inputs or {}).get("action", "")).lower()
-        write_keywords = ("create", "update", "delete", "post", "put", "patch", "write", "comment")
-        is_write_action = any(kw in act_str for kw in write_keywords)
+        act_str = str(action or (inputs or {}).get("action", "")).lower().strip()
+        is_write_action = (
+            act_str.startswith(("create", "update", "delete", "post", "put", "patch", "write"))
+            or ("comment" in act_str and not act_str.startswith(("get", "list", "read", "fetch", "search")))
+        )
 
         if constraints:
             # Read-only constraint check
