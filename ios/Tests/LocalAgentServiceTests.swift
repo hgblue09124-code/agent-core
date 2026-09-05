@@ -110,37 +110,107 @@ final class LocalAgentServiceTests: XCTestCase {
         XCTAssertThrowsError(try validator.validateFileIntegrity(data: sampleData, expectedSize: sampleData.count, expectedSHA256: "invalid_hash"))
     }
 
-    func test09_atomicDataUpdateAndRollback() async {
-        let sampleData = "test config content".data(using: .utf8)!
+    func test09_atomicDeltaUpdatePreservesUnchangedFilesAndRollback() async {
         let validator = DataUpdateValidator()
-        let hash = validator.sha256Hex(data: sampleData)
 
-        let manifest = AppDataManifest(
+        // 1. Initial v1 setup: Create active dataset with unchanged.json ("old") and changed.json ("v1")
+        let unchangedData = "old".data(using: .utf8)!
+        let changedDataV1 = "v1".data(using: .utf8)!
+
+        let manifest1 = AppDataManifest(
             schemaVersion: 1,
             dataVersion: "2026.09.05.001",
             minimumClientVersion: "0.1.0",
-            files: [ManifestFileEntry(path: "agent-config/default.json", sha256: hash, size: sampleData.count)]
+            files: [
+                ManifestFileEntry(path: "unchanged.json", sha256: validator.sha256Hex(data: unchangedData), size: unchangedData.count),
+                ManifestFileEntry(path: "changed.json", sha256: validator.sha256Hex(data: changedDataV1), size: changedDataV1.count)
+            ]
         )
+        let report1 = await updateManager.performUpdate(manifest: manifest1, fileDataMap: ["unchanged.json": unchangedData, "changed.json": changedDataV1])
+        XCTAssertEqual(report1.status, .committed)
+        XCTAssertEqual(report1.installedDataVersion, "2026.09.05.001")
 
-        // Perform successful update
-        let report = await updateManager.performUpdate(manifest: manifest, fileDataMap: ["agent-config/default.json": sampleData])
-        XCTAssertEqual(report.status, .committed)
-        XCTAssertEqual(report.installedDataVersion, "2026.09.05.001")
-
-        // Attempt invalid update with hash mismatch -> Triggers rollback & returns failed status
-        let badManifest = AppDataManifest(
+        // 2. Delta update v2: Manifest contains ONLY changed.json ("v2")
+        let changedDataV2 = "v2".data(using: .utf8)!
+        let manifest2 = AppDataManifest(
             schemaVersion: 1,
             dataVersion: "2026.09.05.002",
             minimumClientVersion: "0.1.0",
-            files: [ManifestFileEntry(path: "agent-config/default.json", sha256: "bad_hash", size: sampleData.count)]
+            files: [
+                ManifestFileEntry(path: "changed.json", sha256: validator.sha256Hex(data: changedDataV2), size: changedDataV2.count)
+            ]
         )
+        let report2 = await updateManager.performUpdate(manifest: manifest2, fileDataMap: ["changed.json": changedDataV2])
+        XCTAssertEqual(report2.status, .committed)
+        XCTAssertEqual(report2.installedDataVersion, "2026.09.05.002")
 
-        let badReport = await updateManager.performUpdate(manifest: badManifest, fileDataMap: ["agent-config/default.json": sampleData])
+        // Verify active directory preserves unchanged.json ("old") and updates changed.json ("v2")
+        let activeDir = tempDir.appendingPathComponent("data/active")
+        let unchangedFile = activeDir.appendingPathComponent("unchanged.json")
+        let changedFile = activeDir.appendingPathComponent("changed.json")
+
+        XCTAssertTrue(FileManager.default.fileExists(atPath: unchangedFile.path))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: changedFile.path))
+        XCTAssertEqual(try? String(contentsOf: unchangedFile, encoding: .utf8), "old")
+        XCTAssertEqual(try? String(contentsOf: changedFile, encoding: .utf8), "v2")
+
+        // 3. Failed update with bad hash -> Rollback preserves active dataset
+        let badManifest = AppDataManifest(
+            schemaVersion: 1,
+            dataVersion: "2026.09.05.003",
+            minimumClientVersion: "0.1.0",
+            files: [
+                ManifestFileEntry(path: "changed.json", sha256: "bad_hash", size: changedDataV2.count)
+            ]
+        )
+        let badReport = await updateManager.performUpdate(manifest: badManifest, fileDataMap: ["changed.json": changedDataV2])
         XCTAssertEqual(badReport.status, .failed)
-        XCTAssertEqual(badReport.installedDataVersion, "2026.09.05.001") // Preserves last known-good version
+        XCTAssertEqual(badReport.installedDataVersion, "2026.09.05.002")
+
+        XCTAssertEqual(try? String(contentsOf: unchangedFile, encoding: .utf8), "old")
+        XCTAssertEqual(try? String(contentsOf: changedFile, encoding: .utf8), "v2")
     }
 
-    func test10_offlineUpdateCheck_preservesAgentCoreOperation() async {
+    func test10_versionDowngradeProtection() async {
+        let validator = DataUpdateValidator()
+        let sampleData = "v100_data".data(using: .utf8)!
+        let hash = validator.sha256Hex(data: sampleData)
+
+        let manifest1 = AppDataManifest(
+            schemaVersion: 1,
+            dataVersion: "2026.09.05.100",
+            minimumClientVersion: "0.1.0",
+            files: [ManifestFileEntry(path: "config.json", sha256: hash, size: sampleData.count)]
+        )
+        let report1 = await updateManager.performUpdate(manifest: manifest1, fileDataMap: ["config.json": sampleData])
+        XCTAssertEqual(report1.status, .committed)
+        XCTAssertEqual(report1.installedDataVersion, "2026.09.05.100")
+
+        // Same version -> NO-OP / UP_TO_DATE
+        let reportSame = await updateManager.performUpdate(manifest: manifest1, fileDataMap: ["config.json": sampleData])
+        XCTAssertEqual(reportSame.status, .upToDate)
+        XCTAssertEqual(reportSame.installedDataVersion, "2026.09.05.100")
+
+        // Older version -> REJECTED / FAILED
+        let olderData = "v050_data".data(using: .utf8)!
+        let olderHash = validator.sha256Hex(data: olderData)
+        let manifestOlder = AppDataManifest(
+            schemaVersion: 1,
+            dataVersion: "2026.09.05.050",
+            minimumClientVersion: "0.1.0",
+            files: [ManifestFileEntry(path: "config.json", sha256: olderHash, size: olderData.count)]
+        )
+        let reportOlder = await updateManager.performUpdate(manifest: manifestOlder, fileDataMap: ["config.json": olderData])
+        XCTAssertEqual(reportOlder.status, .failed)
+        XCTAssertTrue(reportOlder.lastError?.contains("Version Downgrade Rejected") ?? false)
+        XCTAssertEqual(reportOlder.installedDataVersion, "2026.09.05.100")
+
+        // Active dataset remains original v100 data
+        let activeFile = tempDir.appendingPathComponent("data/active/config.json")
+        XCTAssertEqual(try? String(contentsOf: activeFile, encoding: .utf8), "v100_data")
+    }
+
+    func test11_offlineUpdateCheck_preservesAgentCoreOperation() async {
         // Checking updates offline without network or mock returns offline status without breaking AgentCore
         let report = await updateManager.checkForUpdates()
         XCTAssertEqual(report.status, .offline)

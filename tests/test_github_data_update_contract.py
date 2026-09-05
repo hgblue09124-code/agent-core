@@ -2,15 +2,15 @@
 # tests/test_github_data_update_contract.py
 """Python Contract Mirror Test for GitHub Data Update v0.1 Specification.
 
-Mirrors and validates the security, integrity, versioning, atomic update,
+Mirrors and validates the security, integrity, versioning, atomic delta update,
 path safety, and rollback contracts of GitHub Data Update v0.1 on Linux CI:
 1. Valid manifest schema parsing
 2. Relative path safety validation (rejecting absolute paths and '..' traversal)
 3. Executable code boundary enforcement (rejecting Swift/native binary file downloads)
 4. SHA-256 checksum and expected file size validation
-5. Semantic version comparison
-6. Atomic update staging and commit swap
-7. Automatic rollback on validation failure (preserving last known-good version)
+5. Version rule policy: same version -> UP_TO_DATE, older version -> REJECTED/FAILED
+6. Delta update preservation: unchanged files in active/ are preserved during delta updates
+7. Automatic rollback on validation failure (preserving last known-good version and active dataset)
 8. Offline resilience (update failures never compromise Agent-Core execution)
 """
 
@@ -63,7 +63,7 @@ class DataUpdateValidatorMirror:
 
 
 class GitHubDataUpdateManagerMirror:
-    """Python mirror of GitHubDataUpdateManager atomic update and rollback logic."""
+    """Python mirror of GitHubDataUpdateManager atomic delta update, versioning, and rollback logic."""
 
     def __init__(self, storage_dir: str):
         self.storage_dir = Path(storage_dir)
@@ -77,18 +77,40 @@ class GitHubDataUpdateManagerMirror:
 
     def perform_update(self, manifest: dict, file_data_map: dict[str, bytes]) -> dict:
         validator = DataUpdateValidatorMirror()
+        remote_version = manifest.get("dataVersion", "")
+
+        # Version Policy Enforcement
+        if remote_version == self.installed_version:
+            return {"status": "UP_TO_DATE", "installedDataVersion": self.installed_version}
+
+        if validator.is_version_older(remote_version, self.installed_version):
+            return {
+                "status": "FAILED",
+                "error": f"Version Downgrade Rejected: Remote version {remote_version} is older than installed {self.installed_version}",
+                "installedDataVersion": self.installed_version,
+            }
 
         # Validate manifest files & path safety
         for entry in manifest.get("files", []):
             path = entry["path"]
             validator.validate_path_safety(path)
 
-        # Staging
+        # 1. Clean staging
         if self.staging_dir.exists():
             shutil.rmtree(self.staging_dir)
         self.staging_dir.mkdir(parents=True, exist_ok=True)
 
+        # Delta Update Preservation: Copy existing active/ dataset snapshot into staging/ before applying updates
+        if self.active_dir.exists():
+            for item in self.active_dir.iterdir():
+                dst = self.staging_dir / item.name
+                if item.is_dir():
+                    shutil.copytree(item, dst)
+                else:
+                    shutil.copy2(item, dst)
+
         try:
+            # 2. Download / write delta files
             for entry in manifest.get("files", []):
                 path = entry["path"]
                 expected_sha = entry["sha256"]
@@ -105,7 +127,7 @@ class GitHubDataUpdateManagerMirror:
                 with open(target_file, "wb") as f:
                     f.write(data)
 
-            # Atomic commit / swap
+            # 3. Atomic commit / swap
             if self.backup_dir.exists():
                 shutil.rmtree(self.backup_dir)
             if self.active_dir.exists():
@@ -116,11 +138,11 @@ class GitHubDataUpdateManagerMirror:
             if self.backup_dir.exists():
                 shutil.rmtree(self.backup_dir)
 
-            self.installed_version = manifest.get("dataVersion", self.installed_version)
+            self.installed_version = remote_version
             return {"status": "COMMITTED", "installedDataVersion": self.installed_version}
 
         except Exception as exc:
-            # Automatic Rollback
+            # Robust Rollback
             if not self.active_dir.exists() and self.backup_dir.exists():
                 self.backup_dir.rename(self.active_dir)
             return {"status": "FAILED", "error": str(exc), "installedDataVersion": self.installed_version}
@@ -170,28 +192,83 @@ class TestGitHubDataUpdateContract(unittest.TestCase):
         with self.assertRaises(ValueError):
             v.validate_file_integrity(sample_data, len(sample_data) + 5, correct_hash)
 
-    def test_04_atomic_update_and_commit_swap(self):
-        content = b"agent_config_data_v2"
-        correct_hash = hashlib.sha256(content).hexdigest()
+    def test_04_atomic_delta_update_preserves_unchanged_files(self):
+        # 1. Initial v1 setup: active dataset with unchanged.json ("old") and changed.json ("v1")
+        unchanged_content = b"old"
+        changed_v1 = b"v1"
+        hash_unchanged = hashlib.sha256(unchanged_content).hexdigest()
+        hash_changed_v1 = hashlib.sha256(changed_v1).hexdigest()
 
-        manifest = {
+        manifest1 = {
             "schemaVersion": 1,
             "dataVersion": "2026.09.05.001",
-            "minimumClientVersion": "0.1.0",
-            "files": [{"path": "agent-config/default.json", "sha256": correct_hash, "size": len(content)}],
+            "files": [
+                {"path": "unchanged.json", "sha256": hash_unchanged, "size": len(unchanged_content)},
+                {"path": "changed.json", "sha256": hash_changed_v1, "size": len(changed_v1)},
+            ],
         }
 
-        res = self.manager.perform_update(manifest, {"agent-config/default.json": content})
-        self.assertEqual(res["status"], "COMMITTED")
-        self.assertEqual(res["installedDataVersion"], "2026.09.05.001")
+        res1 = self.manager.perform_update(manifest1, {"unchanged.json": unchanged_content, "changed.json": changed_v1})
+        self.assertEqual(res1["status"], "COMMITTED")
+        self.assertEqual(self.manager.installed_version, "2026.09.05.001")
 
-        # Verify active directory file exists
-        active_file = self.manager.active_dir / "agent-config" / "default.json"
-        self.assertTrue(active_file.exists())
-        self.assertEqual(active_file.read_bytes(), content)
+        # 2. Delta update v2: Manifest contains ONLY changed.json ("v2")
+        changed_v2 = b"v2"
+        hash_changed_v2 = hashlib.sha256(changed_v2).hexdigest()
+        manifest2 = {
+            "schemaVersion": 1,
+            "dataVersion": "2026.09.05.002",
+            "files": [{"path": "changed.json", "sha256": hash_changed_v2, "size": len(changed_v2)}],
+        }
 
-    def test_05_automatic_rollback_on_validation_failure(self):
-        # Initial successful update
+        res2 = self.manager.perform_update(manifest2, {"changed.json": changed_v2})
+        self.assertEqual(res2["status"], "COMMITTED")
+        self.assertEqual(self.manager.installed_version, "2026.09.05.002")
+
+        # Verify active directory preserves unchanged.json ("old") and updates changed.json ("v2")
+        unchanged_file = self.manager.active_dir / "unchanged.json"
+        changed_file = self.manager.active_dir / "changed.json"
+
+        self.assertTrue(unchanged_file.exists())
+        self.assertTrue(changed_file.exists())
+        self.assertEqual(unchanged_file.read_bytes(), b"old")
+        self.assertEqual(changed_file.read_bytes(), b"v2")
+
+    def test_05_version_downgrade_protection(self):
+        sample_data = b"v100_data"
+        correct_hash = hashlib.sha256(sample_data).hexdigest()
+
+        manifest1 = {
+            "schemaVersion": 1,
+            "dataVersion": "2026.09.05.100",
+            "files": [{"path": "config.json", "sha256": correct_hash, "size": len(sample_data)}],
+        }
+        res1 = self.manager.perform_update(manifest1, {"config.json": sample_data})
+        self.assertEqual(res1["status"], "COMMITTED")
+        self.assertEqual(self.manager.installed_version, "2026.09.05.100")
+
+        # Same version -> UP_TO_DATE (no-op)
+        res_same = self.manager.perform_update(manifest1, {"config.json": sample_data})
+        self.assertEqual(res_same["status"], "UP_TO_DATE")
+
+        # Older version -> FAILED / REJECTED
+        older_data = b"v050_data"
+        older_hash = hashlib.sha256(older_data).hexdigest()
+        manifest_older = {
+            "schemaVersion": 1,
+            "dataVersion": "2026.09.05.050",
+            "files": [{"path": "config.json", "sha256": older_hash, "size": len(older_data)}],
+        }
+        res_older = self.manager.perform_update(manifest_older, {"config.json": older_data})
+        self.assertEqual(res_older["status"], "FAILED")
+        self.assertIn("Version Downgrade Rejected", res_older["error"])
+        self.assertEqual(self.manager.installed_version, "2026.09.05.100")
+
+        # Active file content remains original v100 data
+        active_file = self.manager.active_dir / "config.json"
+        self.assertEqual(active_file.read_bytes(), b"v100_data")
+
+    def test_06_automatic_rollback_on_validation_failure(self):
         content1 = b"config_version_1"
         hash1 = hashlib.sha256(content1).hexdigest()
         manifest1 = {
@@ -217,7 +294,7 @@ class TestGitHubDataUpdateContract(unittest.TestCase):
         active_file = self.manager.active_dir / "config.json"
         self.assertEqual(active_file.read_bytes(), content1)
 
-    def test_06_offline_resilience_does_not_break_agent_core(self):
+    def test_07_offline_resilience_does_not_break_agent_core(self):
         os.environ["AGENTCORE_PLANNER_PROVIDER"] = "mock"
         agent = Agent(project_id="default")
 
