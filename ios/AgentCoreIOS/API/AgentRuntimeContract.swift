@@ -20,6 +20,9 @@ public protocol LocalAgentServiceProtocol: Sendable {
     /// Update an existing memory item, enforcing policy write approval checks.
     func updateMemory(key: String, value: String, userApproved: Bool) async -> MemoryResult
 
+    /// Forget (remove) a stored personal memory item by key.
+    func forget(key: String) async -> MemoryResult
+
     /// List all registered local capabilities and specifications.
     func listCapabilities() async -> [Capability]
 

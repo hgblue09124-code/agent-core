@@ -95,6 +95,19 @@ class LocalAgentServiceMirror:
         self.agent._vault.store_context(key, {"value": value}, category="user_preference")
         return {"status": "SUCCESS", "item": {"key": key, "value": value}}
 
+    def forget(self, key: str) -> dict:
+        items = self.agent._memory.store.list_all()
+        found = False
+        for item in items:
+            if item.content.startswith(f"{key}:") or item.content == key:
+                self.agent._memory.store.delete(item.memory_id)
+                found = True
+        vault_removed = self.agent._vault.delete_context(key)
+        if found or vault_removed:
+            return {"status": "SUCCESS"}
+        else:
+            return {"status": "FAILED", "errorMessage": f"Memory key '{key}' not found."}
+
     def list_capabilities(self) -> list[dict]:
         specs = self.agent._capabilities.list_specs()
         return [
@@ -235,6 +248,20 @@ class TestIOSNativeAPIContractMirror(unittest.TestCase):
 
         run_res = self.service.run("Fully offline local run")
         self.assertEqual(run_res["status"], "SUCCESS")
+
+    def test_16_forget_memory(self):
+        unique_key = "forget_unique_key_123"
+        save_res = self.service.remember(unique_key, "forget_val_123")
+        self.assertEqual(save_res["status"], "SUCCESS")
+
+        items = self.service.retrieve(unique_key)
+        self.assertEqual(len(items), 1)
+
+        forget_res = self.service.forget(unique_key)
+        self.assertEqual(forget_res["status"], "SUCCESS")
+
+        after = self.service.retrieve(unique_key)
+        self.assertEqual(len(after), 0)
 
 
 if __name__ == "__main__":

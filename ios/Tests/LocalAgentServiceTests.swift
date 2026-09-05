@@ -220,4 +220,36 @@ final class LocalAgentServiceTests: XCTestCase {
         let runRes = await service.run(goal: "Offline operation after failed update check")
         XCTAssertEqual(runRes.status, .success)
     }
+
+    func test12_forgetMemory_removesKeyFromStore() async {
+        let saveRes = await service.remember(key: "test_key", value: "test_val")
+        XCTAssertEqual(saveRes.status, .success)
+
+        let retrieved = await service.retrieve(query: "test_key")
+        XCTAssertEqual(retrieved.count, 1)
+
+        let forgetRes = await service.forget(key: "test_key")
+        XCTAssertEqual(forgetRes.status, .success)
+
+        let afterForget = await service.retrieve(query: "test_key")
+        XCTAssertEqual(afterForget.count, 0)
+
+        let nonExistentRes = await service.forget(key: "non_existent_key")
+        XCTAssertEqual(nonExistentRes.status, .failed)
+    }
+
+    @MainActor
+    func test13_agentAppViewModel_interactiveReviewChecksPass() async {
+        let viewModel = AgentAppViewModel(service: service, updateManager: updateManager)
+        await viewModel.runAllReviewChecks()
+
+        XCTAssertEqual(viewModel.passCount, 10)
+        XCTAssertEqual(viewModel.failCount, 0)
+        XCTAssertEqual(viewModel.blockerDetails.count, 0)
+        XCTAssertEqual(viewModel.agentCoreStatus, .pass)
+        XCTAssertEqual(viewModel.agentRuntimeStatus, .pass)
+        XCTAssertEqual(viewModel.localStorageStatus, .pass)
+        XCTAssertEqual(viewModel.memoryVaultStatus, .pass)
+        XCTAssertEqual(viewModel.connectionStatus, .pass)
+    }
 }
