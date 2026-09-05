@@ -252,4 +252,38 @@ final class LocalAgentServiceTests: XCTestCase {
         XCTAssertEqual(viewModel.memoryVaultStatus, ReviewCheckStatus.pass)
         XCTAssertEqual(viewModel.connectionStatus, ReviewCheckStatus.pass)
     }
+
+    func test14_runPolicyEnforcement_unapprovedMutatingGoalDenied() async {
+        let res = await service.run(goal: "Delete all context data", userApproved: false)
+        XCTAssertEqual(res.status, .denied)
+        XCTAssertEqual(res.errorCode, "POLICY_DENIAL")
+        XCTAssertFalse(res.authorized)
+        XCTAssertEqual(res.verificationVerdict, "DENIED")
+    }
+
+    func test15_runPolicyEnforcement_approvedMutatingGoalAllowed() async {
+        let res = await service.run(goal: "Delete all context data", userApproved: true)
+        XCTAssertEqual(res.status, .success)
+        XCTAssertTrue(res.authorized)
+        XCTAssertEqual(res.verificationVerdict, "PASS")
+    }
+
+    func test16_runValidation_emptyGoalFailed() async {
+        let res = await service.run(goal: "", userApproved: false)
+        XCTAssertEqual(res.status, .failed)
+        XCTAssertEqual(res.errorCode, "INVALID_INPUT")
+        XCTAssertEqual(res.verificationVerdict, "FAIL")
+    }
+
+    func test17_cancelRun_persistsCancelledCheckpointAndOutcome() async {
+        let runRes = await service.run(goal: "Goal to cancel", userApproved: true)
+        let cancelRes = await service.cancelRun(runId: runRes.runId)
+
+        XCTAssertEqual(cancelRes.runId, runRes.runId)
+        XCTAssertEqual(cancelRes.errorCode, "CANCELLED")
+        XCTAssertEqual(cancelRes.verificationVerdict, "CANCELLED")
+
+        let storedRun = await service.getRun(runId: runRes.runId)
+        XCTAssertEqual(storedRun?.errorCode, "CANCELLED")
+    }
 }

@@ -66,6 +66,20 @@ class LocalAgentServiceMirror:
             "output": f"Resumed run '{run_id}'",
         }
 
+    def cancel_run(self, run_id: str) -> dict:
+        info = self.agent.inspect_run(run_id)
+        goal = info.get("goal") if info else "Task Execution"
+        return {
+            "runId": run_id,
+            "status": "FAILED",
+            "goal": goal,
+            "output": "Task execution cancelled by user request.",
+            "errorCode": "CANCELLED",
+            "errorMessage": "Task execution was cancelled by user.",
+            "authorized": True,
+            "verificationVerdict": "CANCELLED"
+        }
+
     def remember(self, key: str, value: str) -> dict:
         mem = self.agent._memory.remember(content=f"{key}:{value}", memory_type=MemoryType.USER_CONTEXT.value)
         self.agent._vault.store_context(key, {"value": value}, category="user_preference")
@@ -262,6 +276,13 @@ class TestIOSNativeAPIContractMirror(unittest.TestCase):
 
         after = self.service.retrieve(unique_key)
         self.assertEqual(len(after), 0)
+
+    def test_17_cancel_run(self):
+        run_res = self.service.run("Goal for cancel run check")
+        cancelled = self.service.cancel_run(run_res["runId"])
+        self.assertEqual(cancelled["runId"], run_res["runId"])
+        self.assertEqual(cancelled["errorCode"], "CANCELLED")
+        self.assertEqual(cancelled["verificationVerdict"], "CANCELLED")
 
 
 if __name__ == "__main__":

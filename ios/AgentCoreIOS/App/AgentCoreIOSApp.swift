@@ -194,6 +194,7 @@ public final class AgentAppViewModel: ObservableObject {
     private let service: LocalAgentServiceProtocol
     private let updateManager: GitHubDataUpdateManager
     private var pendingPermissionContinuation: ((Bool) -> Void)?
+    private var activeRunTask: Task<Void, Never>?
 
     public init(service: LocalAgentServiceProtocol? = nil, updateManager: GitHubDataUpdateManager? = nil) {
         let s = service ?? LocalAgentService()
@@ -215,48 +216,57 @@ public final class AgentAppViewModel: ObservableObject {
     // MARK: - Interactive Agent Execution Flow
 
     public func runTask(requestPermissionPrompt: Bool = false) async {
-        executionState = .preparing
-        lastErrorPayload = nil
-        let startTime = Date()
+        activeRunTask = Task {
+            executionState = .preparing
+            lastErrorPayload = nil
+            let startTime = Date()
 
-        if requestPermissionPrompt {
-            executionState = .waitingForPermission
-            permissionActionTitle = "Allow Agent to execute task: '\(currentGoal)'?"
-            showingPermissionAlert = true
+            var approved = false
 
-            let approved = await withCheckedContinuation { (continuation: CheckedContinuation<Bool, Never>) in
-                self.pendingPermissionContinuation = { result in
-                    continuation.resume(returning: result)
+            if requestPermissionPrompt {
+                executionState = .waitingForPermission
+                permissionActionTitle = "Allow Agent to execute task: '\(currentGoal)'?"
+                showingPermissionAlert = true
+
+                approved = await withCheckedContinuation { (continuation: CheckedContinuation<Bool, Never>) in
+                    self.pendingPermissionContinuation = { result in
+                        continuation.resume(returning: result)
+                    }
+                }
+
+                if !approved {
+                    executionState = .failed
+                    currentExecutionStatus = .fail
+                    lastErrorPayload = "Policy Denial: Execution cancelled by user during permission check."
+                    recordActivity(task: currentGoal, state: "DENIED", duration: formatDuration(startTime), resultOrError: "User denied execution permission.")
+                    return
                 }
             }
 
-            if !approved {
+            executionState = .running
+
+            let result = await service.run(goal: currentGoal, userApproved: approved)
+            lastRunResult = result
+
+            if result.status == .success {
+                executionState = .completed
+                currentExecutionStatus = .pass
+                recordActivity(task: result.goal, state: "COMPLETED", duration: formatDuration(startTime), resultOrError: result.output ?? "Success")
+            } else if result.status == .denied {
                 executionState = .failed
                 currentExecutionStatus = .fail
-                lastErrorPayload = "Policy Denial: Execution cancelled by user during permission check."
-                recordActivity(task: currentGoal, state: "DENIED", duration: formatDuration(startTime), resultOrError: "User denied execution permission.")
-                return
+                lastErrorPayload = result.errorMessage ?? "Policy Denial"
+                recordActivity(task: result.goal, state: "DENIED", duration: formatDuration(startTime), resultOrError: result.errorMessage ?? "Policy Denial")
+            } else {
+                executionState = .failed
+                currentExecutionStatus = .fail
+                lastErrorPayload = result.errorMessage ?? "Execution failed"
+                recordActivity(task: result.goal, state: "FAILED", duration: formatDuration(startTime), resultOrError: result.errorMessage ?? "Failed")
             }
+
+            await refreshState()
         }
-
-        executionState = .running
-        currentExecutionStatus = .pass
-
-        let result = await service.run(goal: currentGoal, userApproved: true)
-        lastRunResult = result
-
-        if result.status == .success {
-            executionState = .completed
-            currentExecutionStatus = .pass
-            recordActivity(task: result.goal, state: "COMPLETED", duration: formatDuration(startTime), resultOrError: result.output ?? "Success")
-        } else {
-            executionState = .failed
-            currentExecutionStatus = .fail
-            lastErrorPayload = result.errorMessage ?? "Execution failed"
-            recordActivity(task: result.goal, state: "FAILED", duration: formatDuration(startTime), resultOrError: result.errorMessage ?? "Failed")
-        }
-
-        await refreshState()
+        await activeRunTask?.value
     }
 
     public func handlePermissionResponse(allowed: Bool) {
@@ -266,10 +276,19 @@ public final class AgentAppViewModel: ObservableObject {
     }
 
     public func cancelTask() {
+        activeRunTask?.cancel()
         executionState = .cancelled
         currentExecutionStatus = .warning
         lastErrorPayload = "Task execution was cancelled by user."
-        recordActivity(task: currentGoal, state: "CANCELLED", duration: "0.01s", resultOrError: "User initiated cancellation.")
+
+        let runIdToCancel = lastRunResult?.runId ?? "RUN-ACTIVE"
+        Task {
+            let res = await service.cancelRun(runId: runIdToCancel)
+            self.lastRunResult = res
+            await refreshState()
+        }
+
+        recordActivity(task: currentGoal, state: "CANCELLED", duration: "0.01s", resultOrError: "User initiated cancellation via runtime.")
     }
 
     public func clearTask() {

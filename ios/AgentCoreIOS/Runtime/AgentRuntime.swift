@@ -48,28 +48,80 @@ public final class AgentRuntime: @unchecked Sendable {
     }
 
     public func run(goal: String, userApproved: Bool = false) async -> AgentRunResult {
+        let trimmedGoal = goal.trimmingCharacters(in: .whitespacesAndNewlines)
         let seq = Int(Date().timeIntervalSince1970 * 1000) % 100000
         let runId = String(format: "RUN-%05d", seq)
 
-        let planSteps = await planner.generatePlan(goal: goal)
+        if trimmedGoal.isEmpty {
+            let res = AgentRunResult(
+                runId: runId,
+                status: .failed,
+                goal: goal,
+                errorCode: "INVALID_INPUT",
+                errorMessage: "Task goal cannot be empty.",
+                authorized: true,
+                verificationVerdict: "FAIL"
+            )
+            checkpointStore.save(result: res)
+            _ = experienceStore.record(runId: runId, goal: goal, outcome: "failed")
+            return res
+        }
+
+        let writeKeywords = ["create", "update", "delete", "post", "put", "patch", "write", "comment", "merge", "close", "remove", "forget", "drop", "clear", "modify"]
+        let lowerGoal = trimmedGoal.lowercased()
+        let isMutatingGoal = writeKeywords.contains(where: { lowerGoal.contains($0) })
+
+        if isMutatingGoal && !userApproved {
+            let res = AgentRunResult(
+                runId: runId,
+                status: .denied,
+                goal: trimmedGoal,
+                errorCode: "POLICY_DENIAL",
+                errorMessage: "Policy Denial: Execution of mutating goal '\(trimmedGoal)' requires explicit user approval (userApproved = true).",
+                authorized: false,
+                verificationVerdict: "DENIED"
+            )
+            checkpointStore.save(result: res)
+            _ = experienceStore.record(runId: runId, goal: trimmedGoal, outcome: "denied")
+            return res
+        }
+
+        let planSteps = await planner.generatePlan(goal: trimmedGoal)
 
         // Store run summary in vault
-        _ = vaultStore.storeContext(key: "run_summary_\(runId)", value: goal, category: "run_history")
+        _ = vaultStore.storeContext(key: "run_summary_\(runId)", value: trimmedGoal, category: "run_history")
 
         let result = AgentRunResult(
             runId: runId,
             status: .success,
-            goal: goal,
-            output: "Successfully executed goal '\(goal)' through local agent runtime pipeline.",
+            goal: trimmedGoal,
+            output: "Successfully executed goal '\(trimmedGoal)' through local agent runtime pipeline.",
             planSteps: planSteps,
             authorized: true,
             verificationVerdict: "PASS"
         )
 
         checkpointStore.save(result: result)
-        _ = experienceStore.record(runId: runId, goal: goal, outcome: "success")
+        _ = experienceStore.record(runId: runId, goal: trimmedGoal, outcome: "success")
 
         return result
+    }
+
+    public func cancelRun(runId: String) async -> AgentRunResult {
+        let existingGoal = checkpointStore.get(runId: runId)?.goal ?? "Task Execution"
+        let cancelled = AgentRunResult(
+            runId: runId,
+            status: .failed,
+            goal: existingGoal,
+            output: "Task execution cancelled by user request.",
+            errorCode: "CANCELLED",
+            errorMessage: "Task execution was cancelled by user.",
+            authorized: true,
+            verificationVerdict: "CANCELLED"
+        )
+        checkpointStore.save(result: cancelled)
+        _ = experienceStore.record(runId: runId, goal: existingGoal, outcome: "cancelled")
+        return cancelled
     }
 
     public func resume(runId: String) async -> AgentRunResult {

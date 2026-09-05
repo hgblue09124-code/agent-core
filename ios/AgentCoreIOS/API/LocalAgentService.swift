@@ -16,6 +16,10 @@ public final class LocalAgentService: LocalAgentServiceProtocol, @unchecked Send
         return await runtime.run(goal: goal, userApproved: userApproved)
     }
 
+    public func cancelRun(runId: String) async -> AgentRunResult {
+        return await runtime.cancelRun(runId: runId)
+    }
+
     public func resume(runId: String) async -> AgentRunResult {
         return await runtime.resume(runId: runId)
     }
