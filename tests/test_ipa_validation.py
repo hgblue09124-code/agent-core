@@ -1,5 +1,5 @@
 """
-Unit tests for IPA Release Asset Validator.
+Unit tests for Unsigned IPA Release Asset Validator.
 """
 
 import sys
@@ -12,7 +12,13 @@ from pathlib import Path
 # Ensure repo root is on sys.path for scripts import
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from scripts.validate_ipa import validate_ipa, REQUIRED_BUNDLE_ID
+from scripts.validate_ipa import (
+    validate_ipa,
+    REQUIRED_BUNDLE_ID,
+    EXPECTED_APP_BUNDLE_NAME,
+    EXPECTED_VERSION,
+    EXPECTED_BUILD,
+)
 
 
 class TestIPAValidation(unittest.TestCase):
@@ -26,15 +32,17 @@ class TestIPAValidation(unittest.TestCase):
 
     def _create_mock_ipa(
         self,
-        filename: str = "AgentCore-iOS-v0.1.0.ipa",
+        filename: str = "AgentCore-iOS-v0.1.0-unsigned.ipa",
         include_payload: bool = True,
         include_app: bool = True,
+        app_name: str = EXPECTED_APP_BUNDLE_NAME,
         bundle_id: str = REQUIRED_BUNDLE_ID,
-        version: str = "0.1.0",
-        build: str = "1",
+        version: str = EXPECTED_VERSION,
+        build: str = EXPECTED_BUILD,
         include_plist: bool = True,
         include_binary: bool = True,
         binary_size: int = 1024,
+        extra_app: bool = False,
         corrupt_zip: bool = False,
     ) -> Path:
         ipa_path = self.dir_path / filename
@@ -52,18 +60,20 @@ class TestIPAValidation(unittest.TestCase):
 
         with zipfile.ZipFile(ipa_path, "w") as zf:
             if include_payload and include_app:
-                prefix = "Payload/AgentCoreIOS.app/"
+                prefix = f"Payload/{app_name}/"
                 if include_plist:
                     zf.writestr(prefix + "Info.plist", plistlib.dumps(plist_data))
                 if include_binary:
                     zf.writestr(prefix + "AgentCoreIOS", b"A" * binary_size)
+                if extra_app:
+                    zf.writestr("Payload/Extra.app/Info.plist", plistlib.dumps(plist_data))
             elif include_payload:
                 zf.writestr("Payload/some_file.txt", "data")
 
         return ipa_path
 
-    def test_valid_ipa(self):
-        ipa_path = self._create_mock_ipa()
+    def test_valid_unsigned_ipa(self):
+        ipa_path = self._create_mock_ipa("AgentCore-iOS-v0.1.0-unsigned.ipa")
         # Should not raise
         validate_ipa(str(ipa_path))
 
@@ -96,6 +106,18 @@ class TestIPAValidation(unittest.TestCase):
             validate_ipa(str(ipa_path))
         self.assertIn("No .app bundle found inside Payload/", str(ctx.exception))
 
+    def test_multiple_app_bundles(self):
+        ipa_path = self._create_mock_ipa(extra_app=True)
+        with self.assertRaises(ValueError) as ctx:
+            validate_ipa(str(ipa_path))
+        self.assertIn("Expected exactly 1 .app bundle inside Payload/", str(ctx.exception))
+
+    def test_wrong_app_bundle_name(self):
+        ipa_path = self._create_mock_ipa(app_name="WrongName.app")
+        with self.assertRaises(ValueError) as ctx:
+            validate_ipa(str(ipa_path))
+        self.assertIn("Expected app bundle name 'AgentCoreIOS.app'", str(ctx.exception))
+
     def test_missing_info_plist(self):
         ipa_path = self._create_mock_ipa(include_plist=False)
         with self.assertRaises(ValueError) as ctx:
@@ -107,6 +129,18 @@ class TestIPAValidation(unittest.TestCase):
         with self.assertRaises(ValueError) as ctx:
             validate_ipa(str(ipa_path))
         self.assertIn("Bundle ID mismatch", str(ctx.exception))
+
+    def test_version_mismatch(self):
+        ipa_path = self._create_mock_ipa(version="9.9.9")
+        with self.assertRaises(ValueError) as ctx:
+            validate_ipa(str(ipa_path))
+        self.assertIn("Version mismatch", str(ctx.exception))
+
+    def test_build_mismatch(self):
+        ipa_path = self._create_mock_ipa(build="99")
+        with self.assertRaises(ValueError) as ctx:
+            validate_ipa(str(ipa_path))
+        self.assertIn("Build number mismatch", str(ctx.exception))
 
     def test_missing_executable_binary(self):
         ipa_path = self._create_mock_ipa(include_binary=False)

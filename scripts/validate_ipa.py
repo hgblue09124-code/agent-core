@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """
-IPA Release Asset Validator for Agent-Core iOS.
+Unsigned IPA Release Asset Validator for Agent-Core iOS.
 
-Validates the structure, metadata, and binary integrity of an iOS .ipa archive.
+Validates the structure, metadata, and binary integrity of an unsigned iOS .ipa archive.
+Does NOT require _CodeSignature, provisioning profiles, or Apple developer signatures.
 """
 
 import sys
@@ -11,6 +12,9 @@ import plistlib
 from pathlib import Path
 
 REQUIRED_BUNDLE_ID = "com.agentcore.AgentCoreIOS"
+EXPECTED_APP_BUNDLE_NAME = "AgentCoreIOS.app"
+EXPECTED_VERSION = "0.1.0"
+EXPECTED_BUILD = "1"
 
 def validate_ipa(ipa_path: str) -> None:
     path = Path(ipa_path)
@@ -18,7 +22,7 @@ def validate_ipa(ipa_path: str) -> None:
         raise FileNotFoundError(f"IPA file not found: {ipa_path}")
 
     if path.suffix.lower() != ".ipa":
-        raise ValueError(f"File extension must be .ipa, got {path.suffix}")
+        raise ValueError(f"File extension must be .ipa, got '{path.suffix}'")
 
     try:
         with zipfile.ZipFile(path, "r") as zf:
@@ -29,7 +33,7 @@ def validate_ipa(ipa_path: str) -> None:
             if not payload_entries:
                 raise ValueError("IPA does not contain a 'Payload/' directory.")
 
-            # 2. Locate .app bundle inside Payload/
+            # 2. Locate .app bundles inside Payload/
             app_bundles = set()
             for name in namelist:
                 parts = Path(name).parts
@@ -39,7 +43,13 @@ def validate_ipa(ipa_path: str) -> None:
             if not app_bundles:
                 raise ValueError("No .app bundle found inside Payload/.")
 
-            app_bundle_name = sorted(list(app_bundles))[0]
+            if len(app_bundles) != 1:
+                raise ValueError(f"Expected exactly 1 .app bundle inside Payload/, found {len(app_bundles)}: {app_bundles}")
+
+            app_bundle_name = list(app_bundles)[0]
+            if app_bundle_name != EXPECTED_APP_BUNDLE_NAME:
+                raise ValueError(f"Expected app bundle name '{EXPECTED_APP_BUNDLE_NAME}', got '{app_bundle_name}'")
+
             app_name = Path(app_bundle_name).stem
             app_prefix = f"Payload/{app_bundle_name}/"
 
@@ -64,10 +74,14 @@ def validate_ipa(ipa_path: str) -> None:
             version = plist.get("CFBundleShortVersionString")
             if not version:
                 raise ValueError("Info.plist missing CFBundleShortVersionString")
+            if version != EXPECTED_VERSION:
+                raise ValueError(f"Version mismatch: expected '{EXPECTED_VERSION}', got '{version}'")
 
-            build_num = plist.get("CFBundleVersion")
+            build_num = str(plist.get("CFBundleVersion", ""))
             if not build_num:
                 raise ValueError("Info.plist missing CFBundleVersion")
+            if build_num != EXPECTED_BUILD:
+                raise ValueError(f"Build number mismatch: expected '{EXPECTED_BUILD}', got '{build_num}'")
 
             # 4. Check executable binary exists and is non-empty
             exec_name = plist.get("CFBundleExecutable", app_name)
@@ -80,11 +94,12 @@ def validate_ipa(ipa_path: str) -> None:
             if exec_info.file_size == 0:
                 raise ValueError(f"Executable binary at {exec_path} is empty (0 bytes)")
 
-            print(f"✅ IPA validation successful: {path.name}")
+            print(f"✅ Unsigned IPA validation successful: {path.name}")
             print(f"   - App Bundle: {app_bundle_name}")
             print(f"   - Bundle ID: {bundle_id}")
             print(f"   - Version: {version} (Build {build_num})")
             print(f"   - Executable Size: {exec_info.file_size} bytes")
+            print("   - Code Signature: Unsigned (Ready for downstream local re-signing)")
 
     except zipfile.BadZipFile:
         raise ValueError(f"Corrupt or invalid ZIP format in IPA file: {ipa_path}")

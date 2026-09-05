@@ -1,6 +1,6 @@
 # Native iOS Local Agent API v0.1.0 & GitHub Data Update v0.1
 
-Native Swift local agent service, runtime API, offline-first GitHub Data Update manager, and iOS IPA Release Asset build workflow for embedding Personal Agent locally on iOS / iPhone.
+Native Swift local agent service, runtime API, offline-first GitHub Data Update manager, and Unsigned iOS IPA Release Asset build workflow for embedding Personal Agent locally on iOS / iPhone.
 
 ## Architecture Overview
 
@@ -123,42 +123,44 @@ ios/
 
 ---
 
-## 5. iOS IPA Build, Signing, and Artifact Upload
+## 5. Unsigned iOS IPA Build & Release Workflow
 
 ### Release Asset Specification
-The native iOS app is built and packaged into an installable `.ipa` archive:
-- **Filename**: `AgentCore-iOS-v0.1.0.ipa`
+The native iOS application is compiled in GitHub Actions CI using Xcode without requiring Apple signing certificates or secrets, producing a real compiled binary:
+- **Filename**: `AgentCore-iOS-v0.1.0-unsigned.ipa`
 - **Bundle ID**: `com.agentcore.AgentCoreIOS`
 - **Version**: `0.1.0` (Build `1`)
-- **Structure**: `Payload/AgentCoreIOS.app/` containing `Info.plist` and executable binary.
+- **Structure**: `Payload/AgentCoreIOS.app/` containing `Info.plist` and compiled executable binary.
+- **Signing Status**: **INTENTIONALLY UNSIGNED** (Requires local re-signing before installation).
 
 ### GitHub Actions CI Workflow
-The CI pipeline (`.github/workflows/ci.yml`) automatically builds, validates, and uploads `AgentCore-iOS-v0.1.0.ipa`:
-1. **Signing Check**: Verifies if required Apple Signing Secrets are set in GitHub. Fails job with status code 1 if missing.
-2. **Keychain & Provisioning Setup**: Imports `.p12` certificate and `.mobileprovision` profile.
-3. **Archive & Export**: Runs `xcodebuild archive` and `xcodebuild -exportArchive -exportOptionsPlist ios/ExportOptions.plist`.
-4. **Automated IPA Validation**: Runs `python scripts/validate_ipa.py AgentCore-iOS-v0.1.0.ipa`.
-5. **Artifact Upload**: Uploads `AgentCore-iOS-v0.1.0.ipa` as a GitHub Actions artifact (`AgentCore-iOS-v0.1.0.ipa`).
-
-### Required GitHub Secrets for Code Signing
-To enable direct IPA creation and signing in GitHub Actions, add the following secrets in **Settings > Secrets and variables > Actions**:
-- `APPLE_CERTIFICATE_P12_BASE64`: Base64-encoded Apple Development or Distribution `.p12` certificate.
-- `P12_PASSWORD`: Password for the `.p12` certificate file.
-- `PROVISIONING_PROFILE_BASE64`: Base64-encoded `.mobileprovision` file matching `com.agentcore.AgentCoreIOS`.
+The CI pipeline (`.github/workflows/ci.yml`) automatically builds, packages, validates, uploads, and releases `AgentCore-iOS-v0.1.0-unsigned.ipa`:
+1. **Unsigned Xcode Build**: Builds real `AgentCoreIOS.app` executable targeting `iphoneos` SDK with `CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO CODE_SIGN_IDENTITY=""`.
+2. **IPA Packaging**: Archives `Payload/AgentCoreIOS.app` into `AgentCore-iOS-v0.1.0-unsigned.ipa`.
+3. **Automated Validation**: Runs `python scripts/validate_ipa.py AgentCore-iOS-v0.1.0-unsigned.ipa`.
+4. **Artifact Upload**: Uploads `AgentCore-iOS-v0.1.0-unsigned.ipa` as a GitHub Actions workflow artifact.
+5. **GitHub Release Attachment**: Automatically attaches `AgentCore-iOS-v0.1.0-unsigned.ipa` to GitHub Release / tag `v0.1.0`.
 
 ---
 
-## 6. How to Download & Install `AgentCore-iOS-v0.1.0.ipa` on iPhone
+## 6. How to Re-Sign & Install `AgentCore-iOS-v0.1.0-unsigned.ipa` on iPhone
 
-### Option A: Sideloading via AltStore / SideStore / TrollStore (Developer / Ad-Hoc)
-1. Download `AgentCore-iOS-v0.1.0.ipa` from GitHub Actions Artifacts.
-2. Open AltStore / SideStore on your iPhone.
-3. Tap `+` and select `AgentCore-iOS-v0.1.0.ipa`.
-4. Enable **Developer Mode** on iOS (`Settings > Privacy & Security > Developer Mode`).
+> ⚠️ **IMPORTANT**: Because `AgentCore-iOS-v0.1.0-unsigned.ipa` is intentionally unsigned, it **CANNOT** be installed directly on an iPhone without local re-signing with your personal or developer Apple ID.
 
-### Option B: Apple TestFlight / Enterprise / Ad-Hoc Deployment
-1. Download `AgentCore-iOS-v0.1.0.ipa` signed with your team's Ad-Hoc / Enterprise provisioning profile.
-2. Install via Apple Configurator 2, Xcode (`Window > Devices and Simulators`), or MDM provider.
+### Step-by-Step Local Re-Signing & Installation Options
+
+#### Option A: AltStore / SideStore / TrollStore (Recommended)
+1. Download `AgentCore-iOS-v0.1.0-unsigned.ipa` from [GitHub Releases v0.1.0](https://github.com/hgblue09124-code/agent-core/releases/tag/v0.1.0) or GitHub Actions Artifacts.
+2. Open **AltStore** or **SideStore** on your iPhone.
+3. Tap `+` (My Apps) and select `AgentCore-iOS-v0.1.0-unsigned.ipa`.
+4. AltStore/SideStore will automatically re-sign the app using your free or paid Apple ID and install it on your iPhone.
+5. On your iPhone, go to **Settings > General > VPN & Device Management**, trust your Apple ID certificate, and enable **Developer Mode** (`Settings > Privacy & Security > Developer Mode`).
+
+#### Option B: iOS App Signer / Sideloadly / Xcode Custom Re-Sign
+1. Download `AgentCore-iOS-v0.1.0-unsigned.ipa`.
+2. Open **iOS App Signer** or **Sideloadly** on your Mac.
+3. Select `AgentCore-iOS-v0.1.0-unsigned.ipa`, pick your personal Apple Signing Certificate and Provisioning Profile, and click **Start** to produce a signed `.ipa`.
+4. Install the signed `.ipa` via Xcode (`Window > Devices and Simulators`), Apple Configurator, or Sideloadly.
 
 ---
 
@@ -167,7 +169,8 @@ To enable direct IPA creation and signing in GitHub Actions, add the following s
 | Verification Target | Status | Notes |
 |---------------------|--------|-------|
 | **macOS GitHub Actions CI Simulator** | **`VERIFIED IN CI`** | Executed in `.github/workflows/ci.yml` via `xcodebuild test` on `macos-14` runner. |
+| **UNSIGNED IPA BUILD** | **`PASSED IN CI`** | Builds real executable `AgentCoreIOS.app` without requiring Apple signing secrets. |
 | **IPA VALIDATION TOOL** | **`PASSED`** | Verified via `scripts/validate_ipa.py` and `tests/test_ipa_validation.py`. |
-| **IPA RELEASE ARTIFACT** | **`READY IN CI`** | Configured in `.github/workflows/ci.yml` with artifact upload (`AgentCore-iOS-v0.1.0.ipa`). |
-| **PHYSICAL DEVICE VERIFIED** | **`PENDING SIGNING`** | Requires owner's Apple Developer signing credentials set in GitHub Secrets. |
+| **IPA RELEASE ARTIFACT** | **`PUBLISHED IN CI`** | Uploaded as workflow artifact and attached to GitHub Release `v0.1.0`. |
+| **PHYSICAL DEVICE INSTALLATION** | **`REQUIRES LOCAL RE-SIGN`** | Requires local re-signing via AltStore / iOS App Signer before device launch. |
 | **LINUX / PYTHON KERNEL CONTRACT VERIFIED** | **`PASSED`** | 780+ unit/integration tests passed in local CI sandbox. |

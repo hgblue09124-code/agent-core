@@ -5,7 +5,7 @@
 **Target Repository**: `Agent-Core` (`hgblue09124-code/agent-core`)
 **Date**: 2026-09-04
 **Release Artifacts**:
-- `AgentCore-iOS-v0.1.0.ipa` (iOS Application Archive Artifact)
+- `AgentCore-iOS-v0.1.0-unsigned.ipa` (Unsigned iOS Application Package Artifact)
 - `agent-core-ios-v0.1.0.zip` (Source & Xcode Project Package)
 
 ---
@@ -25,7 +25,7 @@
 | **Process-Restart Safety** | File-backed atomic state persistence | **VERIFIED** | Application Support file stores with `.tmp` -> `fsync` -> `os.replace` |
 | **Linux / CI Build Status** | `780+` tests passing | **PASSED** | Executed in CI sandbox (`python3 -m unittest discover -s tests`) |
 | **Xcode / Simulator Build** | Build & test in Xcode on macOS | **PASSED** | Executed in CI (`.github/workflows/ci.yml` on `macos-14`) |
-| **IPA Build & Artifact** | `AgentCore-iOS-v0.1.0.ipa` | **CONFIGURED IN CI** | Built, validated, and uploaded as GitHub Actions artifact |
+| **Unsigned IPA Build & Release** | `AgentCore-iOS-v0.1.0-unsigned.ipa` | **VERIFIED IN CI** | Built without Apple signing secrets, validated, uploaded as artifact, attached to GitHub Release v0.1.0 |
 
 ---
 
@@ -39,24 +39,22 @@
 - **`ios/AgentCoreIOS/App/`**: `AgentCoreIOSApp.swift`, `Info.plist`
 - **`ios/AgentCoreIOS.xcodeproj/`**: `project.pbxproj` (native Xcode project file)
 - **`ios/ExportOptions.plist`**: Xcode IPA export options
-- **`scripts/validate_ipa.py`**: IPA archive inspection & integrity validator
-- **`tests/test_ipa_validation.py`**: Automated unit tests for IPA validation
-- **`AgentCore-iOS-v0.1.0.ipa`**: Signed iOS Application Package artifact
+- **`scripts/validate_ipa.py`**: Unsigned IPA archive inspection & integrity validator
+- **`tests/test_ipa_validation.py`**: Automated unit tests for unsigned IPA validation
+- **`AgentCore-iOS-v0.1.0-unsigned.ipa`**: Unsigned iOS Application Package attached to GitHub Release v0.1.0 and workflow artifact
 - **`agent-core-ios-v0.1.0.zip`**: Xcode project release zip package
 
 ---
 
-## 3. GitHub Secrets for Code Signing
+## 3. Signing & Device Installation Notice
 
-To sign and build `.ipa` files in GitHub Actions, configure the following secrets in GitHub repository settings:
-1. `APPLE_CERTIFICATE_P12_BASE64`: Base64 string of Apple Certificate (`.p12`).
-2. `P12_PASSWORD`: Certificate password.
-3. `PROVISIONING_PROFILE_BASE64`: Base64 string of Provisioning Profile (`.mobileprovision`).
+`AgentCore-iOS-v0.1.0-unsigned.ipa` is intentionally built without Apple code signing in GitHub Actions CI.
+To install on an iPhone, perform local re-signing via AltStore, SideStore, Sideloadly, or iOS App Signer using your free or paid Apple ID.
 
 ---
 
 ## 4. Known Limitations & Deferred Work
 
 1. **Local Model Provider**: `LocalDeterministicPlanner` is explicitly labeled `TEST / DEVELOPMENT PROVIDER`. Real CoreML / Metal on-device LLM weights integration is deferred to post-Beta milestones.
-2. **Signing Credentials Requirement**: If Apple signing secrets are missing from GitHub Secrets, CI job fails strictly with status code 1.
+2. **Re-Signing Required for Device Launch**: Unsigned IPA must be re-signed locally prior to launching on physical iOS devices.
 3. **No Mandatory Cloud Backend**: Zero CloudKit, Firebase, or Supabase dependencies.
