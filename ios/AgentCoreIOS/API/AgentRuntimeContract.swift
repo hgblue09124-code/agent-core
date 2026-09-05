@@ -8,6 +8,9 @@ public protocol LocalAgentServiceProtocol: Sendable {
     /// Execute a task goal through the local Agent orchestration loop.
     func run(goal: String, userApproved: Bool) async -> AgentRunResult
 
+    /// Cancel an active or pending agent execution run.
+    func cancelRun(runId: String) async -> AgentRunResult
+
     /// Resume an interrupted/non-terminal run from local disk checkpoint.
     func resume(runId: String) async -> AgentRunResult
 
@@ -19,6 +22,9 @@ public protocol LocalAgentServiceProtocol: Sendable {
 
     /// Update an existing memory item, enforcing policy write approval checks.
     func updateMemory(key: String, value: String, userApproved: Bool) async -> MemoryResult
+
+    /// Forget (remove) a stored personal memory item by key.
+    func forget(key: String) async -> MemoryResult
 
     /// List all registered local capabilities and specifications.
     func listCapabilities() async -> [Capability]

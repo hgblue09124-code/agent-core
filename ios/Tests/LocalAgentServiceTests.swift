@@ -217,7 +217,73 @@ final class LocalAgentServiceTests: XCTestCase {
         XCTAssertTrue(report.isOffline)
 
         // Local Agent Core run continues normally
-        let runRes = await service.run(goal: "Offline operation after failed update check")
+        let runRes = await service.run(goal: "Offline operation read status", userApproved: true)
         XCTAssertEqual(runRes.status, .success)
+    }
+
+    func test12_forgetMemory_removesKeyFromStore() async {
+        let saveRes = await service.remember(key: "test_key", value: "test_val")
+        XCTAssertEqual(saveRes.status, .success)
+
+        let retrieved = await service.retrieve(query: "test_key")
+        XCTAssertEqual(retrieved.count, 1)
+
+        let forgetRes = await service.forget(key: "test_key")
+        XCTAssertEqual(forgetRes.status, .success)
+
+        let afterForget = await service.retrieve(query: "test_key")
+        XCTAssertEqual(afterForget.count, 0)
+
+        let nonExistentRes = await service.forget(key: "non_existent_key")
+        XCTAssertEqual(nonExistentRes.status, .failed)
+    }
+
+    @MainActor
+    func test13_agentAppViewModel_interactiveReviewChecksPass() async {
+        let viewModel = AgentAppViewModel(service: service, updateManager: updateManager)
+        await viewModel.runAllReviewChecks()
+
+        XCTAssertEqual(viewModel.passCount, 10)
+        XCTAssertEqual(viewModel.failCount, 0)
+        XCTAssertEqual(viewModel.blockerDetails.count, 0)
+        XCTAssertEqual(viewModel.agentCoreStatus, ReviewCheckStatus.pass)
+        XCTAssertEqual(viewModel.agentRuntimeStatus, ReviewCheckStatus.pass)
+        XCTAssertEqual(viewModel.localStorageStatus, ReviewCheckStatus.pass)
+        XCTAssertEqual(viewModel.memoryVaultStatus, ReviewCheckStatus.pass)
+        XCTAssertEqual(viewModel.connectionStatus, ReviewCheckStatus.pass)
+    }
+
+    func test14_runPolicyEnforcement_unapprovedMutatingGoalDenied() async {
+        let res = await service.run(goal: "Delete all context data", userApproved: false)
+        XCTAssertEqual(res.status, .denied)
+        XCTAssertEqual(res.errorCode, "POLICY_DENIAL")
+        XCTAssertFalse(res.authorized)
+        XCTAssertEqual(res.verificationVerdict, "DENIED")
+    }
+
+    func test15_runPolicyEnforcement_approvedMutatingGoalAllowed() async {
+        let res = await service.run(goal: "Delete all context data", userApproved: true)
+        XCTAssertEqual(res.status, .success)
+        XCTAssertTrue(res.authorized)
+        XCTAssertEqual(res.verificationVerdict, "PASS")
+    }
+
+    func test16_runValidation_emptyGoalFailed() async {
+        let res = await service.run(goal: "", userApproved: false)
+        XCTAssertEqual(res.status, .failed)
+        XCTAssertEqual(res.errorCode, "INVALID_INPUT")
+        XCTAssertEqual(res.verificationVerdict, "FAIL")
+    }
+
+    func test17_cancelRun_persistsCancelledCheckpointAndOutcome() async {
+        let runRes = await service.run(goal: "Goal to cancel", userApproved: true)
+        let cancelRes = await service.cancelRun(runId: runRes.runId)
+
+        XCTAssertEqual(cancelRes.runId, runRes.runId)
+        XCTAssertEqual(cancelRes.errorCode, "CANCELLED")
+        XCTAssertEqual(cancelRes.verificationVerdict, "CANCELLED")
+
+        let storedRun = await service.getRun(runId: runRes.runId)
+        XCTAssertEqual(storedRun?.errorCode, "CANCELLED")
     }
 }

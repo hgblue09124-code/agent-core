@@ -126,6 +126,9 @@ class TestIOSPortabilityAndBoundaries(unittest.TestCase):
             def store_context(self, key, data, category="user_preference"):
                 return True
 
+            def delete_context(self, key):
+                return True
+
             def retrieve_context(self, query, limit=5):
                 return [{"key": "custom_key", "data": {"custom": "data"}}]
 

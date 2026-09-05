@@ -277,6 +277,7 @@
 				001001 /* AgentAPIModels.swift in Sources */,
 				001003 /* AgentRuntimeContract.swift in Sources */,
 				001005 /* LocalAgentService.swift in Sources */,
+				001007 /* AgentCoreIOSApp.swift in Sources */,
 				001009 /* AgentModelProvider.swift in Sources */,
 				001011 /* LocalDeterministicPlanner.swift in Sources */,
 				001013 /* AgentRuntime.swift in Sources */,

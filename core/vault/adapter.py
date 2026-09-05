@@ -36,6 +36,11 @@ class BaseVaultAdapter(ABC):
         pass
 
     @abstractmethod
+    def delete_context(self, key: str) -> bool:
+        """Remove a personal context entry from the vault."""
+        pass
+
+    @abstractmethod
     def is_available(self) -> bool:
         """Return True if external personal vault backend is connected and available."""
         pass
@@ -156,6 +161,20 @@ class PersonalVaultAdapter(BaseVaultAdapter):
         self._fallback_store[key] = {"data": data, "category": category}
         self._save_fallback_store()
         return success if self._vault_client is not None else True
+
+    def delete_context(self, key: str) -> bool:
+        """Remove a personal context entry from vault."""
+        removed = False
+        if self._vault_client is not None and hasattr(self._vault_client, "delete_context"):
+            try:
+                removed = bool(self._vault_client.delete_context(key=key))
+            except Exception as exc:
+                logger.error(f"External Vault delete exception: {exc}")
+        if key in self._fallback_store:
+            del self._fallback_store[key]
+            self._save_fallback_store()
+            removed = True
+        return removed
 
     def get_status(self) -> dict[str, Any]:
         """Return diagnostic status of the vault adapter."""

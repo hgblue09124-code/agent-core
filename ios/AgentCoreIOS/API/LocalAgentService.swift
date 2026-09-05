@@ -16,6 +16,10 @@ public final class LocalAgentService: LocalAgentServiceProtocol, @unchecked Send
         return await runtime.run(goal: goal, userApproved: userApproved)
     }
 
+    public func cancelRun(runId: String) async -> AgentRunResult {
+        return await runtime.cancelRun(runId: runId)
+    }
+
     public func resume(runId: String) async -> AgentRunResult {
         return await runtime.resume(runId: runId)
     }
@@ -30,6 +34,10 @@ public final class LocalAgentService: LocalAgentServiceProtocol, @unchecked Send
 
     public func updateMemory(key: String, value: String, userApproved: Bool = false) async -> MemoryResult {
         return await runtime.updateMemory(key: key, value: value, userApproved: userApproved)
+    }
+
+    public func forget(key: String) async -> MemoryResult {
+        return await runtime.forget(key: key)
     }
 
     public func listCapabilities() async -> [Capability] {
