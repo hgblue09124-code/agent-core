@@ -1,0 +1,405 @@
+
+<div class="wrap">
+
+  <!-- ============ SVG ICON DEFS ============ -->
+  <svg width="0" height="0" style="position:absolute">
+    <defs>
+      <symbol id="i-home" viewBox="0 0 24 24"><path d="M4 11.5 12 4l8 7.5"/><path d="M6 10v9h12v-9"/></symbol>
+      <symbol id="i-bolt" viewBox="0 0 24 24"><path d="M13 3 5 14h6l-1 7 8-11h-6z"/></symbol>
+      <symbol id="i-activity" viewBox="0 0 24 24"><path d="M3 12h4l2 8 4-16 2 8h6"/></symbol>
+      <symbol id="i-vault" viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="3"/><circle cx="12" cy="12" r="2.4"/><path d="M12 9.6V7M12 17v-2.6"/></symbol>
+      <symbol id="i-link" viewBox="0 0 24 24"><path d="M9 15l6-6"/><path d="M11 6l1-1a4 4 0 0 1 6 6l-1 1"/><path d="M13 18l-1 1a4 4 0 0 1-6-6l1-1"/></symbol>
+      <symbol id="i-gear" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 3v2M12 19v2M4.2 4.2l1.4 1.4M18.4 18.4l1.4 1.4M3 12h2M19 12h2M4.2 19.8l1.4-1.4M18.4 5.6l1.4-1.4"/></symbol>
+      <symbol id="i-mic" viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0"/><path d="M12 18v3"/></symbol>
+      <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="6.5"/><path d="M20 20l-4.3-4.3"/></symbol>
+      <symbol id="i-chevron" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></symbol>
+      <symbol id="i-check" viewBox="0 0 24 24"><path d="M5 13l4 4L19 7"/></symbol>
+      <symbol id="i-x" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></symbol>
+      <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/></symbol>
+      <symbol id="i-cloudoff" viewBox="0 0 24 24"><path d="M3 3l18 18"/><path d="M17.5 17H7a4 4 0 0 1-.8-7.9A5.5 5.5 0 0 1 16.6 8"/></symbol>
+      <symbol id="i-folder" viewBox="0 0 24 24"><path d="M4 6h5l2 2h9v10H4z"/></symbol>
+      <symbol id="i-doc" viewBox="0 0 24 24"><path d="M6 3h8l4 4v14H6z"/><path d="M14 3v4h4"/></symbol>
+      <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+      <symbol id="i-arrowup" viewBox="0 0 24 24"><path d="M12 19V5M6 11l6-6 6 6"/></symbol>
+      <symbol id="i-shield" viewBox="0 0 24 24"><path d="M12 3l7 3v6c0 4.5-3 7.5-7 9-4-1.5-7-4.5-7-9V6z"/></symbol>
+      <symbol id="i-wifi" viewBox="0 0 24 24"><path d="M12 18h.01M8.5 14.5a5 5 0 0 1 7 0M5.5 11.2a9.5 9.5 0 0 1 13 0"/></symbol>
+      <symbol id="i-bell" viewBox="0 0 24 24"><path d="M6 10a6 6 0 0 1 12 0c0 4 1.5 5.5 1.5 5.5H4.5S6 14 6 10z"/><path d="M10 18.5a2 2 0 0 0 4 0"/></symbol>
+      <symbol id="i-trash" viewBox="0 0 24 24"><path d="M5 7h14M9 7V5h6v2M7 7l1 13h8l1-13"/></symbol>
+      <symbol id="i-battery" viewBox="0 0 24 24"><rect x="2" y="8" width="17" height="8" rx="2"/><path d="M21 11v2"/></symbol>
+      <symbol id="i-cellular" viewBox="0 0 24 24"><path d="M4 18v-4M9.5 18v-8M15 18V7M20.5 18V3"/></symbol>
+      <symbol id="i-info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M12 11v5M12 8v.01"/></symbol>
+      <symbol id="i-repeat" viewBox="0 0 24 24"><path d="M4 7h13l-3-3M20 17H7l3 3"/></symbol>
+      <symbol id="i-play" viewBox="0 0 24 24"><path d="M7 5l12 7-12 7z"/></symbol>
+    </defs>
+  </svg>
+
+  <!-- ============ HEADER ============ -->
+  <div class="section-head">
+    <div class="eyebrow">Personal Agent · iOS UI concept</div>
+    <div class="section-title">A private, local-first agent — dark, quiet, deliberate</div>
+    <div class="section-sub">High-fidelity concept for a personal AI agent app. Native SwiftUI feel, one restrained accent, and a clear answer to "what is my agent doing, and what can I ask it?" at every screen.</div>
+  </div>
+
+  <!-- ============ HERO: HOME SCREEN ============ -->
+  <div class="hero-row">
+    <div class="phone hero">
+      <div class="screen">
+        <div class="island"></div>
+        <div class="statusbar">
+          <span>9:41</span>
+          <div class="icons"><svg class="icon" style="width:15px;height:15px"><use href="#i-cellular"/></svg><svg class="icon" style="width:15px;height:15px"><use href="#i-wifi"/></svg><svg class="icon" style="width:20px;height:15px"><use href="#i-battery"/></svg></div>
+        </div>
+
+        <div class="scr-content scrollhide" style="overflow-y:auto">
+          <div class="between" style="margin-top:6px">
+            <div>
+              <div class="cap">Good evening</div>
+              <div class="h1">Your agent</div>
+            </div>
+            <div class="icon-tile"><svg class="icon"><use href="#i-bell"/></svg></div>
+          </div>
+
+          <!-- agent status card -->
+          <div class="card" style="align-items:center; text-align:center;">
+            <div class="between" style="width:100%">
+              <span class="pill ready"><span class="pdot"></span>Ready</span>
+              <span class="chip local"><svg class="icon" style="width:11px;height:11px"><use href="#i-shield"/></svg>On-device</span>
+            </div>
+            <div class="orb-wrap">
+              <div class="orb"><div class="core"></div></div>
+              <div class="muted" style="font-size:13px">Idle · last active 4 minutes ago</div>
+            </div>
+            <div class="input-pill" style="width:100%">
+              <svg class="icon"><use href="#i-mic"/></svg>
+              <span style="flex:1; text-align:left">Ask your agent to do something…</span>
+              <svg class="icon"><use href="#i-arrowup"/></svg>
+            </div>
+          </div>
+
+          <!-- quick actions -->
+          <div>
+            <div class="cap" style="margin-bottom:10px">Quick actions</div>
+            <div class="grid2">
+              <div class="card" style="padding:14px;">
+                <div class="icon-tile accent"><svg class="icon"><use href="#i-bolt"/></svg></div>
+                <div class="h2" style="margin-top:10px; font-size:14.5px">Run a task</div>
+              </div>
+              <div class="card" style="padding:14px;">
+                <div class="icon-tile"><svg class="icon"><use href="#i-vault"/></svg></div>
+                <div class="h2" style="margin-top:10px; font-size:14.5px">Search memory</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- current task -->
+          <div>
+            <div class="between" style="margin-bottom:10px">
+              <div class="cap">Current task</div>
+              <span class="pill running"><span class="pdot"></span>Running</span>
+            </div>
+            <div class="card">
+              <div class="row">
+                <div class="icon-tile warning"><svg class="icon"><use href="#i-repeat"/></svg></div>
+                <div style="flex:1">
+                  <div class="h2" style="font-size:14.5px">Organizing travel receipts</div>
+                  <div class="muted">Reading 12 files in Vault → Documents</div>
+                </div>
+              </div>
+              <div class="progressbar" style="margin-top:12px"><div style="width:64%"></div></div>
+            </div>
+          </div>
+
+          <!-- recent activity -->
+          <div>
+            <div class="between" style="margin-bottom:6px">
+              <div class="cap">Recent activity</div>
+              <span class="muted" style="color:var(--accent)">See all</span>
+            </div>
+            <div class="card" style="padding:6px 14px;">
+              <div class="list-item">
+                <div class="icon-tile success" style="width:32px;height:32px"><svg class="icon" style="width:15px;height:15px"><use href="#i-check"/></svg></div>
+                <div style="flex:1">
+                  <div style="font-size:13.5px; font-weight:500">Summarized weekly emails</div>
+                  <div class="muted" style="font-size:11.5px">2h ago · Local</div>
+                </div>
+              </div>
+              <div class="list-item">
+                <div class="icon-tile danger" style="width:32px;height:32px"><svg class="icon" style="width:15px;height:15px"><use href="#i-x"/></svg></div>
+                <div style="flex:1">
+                  <div style="font-size:13.5px; font-weight:500">Sync with calendar</div>
+                  <div class="muted" style="font-size:11.5px">Yesterday · Failed, permission needed</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="tabbar">
+          <div class="tab active"><svg class="icon" style="width:21px;height:21px"><use href="#i-home"/></svg>Home<span class="dot"></span></div>
+          <div class="tab"><svg class="icon" style="width:21px;height:21px"><use href="#i-bolt"/></svg>Agent</div>
+          <div class="tab"><svg class="icon" style="width:21px;height:21px"><use href="#i-activity"/></svg>Activity</div>
+          <div class="tab"><svg class="icon" style="width:21px;height:21px"><use href="#i-vault"/></svg>Vault</div>
+          <div class="tab"><svg class="icon" style="width:21px;height:21px"><use href="#i-gear"/></svg>Settings</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="hero-caption">
+      <div class="h1">Home</div>
+      <div class="muted">One glance answers two questions: what state is my agent in, and what can I ask it to do right now. Everything else — quick actions, the active task, recent history — supports that.</div>
+      <div class="kv"><div class="k">Status</div><div class="v">A single status pill (Ready / Thinking / Running / Offline) sits above the orb, always in the same place.</div></div>
+      <div class="kv"><div class="k">Center of gravity</div><div class="v">The orb is the only place gradient and motion appear on this screen — it reads as "the agent," not decoration.</div></div>
+      <div class="kv"><div class="k">Input</div><div class="v">One pill-shaped composer, always docked under the orb. Typing or speaking both start here.</div></div>
+      <div class="kv"><div class="k">Privacy signal</div><div class="v">The "on-device" chip is present wherever the agent is actively reasoning, not buried in settings.</div></div>
+    </div>
+  </div>
+
+  <div class="divider"></div>
+
+  <!-- ============ OTHER SCREENS ============ -->
+  <div class="section-head">
+    <div class="section-title">The full system</div>
+    <div class="section-sub">Five supporting screens, same tokens, same tab bar, same card language.</div>
+  </div>
+
+  <div class="screens-grid">
+
+    <!-- AGENT / EXECUTE -->
+    <div class="screen-block">
+      <div class="phone small">
+        <div class="screen">
+          <div class="island" style="width:76px;height:22px;top:11px"></div>
+          <div class="statusbar" style="padding:12px 20px 0; font-size:12px"><span>9:41</span><div class="icons"><svg class="icon" style="width:12px;height:12px"><use href="#i-wifi"/></svg></div></div>
+          <div class="scr-content" style="padding:15px 15px 10px; gap:12px">
+            <div class="between">
+              <div class="h2" style="font-size:16px">Execute</div>
+              <span class="pill thinking" style="font-size:10px"><span class="pdot"></span>Thinking</span>
+            </div>
+            <div class="card" style="padding:12px;">
+              <div class="cap" style="margin-bottom:6px">Task</div>
+              <div style="font-size:13px">"Draft replies to unread emails from this week and flag anything urgent."</div>
+            </div>
+            <div class="card" style="padding:12px; gap:8px; display:flex; flex-direction:column;">
+              <div class="row"><svg class="icon" style="width:14px;height:14px; stroke:var(--text-2)"><use href="#i-check"/></svg><span style="font-size:12px" class="muted">Read inbox — 41 messages</span></div>
+              <div class="row"><svg class="icon" style="width:14px;height:14px; stroke:var(--text-2)"><use href="#i-check"/></svg><span style="font-size:12px" class="muted">Grouped by sender</span></div>
+              <div class="row"><div class="orb" style="width:14px;height:14px" ></div><span style="font-size:12px">Drafting reply 3 of 7…</span></div>
+              <div class="progressbar"><div style="width:38%"></div></div>
+            </div>
+            <div style="display:flex; gap:8px; margin-top:auto">
+              <div class="btn ghost" style="flex:1; height:40px; font-size:12.5px">Cancel</div>
+              <div class="btn ghost" style="flex:1; height:40px; font-size:12.5px; opacity:.5">Retry</div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="screen-label"><div class="name">Agent / Execute</div><div class="desc">Task in, live steps, cancel or retry</div></div>
+    </div>
+
+    <!-- ACTIVITY -->
+    <div class="screen-block">
+      <div class="phone small">
+        <div class="screen">
+          <div class="island" style="width:76px;height:22px;top:11px"></div>
+          <div class="statusbar" style="padding:12px 20px 0; font-size:12px"><span>9:41</span><div class="icons"><svg class="icon" style="width:12px;height:12px"><use href="#i-wifi"/></svg></div></div>
+          <div class="scr-content" style="padding:15px 15px 10px; gap:10px">
+            <div class="h2" style="font-size:16px">Activity</div>
+            <div class="seg"><span class="on">All</span><span>Success</span><span>Failed</span></div>
+            <div class="card" style="padding:6px 12px;">
+              <div class="list-item">
+                <div class="icon-tile success" style="width:28px;height:28px"><svg class="icon" style="width:13px;height:13px"><use href="#i-check"/></svg></div>
+                <div style="flex:1"><div style="font-size:12.5px;font-weight:500">Backed up notes</div><div class="muted" style="font-size:10.5px">10:04 · 1.2s</div></div>
+              </div>
+              <div class="list-item">
+                <div class="icon-tile danger" style="width:28px;height:28px"><svg class="icon" style="width:13px;height:13px"><use href="#i-x"/></svg></div>
+                <div style="flex:1"><div style="font-size:12.5px;font-weight:500">Sync calendar</div><div class="muted" style="font-size:10.5px">09:41 · permission denied</div></div>
+              </div>
+              <div class="list-item">
+                <div class="icon-tile success" style="width:28px;height:28px"><svg class="icon" style="width:13px;height:13px"><use href="#i-check"/></svg></div>
+                <div style="flex:1"><div style="font-size:12.5px;font-weight:500">Weekly summary</div><div class="muted" style="font-size:10.5px">Yesterday · 8.4s</div></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="screen-label"><div class="name">Activity</div><div class="desc">Timeline of every run, filterable</div></div>
+    </div>
+
+    <!-- MEMORY / VAULT -->
+    <div class="screen-block">
+      <div class="phone small">
+        <div class="screen">
+          <div class="island" style="width:76px;height:22px;top:11px"></div>
+          <div class="statusbar" style="padding:12px 20px 0; font-size:12px"><span>9:41</span><div class="icons"><svg class="icon" style="width:12px;height:12px"><use href="#i-wifi"/></svg></div></div>
+          <div class="scr-content" style="padding:15px 15px 10px; gap:10px">
+            <div class="between"><div class="h2" style="font-size:16px">Vault</div><span class="chip local"><svg class="icon" style="width:10px;height:10px"><use href="#i-shield"/></svg>Private</span></div>
+            <div class="input-pill" style="padding:9px 12px; font-size:12px"><svg class="icon" style="width:14px;height:14px"><use href="#i-search"/></svg>Search memory</div>
+            <div class="grid2">
+              <div class="card" style="padding:10px;"><svg class="icon" style="stroke:var(--text-2)"><use href="#i-folder"/></svg><div style="font-size:12px;margin-top:6px">Documents</div><div class="muted" style="font-size:10.5px">128 items</div></div>
+              <div class="card" style="padding:10px;"><svg class="icon" style="stroke:var(--text-2)"><use href="#i-doc"/></svg><div style="font-size:12px;margin-top:6px">Notes</div><div class="muted" style="font-size:10.5px">54 items</div></div>
+            </div>
+            <div class="card" style="padding:12px;">
+              <div class="cap" style="margin-bottom:4px">Context the agent remembers</div>
+              <div class="muted" style="font-size:12px">Home address, work calendar, three ongoing projects</div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="screen-label"><div class="name">Memory / Vault</div><div class="desc">Categorized, searchable, local-only</div></div>
+    </div>
+
+    <!-- CONNECTIONS -->
+    <div class="screen-block">
+      <div class="phone small">
+        <div class="screen">
+          <div class="island" style="width:76px;height:22px;top:11px"></div>
+          <div class="statusbar" style="padding:12px 20px 0; font-size:12px"><span>9:41</span><div class="icons"><svg class="icon" style="width:12px;height:12px"><use href="#i-wifi"/></svg></div></div>
+          <div class="scr-content" style="padding:15px 15px 10px; gap:10px">
+            <div class="h2" style="font-size:16px">Connections</div>
+            <div class="card" style="padding:6px 12px;">
+              <div class="list-item">
+                <div class="icon-tile success" style="width:28px;height:28px"><svg class="icon" style="width:13px;height:13px"><use href="#i-link"/></svg></div>
+                <div style="flex:1"><div style="font-size:12.5px;font-weight:500">Local model</div><div class="muted" style="font-size:10.5px">On-device · always available</div></div>
+                <span class="chip local" style="font-size:9.5px">Local</span>
+              </div>
+              <div class="list-item">
+                <div class="icon-tile" style="width:28px;height:28px"><svg class="icon" style="width:13px;height:13px; stroke:var(--text-2)"><use href="#i-link"/></svg></div>
+                <div style="flex:1"><div style="font-size:12.5px;font-weight:500">Calendar</div><div class="muted" style="font-size:10.5px">Connected · remote</div></div>
+                <span class="chip" style="font-size:9.5px">Remote</span>
+              </div>
+              <div class="list-item">
+                <div class="icon-tile danger" style="width:28px;height:28px"><svg class="icon" style="width:13px;height:13px"><use href="#i-x"/></svg></div>
+                <div style="flex:1"><div style="font-size:12.5px;font-weight:500">Gmail</div><div class="muted" style="font-size:10.5px">Not connected</div></div>
+                <span class="muted" style="font-size:11px; color:var(--accent)">Connect</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="screen-label"><div class="name">API / Connections</div><div class="desc">Local vs remote made explicit</div></div>
+    </div>
+
+    <!-- SETTINGS -->
+    <div class="screen-block">
+      <div class="phone small">
+        <div class="screen">
+          <div class="island" style="width:76px;height:22px;top:11px"></div>
+          <div class="statusbar" style="padding:12px 20px 0; font-size:12px"><span>9:41</span><div class="icons"><svg class="icon" style="width:12px;height:12px"><use href="#i-wifi"/></svg></div></div>
+          <div class="scr-content" style="padding:15px 15px 10px; gap:10px">
+            <div class="h2" style="font-size:16px">Settings</div>
+            <div class="card" style="padding:2px 12px;">
+              <div class="list-item"><span style="font-size:12.5px;flex:1">Background execution</span><div class="toggle on"></div></div>
+              <div class="list-item"><span style="font-size:12.5px;flex:1">Privacy mode</span><div class="toggle on"></div></div>
+              <div class="list-item"><span style="font-size:12.5px;flex:1">Storage</span><span class="muted" style="font-size:11.5px">1.4 GB</span><svg class="icon" style="width:13px;height:13px;stroke:var(--text-3)"><use href="#i-chevron"/></svg></div>
+              <div class="list-item"><span style="font-size:12.5px;flex:1">Appearance</span><span class="muted" style="font-size:11.5px">Dark</span><svg class="icon" style="width:13px;height:13px;stroke:var(--text-3)"><use href="#i-chevron"/></svg></div>
+              <div class="list-item"><span style="font-size:12.5px;flex:1">About</span><svg class="icon" style="width:13px;height:13px;stroke:var(--text-3)"><use href="#i-chevron"/></svg></div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="screen-label"><div class="name">Settings</div><div class="desc">Grouped, native iOS list style</div></div>
+    </div>
+
+  </div>
+
+  <div class="divider"></div>
+
+  <!-- ============ INTERACTION STATES ============ -->
+  <div class="section-head">
+    <div class="section-title">Interaction states</div>
+    <div class="section-sub">The same status card, in every state the agent can be in. Color and motion carry the meaning — layout never changes.</div>
+  </div>
+
+  <div class="states-grid">
+    <div class="state-card">
+      <div class="tag">Idle</div>
+      <span class="pill ready"><span class="pdot"></span>Ready</span>
+      <div class="muted">Waiting for a task. No motion, orb static.</div>
+    </div>
+    <div class="state-card">
+      <div class="tag">Thinking</div>
+      <span class="pill thinking"><span class="pdot"></span>Thinking</span>
+      <div class="muted">Orb rotates slowly, gradient breathing.</div>
+    </div>
+    <div class="state-card">
+      <div class="tag">Running</div>
+      <span class="pill running"><span class="pdot"></span>Running</span>
+      <div class="progressbar"><div style="width:52%"></div></div>
+    </div>
+    <div class="state-card">
+      <div class="tag">Completed</div>
+      <div class="row"><div class="icon-tile success"><svg class="icon"><use href="#i-check"/></svg></div><span style="font-size:13px">Task finished</span></div>
+      <div class="muted">Card settles to a quiet success tint for 2s, then returns to idle.</div>
+    </div>
+    <div class="state-card">
+      <div class="tag">Failed</div>
+      <div class="row"><div class="icon-tile danger"><svg class="icon"><use href="#i-x"/></svg></div><span style="font-size:13px">Couldn't finish</span></div>
+      <div class="muted">Reason shown inline, with a Retry action.</div>
+    </div>
+    <div class="state-card">
+      <div class="tag">Offline</div>
+      <div class="row"><div class="icon-tile"><svg class="icon" style="stroke:var(--offline)"><use href="#i-cloudoff"/></svg></div><span class="pill offline"><span class="pdot"></span>Offline</span></div>
+      <div class="muted">On-device tasks still work; remote ones queue.</div>
+    </div>
+    <div class="state-card">
+      <div class="tag">Empty</div>
+      <div class="muted" style="text-align:center; padding:14px 0;">No activity yet.<br>Give your agent its first task.</div>
+    </div>
+    <div class="state-card">
+      <div class="tag">Loading</div>
+      <div class="orb-wrap" style="padding:0"><div class="orb" style="width:52px;height:52px"></div></div>
+      <div class="muted" style="text-align:center">Preparing your agent…</div>
+    </div>
+    <div class="state-card">
+      <div class="tag">Permission required</div>
+      <div class="row"><div class="icon-tile warning"><svg class="icon"><use href="#i-shield"/></svg></div><span style="font-size:13px">Calendar access needed</span></div>
+      <div class="btn ghost" style="height:36px; font-size:12.5px">Grant access</div>
+    </div>
+  </div>
+
+  <div class="divider"></div>
+
+  <!-- ============ DESIGN SYSTEM ============ -->
+  <div class="section-head">
+    <div class="section-title">Design system</div>
+    <div class="section-sub">Reference for SwiftUI implementation — colors, type, spacing, radius.</div>
+  </div>
+
+  <div class="cap" style="margin-bottom:10px">Color</div>
+  <div class="tok-row" style="margin-bottom:32px">
+    <div class="swatch" style="background:var(--bg-1)"><span class="lbl">bg / 1 · #0A0A0D</span></div>
+    <div class="swatch" style="background:var(--bg-2)"><span class="lbl">bg / 2 · #141417</span></div>
+    <div class="swatch" style="background:var(--bg-4)"><span class="lbl">bg / 4 · #26262C</span></div>
+    <div class="swatch" style="background:var(--accent)"><span class="lbl" style="color:#0A0A0D">accent · #7C8CFF</span></div>
+    <div class="swatch" style="background:var(--success)"><span class="lbl" style="color:#0A0A0D">success · #3DD68C</span></div>
+    <div class="swatch" style="background:var(--warning)"><span class="lbl" style="color:#0A0A0D">warning · #F5B84D</span></div>
+    <div class="swatch" style="background:var(--danger)"><span class="lbl" style="color:#0A0A0D">danger · #F5716B</span></div>
+    <div class="swatch" style="background:var(--offline)"><span class="lbl" style="color:#0A0A0D">offline · #8B8B92</span></div>
+  </div>
+
+  <div class="cap" style="margin-bottom:10px">Typography — Inter / SF Pro, two weights only (500, 600)</div>
+  <div style="margin-bottom:32px">
+    <div class="type-row"><div class="tlabel">Display / 34 · 600</div><div style="font-size:34px; font-weight:600; letter-spacing:-.01em">Your agent</div></div>
+    <div class="type-row"><div class="tlabel">Title / 22 · 600</div><div style="font-size:22px; font-weight:600">The full system</div></div>
+    <div class="type-row"><div class="tlabel">Body / 15 · 500</div><div style="font-size:15px; font-weight:500">Organizing travel receipts</div></div>
+    <div class="type-row"><div class="tlabel">Secondary / 13 · 400</div><div style="font-size:13px; color:var(--text-2)">Reading 12 files in Vault → Documents</div></div>
+    <div class="type-row"><div class="tlabel">Caption / 11 · 500</div><div style="font-size:11px; color:var(--text-3)">2h ago · Local</div></div>
+  </div>
+
+  <div class="cap" style="margin-bottom:10px">Spacing (8pt grid) &amp; radius</div>
+  <div class="grid2" style="gap:32px; margin-bottom:8px">
+    <div>
+      <div class="spacing-row" style="margin-bottom:10px"><span class="muted" style="width:36px">4</span><div class="spacing-bar" style="width:4px"></div></div>
+      <div class="spacing-row" style="margin-bottom:10px"><span class="muted" style="width:36px">8</span><div class="spacing-bar" style="width:8px"></div></div>
+      <div class="spacing-row" style="margin-bottom:10px"><span class="muted" style="width:36px">16</span><div class="spacing-bar" style="width:16px"></div></div>
+      <div class="spacing-row" style="margin-bottom:10px"><span class="muted" style="width:36px">24</span><div class="spacing-bar" style="width:24px"></div></div>
+      <div class="spacing-row"><span class="muted" style="width:36px">32</span><div class="spacing-bar" style="width:32px"></div></div>
+    </div>
+    <div class="row" style="gap:20px; align-items:flex-end">
+      <div style="width:56px; height:56px; background:var(--bg-3); border:1px solid var(--hair); border-radius:12px; display:flex;align-items:center;justify-content:center;font-size:10px;color:var(--text-3)">12</div>
+      <div style="width:56px; height:56px; background:var(--bg-3); border:1px solid var(--hair); border-radius:20px; display:flex;align-items:center;justify-content:center;font-size:10px;color:var(--text-3)">20</div>
+      <div style="width:56px; height:56px; background:var(--bg-3); border:1px solid var(--hair); border-radius:28px; display:flex;align-items:center;justify-content:center;font-size:10px;color:var(--text-3)">28 / pill</div>
+    </div>
+  </div>
+
+  <footer>Personal Agent — UI concept · dark mode primary · SwiftUI reference</footer>
+</div>
