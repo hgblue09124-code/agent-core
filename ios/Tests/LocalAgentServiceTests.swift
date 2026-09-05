@@ -240,7 +240,7 @@ final class LocalAgentServiceTests: XCTestCase {
 
     @MainActor
     func test13_agentAppViewModel_interactiveReviewChecksPass() async {
-        let viewModel = AgentAppViewModel(service: service, updateManager: updateManager)
+        let viewModel = AgentAppViewModel(service: service)
         await viewModel.runAllReviewChecks()
 
         XCTAssertEqual(viewModel.passCount, 10)
