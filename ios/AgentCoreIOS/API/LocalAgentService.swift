@@ -32,6 +32,10 @@ public final class LocalAgentService: LocalAgentServiceProtocol, @unchecked Send
         return await runtime.updateMemory(key: key, value: value, userApproved: userApproved)
     }
 
+    public func forget(key: String, userApproved: Bool = false) async -> MemoryResult {
+        return await runtime.forget(key: key, userApproved: userApproved)
+    }
+
     public func listCapabilities() async -> [Capability] {
         return await runtime.listCapabilities()
     }

@@ -80,4 +80,12 @@ public final class LocalMemoryStore: @unchecked Sendable {
         saveToDisk()
         return item
     }
+
+    public func forget(key: String) -> Bool {
+        if memories.removeValue(forKey: key) != nil {
+            saveToDisk()
+            return true
+        }
+        return false
+    }
 }

@@ -22,6 +22,20 @@
 		001025 /* DataUpdateValidator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 001024 /* DataUpdateValidator.swift */; };
 		001027 /* GitHubDataUpdateConfiguration.swift in Sources */ = {isa = PBXBuildFile; fileRef = 001026 /* GitHubDataUpdateConfiguration.swift */; };
 		001029 /* GitHubDataUpdateManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 001028 /* GitHubDataUpdateManager.swift */; };
+		002001 /* Theme.swift in Sources */ = {isa = PBXBuildFile; fileRef = 002000 /* Theme.swift */; };
+		002003 /* AgentOrbView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 002002 /* AgentOrbView.swift */; };
+		002005 /* AgentStatusPill.swift in Sources */ = {isa = PBXBuildFile; fileRef = 002004 /* AgentStatusPill.swift */; };
+		002007 /* LocalIndicator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 002006 /* LocalIndicator.swift */; };
+		002009 /* ConnectionChip.swift in Sources */ = {isa = PBXBuildFile; fileRef = 002008 /* ConnectionChip.swift */; };
+		002011 /* CustomComponents.swift in Sources */ = {isa = PBXBuildFile; fileRef = 002010 /* CustomComponents.swift */; };
+		002013 /* AgentAppViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 002012 /* AgentAppViewModel.swift */; };
+		002015 /* HomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 002014 /* HomeView.swift */; };
+		002017 /* ExecuteView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 002016 /* ExecuteView.swift */; };
+		002019 /* ActivityView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 002018 /* ActivityView.swift */; };
+		002021 /* VaultView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 002020 /* VaultView.swift */; };
+		002023 /* ConnectionsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 002022 /* ConnectionsView.swift */; };
+		002025 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 002024 /* SettingsView.swift */; };
+		002027 /* MainTabView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 002026 /* MainTabView.swift */; };
 		001031 /* LocalAgentServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 001030 /* LocalAgentServiceTests.swift */; };
 /* End PBXBuildFile section */
 
@@ -36,6 +50,20 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
+		002000 /* Theme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Theme.swift; sourceTree = "<group>"; };
+		002002 /* AgentOrbView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentOrbView.swift; sourceTree = "<group>"; };
+		002004 /* AgentStatusPill.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentStatusPill.swift; sourceTree = "<group>"; };
+		002006 /* LocalIndicator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalIndicator.swift; sourceTree = "<group>"; };
+		002008 /* ConnectionChip.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConnectionChip.swift; sourceTree = "<group>"; };
+		002010 /* CustomComponents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CustomComponents.swift; sourceTree = "<group>"; };
+		002012 /* AgentAppViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentAppViewModel.swift; sourceTree = "<group>"; };
+		002014 /* HomeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeView.swift; sourceTree = "<group>"; };
+		002016 /* ExecuteView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExecuteView.swift; sourceTree = "<group>"; };
+		002018 /* ActivityView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActivityView.swift; sourceTree = "<group>"; };
+		002020 /* VaultView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VaultView.swift; sourceTree = "<group>"; };
+		002022 /* ConnectionsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConnectionsView.swift; sourceTree = "<group>"; };
+		002024 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
+		002026 /* MainTabView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MainTabView.swift; sourceTree = "<group>"; };
 		001000 /* AgentAPIModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentAPIModels.swift; sourceTree = "<group>"; };
 		001002 /* AgentRuntimeContract.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentRuntimeContract.swift; sourceTree = "<group>"; };
 		001004 /* LocalAgentService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalAgentService.swift; sourceTree = "<group>"; };
@@ -75,6 +103,41 @@
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
+		002030 /* DesignSystem */ = {
+			isa = PBXGroup;
+			children = (
+				002000 /* Theme.swift */,
+				002002 /* AgentOrbView.swift */,
+				002004 /* AgentStatusPill.swift */,
+				002006 /* LocalIndicator.swift */,
+				002008 /* ConnectionChip.swift */,
+				002010 /* CustomComponents.swift */,
+			);
+			path = DesignSystem;
+			sourceTree = "<group>";
+		};
+		002031 /* ViewModels */ = {
+			isa = PBXGroup;
+			children = (
+				002012 /* AgentAppViewModel.swift */,
+			);
+			path = ViewModels;
+			sourceTree = "<group>";
+		};
+		002032 /* Views */ = {
+			isa = PBXGroup;
+			children = (
+				002014 /* HomeView.swift */,
+				002016 /* ExecuteView.swift */,
+				002018 /* ActivityView.swift */,
+				002020 /* VaultView.swift */,
+				002022 /* ConnectionsView.swift */,
+				002024 /* SettingsView.swift */,
+				002026 /* MainTabView.swift */,
+			);
+			path = Views;
+			sourceTree = "<group>";
+		};
 		001070 /* Main Group */ = {
 			isa = PBXGroup;
 			children = (
@@ -87,6 +150,9 @@
 		001071 /* AgentCoreIOS */ = {
 			isa = PBXGroup;
 			children = (
+				002030 /* DesignSystem */,
+				002031 /* ViewModels */,
+				002032 /* Views */,
 				001072 /* API */,
 				001073 /* App */,
 				001074 /* Providers */,
@@ -266,6 +332,11 @@
 				001025 /* DataUpdateValidator.swift in Sources */,
 				001027 /* GitHubDataUpdateConfiguration.swift in Sources */,
 				001029 /* GitHubDataUpdateManager.swift in Sources */,
+				002001 /* Theme.swift in Sources */,
+				002003 /* AgentOrbView.swift in Sources */,
+				002005 /* AgentStatusPill.swift in Sources */,
+				002007 /* LocalIndicator.swift in Sources */,
+				002009 /* ConnectionChip.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -288,6 +359,20 @@
 				001025 /* DataUpdateValidator.swift in Sources */,
 				001027 /* GitHubDataUpdateConfiguration.swift in Sources */,
 				001029 /* GitHubDataUpdateManager.swift in Sources */,
+				002001 /* Theme.swift in Sources */,
+				002003 /* AgentOrbView.swift in Sources */,
+				002005 /* AgentStatusPill.swift in Sources */,
+				002007 /* LocalIndicator.swift in Sources */,
+				002009 /* ConnectionChip.swift in Sources */,
+				002011 /* CustomComponents.swift in Sources */,
+				002013 /* AgentAppViewModel.swift in Sources */,
+				002015 /* HomeView.swift in Sources */,
+				002017 /* ExecuteView.swift in Sources */,
+				002019 /* ActivityView.swift in Sources */,
+				002021 /* VaultView.swift in Sources */,
+				002023 /* ConnectionsView.swift in Sources */,
+				002025 /* SettingsView.swift in Sources */,
+				002027 /* MainTabView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
