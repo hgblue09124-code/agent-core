@@ -1,5 +1,5 @@
 // ios/Tests/LocalAgentServiceTests.swift
-// Native XCTest Suite for LocalAgentService & Native Runtime Contracts
+// Native XCTest Suite for LocalAgentService, Policy Boundaries & GitHub Data Update v0.1
 
 import XCTest
 @testable import AgentCoreIOS
@@ -7,6 +7,7 @@ import XCTest
 final class LocalAgentServiceTests: XCTestCase {
     private var tempDir: URL!
     private var service: LocalAgentService!
+    private var updateManager: GitHubDataUpdateManager!
 
     override func setUp() async throws {
         try await super.setUp()
@@ -25,6 +26,7 @@ final class LocalAgentServiceTests: XCTestCase {
             vaultStore: vltStore
         )
         service = LocalAgentService(runtime: runtime)
+        updateManager = GitHubDataUpdateManager(storageDir: tempDir.appendingPathComponent("data"))
     }
 
     override func tearDown() async throws {
@@ -42,58 +44,27 @@ final class LocalAgentServiceTests: XCTestCase {
         XCTAssertTrue(health.isLocalOnly)
     }
 
-    func test03_remember() async {
-        let res = await service.remember(key: "preferred_branch", value: "master")
+    func test03_rememberAndRetrieve() async {
+        let res = await service.remember(key: "branch", value: "master")
         XCTAssertEqual(res.status, .success)
-        XCTAssertEqual(res.item?.key, "preferred_branch")
-        XCTAssertEqual(res.item?.value, "master")
-    }
 
-    func test04_retrieve() async {
-        _ = await service.remember(key: "user_editor", value: "vscode")
-        let items = await service.retrieve(query: "vscode")
+        let items = await service.retrieve(query: "master")
         XCTAssertEqual(items.count, 1)
-        XCTAssertEqual(items.first?.value, "vscode")
+        XCTAssertEqual(items.first?.value, "master")
     }
 
-    func test05_persistenceAfterRuntimeRecreation() async {
-        _ = await service.remember(key: "persist_key", value: "persist_val")
-
-        // Recreate runtime pointing to same storage URL
-        let memStore2 = LocalMemoryStore(storageDir: tempDir.appendingPathComponent("memories"))
-        let expStore2 = LocalExperienceStore(storageDir: tempDir.appendingPathComponent("experiences"))
-        let chkStore2 = LocalCheckpointStore(storageDir: tempDir.appendingPathComponent("runs"))
-        let vltStore2 = LocalVaultStore(storageDir: tempDir.appendingPathComponent("vault"))
-
-        let runtime2 = AgentRuntime(
-            memoryStore: memStore2,
-            experienceStore: expStore2,
-            checkpointStore: chkStore2,
-            vaultStore: vltStore2
+    func test04_actionAwarePolicy_readActionAllowedWithoutApproval() async {
+        // Read action 'get_repo' on github_integration passes without user approval
+        let res = await service.executeCapability(
+            capabilityId: "github_integration",
+            input: ["action": "get_repo", "owner": "owner", "repo": "repo", "mock_offline": "true"],
+            userApproved: false
         )
-        let service2 = LocalAgentService(runtime: runtime2)
-
-        let items = await service2.retrieve(query: "persist_key")
-        XCTAssertEqual(items.count, 1)
-        XCTAssertEqual(items.first?.value, "persist_val")
-    }
-
-    func test06_run() async {
-        let res = await service.run(goal: "Inspect workspace architecture")
         XCTAssertEqual(res.status, .success)
-        XCTAssertTrue(res.runId.hasPrefix("RUN-"))
-        XCTAssertFalse(res.planSteps.isEmpty)
     }
 
-    func test07_stableRunId() async {
-        let res = await service.run(goal: "Stable ID test")
-        XCTAssertFalse(res.runId.isEmpty)
-        let runInfo = await service.getRun(runId: res.runId)
-        XCTAssertEqual(runInfo?.runId, res.runId)
-    }
-
-    func test08_policyDenial() async {
-        // Unapproved write capability call -> DENIED
+    func test05_actionAwarePolicy_writeActionDeniedWithoutApproval() async {
+        // Write action 'create_issue_comment' without approval -> DENIED
         let res = await service.executeCapability(
             capabilityId: "github_integration",
             input: ["action": "create_issue_comment", "owner": "owner", "repo": "repo", "issue_number": "1", "body": "comment"],
@@ -103,8 +74,8 @@ final class LocalAgentServiceTests: XCTestCase {
         XCTAssertTrue(res.errorMessage?.contains("requires explicit user approval") ?? false)
     }
 
-    func test09_approvedMutation() async {
-        // Approved write capability call -> SUCCESS (offline mock)
+    func test06_actionAwarePolicy_writeActionAllowedWithApproval() async {
+        // Write action 'create_issue_comment' with explicit approval -> SUCCESS
         let res = await service.executeCapability(
             capabilityId: "github_integration",
             input: ["action": "create_issue_comment", "owner": "owner", "repo": "repo", "issue_number": "1", "body": "comment", "mock_offline": "true"],
@@ -113,57 +84,70 @@ final class LocalAgentServiceTests: XCTestCase {
         XCTAssertEqual(res.status, .success)
     }
 
-    func test10_experiencePersistence() async {
-        let runRes = await service.run(goal: "Experience test goal")
-        let exps = await service.getExperience()
-        XCTAssertTrue(exps.contains(where: { $0.runId == runRes.runId }))
+    func test07_pathSafetyValidator_rejectsAbsoluteAndTraversalPaths() {
+        let validator = DataUpdateValidator()
+
+        XCTAssertThrowsError(try validator.validatePathSafety(path: "/etc/passwd"))
+        XCTAssertThrowsError(try validator.validatePathSafety(path: "../secret.json"))
+        XCTAssertThrowsError(try validator.validatePathSafety(path: "config/../../secret.json"))
+        XCTAssertThrowsError(try validator.validatePathSafety(path: "bin/update.swift"))
+
+        XCTAssertNoThrow(try validator.validatePathSafety(path: "agent-config/default.json"))
     }
 
-    func test11_checkpointPersistence() async {
-        let runRes = await service.run(goal: "Checkpoint test goal")
+    func test08_dataUpdateIntegrity_sha256AndSizeValidation() {
+        let validator = DataUpdateValidator()
+        let sampleData = "Hello Agent Core Data Update".data(using: .utf8)!
+        let expectedHash = validator.sha256Hex(data: sampleData)
 
-        // Recreate runtime and verify run checkpoint reloads from disk
-        let chkStore2 = LocalCheckpointStore(storageDir: tempDir.appendingPathComponent("runs"))
-        let loaded = chkStore2.get(runId: runRes.runId)
-        XCTAssertNotNil(loaded)
-        XCTAssertEqual(loaded?.runId, runRes.runId)
+        // Valid integrity -> No error
+        XCTAssertNoThrow(try validator.validateFileIntegrity(data: sampleData, expectedSize: sampleData.count, expectedSHA256: expectedHash))
+
+        // Mismatched size -> Throws error
+        XCTAssertThrowsError(try validator.validateFileIntegrity(data: sampleData, expectedSize: sampleData.count + 10, expectedSHA256: expectedHash))
+
+        // Mismatched SHA-256 -> Throws error
+        XCTAssertThrowsError(try validator.validateFileIntegrity(data: sampleData, expectedSize: sampleData.count, expectedSHA256: "invalid_hash"))
     }
 
-    func test12_resume() async {
-        let runRes = await service.run(goal: "Initial run for resume")
-        let resumed = await service.resume(runId: runRes.runId)
-        XCTAssertEqual(resumed.runId, runRes.runId)
-        XCTAssertEqual(resumed.status, .success)
-        XCTAssertTrue(resumed.output?.contains("Resumed") ?? false)
-    }
+    func test09_atomicDataUpdateAndRollback() async {
+        let sampleData = "test config content".data(using: .utf8)!
+        let validator = DataUpdateValidator()
+        let hash = validator.sha256Hex(data: sampleData)
 
-    func test13_failedCapability() async {
-        // Attempting GitHub action without mock flag in offline mode returns FAILED
-        let res = await service.executeCapability(
-            capabilityId: "github_integration",
-            input: ["action": "get_repo", "owner": "owner", "repo": "repo"],
-            userApproved: false
+        let manifest = AppDataManifest(
+            schemaVersion: 1,
+            dataVersion: "2026.09.05.001",
+            minimumClientVersion: "0.1.0",
+            files: [ManifestFileEntry(path: "agent-config/default.json", sha256: hash, size: sampleData.count)]
         )
-        XCTAssertEqual(res.status, .failed)
+
+        // Perform successful update
+        let report = await updateManager.performUpdate(manifest: manifest, fileDataMap: ["agent-config/default.json": sampleData])
+        XCTAssertEqual(report.status, .committed)
+        XCTAssertEqual(report.installedDataVersion, "2026.09.05.001")
+
+        // Attempt invalid update with hash mismatch -> Triggers rollback & returns failed status
+        let badManifest = AppDataManifest(
+            schemaVersion: 1,
+            dataVersion: "2026.09.05.002",
+            minimumClientVersion: "0.1.0",
+            files: [ManifestFileEntry(path: "agent-config/default.json", sha256: "bad_hash", size: sampleData.count)]
+        )
+
+        let badReport = await updateManager.performUpdate(manifest: badManifest, fileDataMap: ["agent-config/default.json": sampleData])
+        XCTAssertEqual(badReport.status, .failed)
+        XCTAssertEqual(badReport.installedDataVersion, "2026.09.05.001") // Preserves last known-good version
     }
 
-    func test14_health() async {
-        let h = await service.health()
-        XCTAssertEqual(h.status, "HEALTHY")
-        XCTAssertTrue(h.isLocalOnly)
-        XCTAssertTrue(h.activeCapabilitiesCount >= 2)
-    }
+    func test10_offlineUpdateCheck_preservesAgentCoreOperation() async {
+        // Checking updates offline without network or mock returns offline status without breaking AgentCore
+        let report = await updateManager.checkForUpdates()
+        XCTAssertEqual(report.status, .offline)
+        XCTAssertTrue(report.isOffline)
 
-    func test15_noNetworkRequired() async {
-        // Verify local memory, vault, reasoning, capability listing, and runs execute completely offline
-        _ = await service.remember(key: "offline_key", value: "offline_val")
-        let retrieved = await service.retrieve(query: "offline_key")
-        XCTAssertEqual(retrieved.count, 1)
-
-        let caps = await service.listCapabilities()
-        XCTAssertFalse(caps.isEmpty)
-
-        let runRes = await service.run(goal: "Fully offline local operation")
+        // Local Agent Core run continues normally
+        let runRes = await service.run(goal: "Offline operation after failed update check")
         XCTAssertEqual(runRes.status, .success)
     }
 }

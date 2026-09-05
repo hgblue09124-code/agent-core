@@ -134,9 +134,14 @@ public final class AgentRuntime: @unchecked Sendable {
             )
         }
 
-        let action = (input["action"] ?? "").lowercased()
-        let writeKeywords = ["create", "update", "delete", "post", "put", "patch", "write", "comment"]
-        let isMutatingAction = !cap.readOnly || cap.requiresUserApproval || writeKeywords.contains(where: { action.contains($0) })
+        let action = (input["action"] ?? "").lowercased().trimmingCharacters(in: .whitespaces)
+        let writeKeywords = ["create", "update", "delete", "post", "put", "patch", "write", "comment", "merge", "close"]
+        let readKeywords = ["get", "read", "list", "search", "status", "inspect", "fetch"]
+
+        let isReadAction = readKeywords.contains(where: { action.hasPrefix($0) || action == $0 })
+        let isWriteAction = writeKeywords.contains(where: { action.contains($0) })
+
+        let isMutatingAction = cap.requiresUserApproval || isWriteAction || (!cap.readOnly && !isReadAction)
 
         if isMutatingAction && !userApproved {
             return CapabilityResult(
