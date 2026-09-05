@@ -7,20 +7,6 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-		002001 /* Theme.swift in Sources */ = {isa = PBXBuildFile; fileRef = 002000 /* Theme.swift */; };
-		002003 /* AgentOrbView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 002002 /* AgentOrbView.swift */; };
-		002005 /* AgentStatusPill.swift in Sources */ = {isa = PBXBuildFile; fileRef = 002004 /* AgentStatusPill.swift */; };
-		002007 /* LocalIndicator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 002006 /* LocalIndicator.swift */; };
-		002009 /* ConnectionChip.swift in Sources */ = {isa = PBXBuildFile; fileRef = 002008 /* ConnectionChip.swift */; };
-		002011 /* CustomComponents.swift in Sources */ = {isa = PBXBuildFile; fileRef = 002010 /* CustomComponents.swift */; };
-		002013 /* AgentAppViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 002012 /* AgentAppViewModel.swift */; };
-		002015 /* HomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 002014 /* HomeView.swift */; };
-		002017 /* ExecuteView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 002016 /* ExecuteView.swift */; };
-		002019 /* ActivityView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 002018 /* ActivityView.swift */; };
-		002021 /* VaultView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 002020 /* VaultView.swift */; };
-		002023 /* ConnectionsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 002022 /* ConnectionsView.swift */; };
-		002025 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 002024 /* SettingsView.swift */; };
-		002027 /* MainTabView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 002026 /* MainTabView.swift */; };
 		001001 /* AgentAPIModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 001000 /* AgentAPIModels.swift */; };
 		001003 /* AgentRuntimeContract.swift in Sources */ = {isa = PBXBuildFile; fileRef = 001002 /* AgentRuntimeContract.swift */; };
 		001005 /* LocalAgentService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 001004 /* LocalAgentService.swift */; };
@@ -36,6 +22,20 @@
 		001025 /* DataUpdateValidator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 001024 /* DataUpdateValidator.swift */; };
 		001027 /* GitHubDataUpdateConfiguration.swift in Sources */ = {isa = PBXBuildFile; fileRef = 001026 /* GitHubDataUpdateConfiguration.swift */; };
 		001029 /* GitHubDataUpdateManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 001028 /* GitHubDataUpdateManager.swift */; };
+		002001 /* Theme.swift in Sources */ = {isa = PBXBuildFile; fileRef = 002000 /* Theme.swift */; };
+		002003 /* AgentOrbView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 002002 /* AgentOrbView.swift */; };
+		002005 /* AgentStatusPill.swift in Sources */ = {isa = PBXBuildFile; fileRef = 002004 /* AgentStatusPill.swift */; };
+		002007 /* LocalIndicator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 002006 /* LocalIndicator.swift */; };
+		002009 /* ConnectionChip.swift in Sources */ = {isa = PBXBuildFile; fileRef = 002008 /* ConnectionChip.swift */; };
+		002011 /* CustomComponents.swift in Sources */ = {isa = PBXBuildFile; fileRef = 002010 /* CustomComponents.swift */; };
+		002013 /* AgentAppViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 002012 /* AgentAppViewModel.swift */; };
+		002015 /* HomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 002014 /* HomeView.swift */; };
+		002017 /* ExecuteView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 002016 /* ExecuteView.swift */; };
+		002019 /* ActivityView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 002018 /* ActivityView.swift */; };
+		002021 /* VaultView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 002020 /* VaultView.swift */; };
+		002023 /* ConnectionsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 002022 /* ConnectionsView.swift */; };
+		002025 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 002024 /* SettingsView.swift */; };
+		002027 /* MainTabView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 002026 /* MainTabView.swift */; };
 		001031 /* LocalAgentServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 001030 /* LocalAgentServiceTests.swift */; };
 /* End PBXBuildFile section */
 
@@ -317,20 +317,6 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				002001 /* Theme.swift in Sources */,
-				002003 /* AgentOrbView.swift in Sources */,
-				002005 /* AgentStatusPill.swift in Sources */,
-				002007 /* LocalIndicator.swift in Sources */,
-				002009 /* ConnectionChip.swift in Sources */,
-				002011 /* CustomComponents.swift in Sources */,
-				002013 /* AgentAppViewModel.swift in Sources */,
-				002015 /* HomeView.swift in Sources */,
-				002017 /* ExecuteView.swift in Sources */,
-				002019 /* ActivityView.swift in Sources */,
-				002021 /* VaultView.swift in Sources */,
-				002023 /* ConnectionsView.swift in Sources */,
-				002025 /* SettingsView.swift in Sources */,
-				002027 /* MainTabView.swift in Sources */,
 				001001 /* AgentAPIModels.swift in Sources */,
 				001003 /* AgentRuntimeContract.swift in Sources */,
 				001005 /* LocalAgentService.swift in Sources */,
@@ -346,13 +332,6 @@
 				001025 /* DataUpdateValidator.swift in Sources */,
 				001027 /* GitHubDataUpdateConfiguration.swift in Sources */,
 				001029 /* GitHubDataUpdateManager.swift in Sources */,
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-		};
-		001091 /* Sources */ = {
-			isa = PBXSourcesBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
 				002001 /* Theme.swift in Sources */,
 				002003 /* AgentOrbView.swift in Sources */,
 				002005 /* AgentStatusPill.swift in Sources */,
@@ -367,6 +346,13 @@
 				002023 /* ConnectionsView.swift in Sources */,
 				002025 /* SettingsView.swift in Sources */,
 				002027 /* MainTabView.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		001091 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
 				001031 /* LocalAgentServiceTests.swift in Sources */,
 				001001 /* AgentAPIModels.swift in Sources */,
 				001003 /* AgentRuntimeContract.swift in Sources */,
@@ -382,6 +368,20 @@
 				001025 /* DataUpdateValidator.swift in Sources */,
 				001027 /* GitHubDataUpdateConfiguration.swift in Sources */,
 				001029 /* GitHubDataUpdateManager.swift in Sources */,
+				002001 /* Theme.swift in Sources */,
+				002003 /* AgentOrbView.swift in Sources */,
+				002005 /* AgentStatusPill.swift in Sources */,
+				002007 /* LocalIndicator.swift in Sources */,
+				002009 /* ConnectionChip.swift in Sources */,
+				002011 /* CustomComponents.swift in Sources */,
+				002013 /* AgentAppViewModel.swift in Sources */,
+				002015 /* HomeView.swift in Sources */,
+				002017 /* ExecuteView.swift in Sources */,
+				002019 /* ActivityView.swift in Sources */,
+				002021 /* VaultView.swift in Sources */,
+				002023 /* ConnectionsView.swift in Sources */,
+				002025 /* SettingsView.swift in Sources */,
+				002027 /* MainTabView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
