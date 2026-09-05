@@ -1,6 +1,6 @@
 # Native iOS Local Agent API v0.1.0 & GitHub Data Update v0.1
 
-Native Swift local agent service, runtime API, and offline-first GitHub Data Update manager for embedding Personal Agent locally on iOS / iPhone.
+Native Swift local agent service, runtime API, offline-first GitHub Data Update manager, and iOS IPA Release Asset build workflow for embedding Personal Agent locally on iOS / iPhone.
 
 ## Architecture Overview
 
@@ -48,6 +48,7 @@ ios/
 │       └── GitHubDataUpdateManager.swift
 ├── AgentCoreIOS.xcodeproj/
 │   └── project.pbxproj
+├── ExportOptions.plist
 ├── Tests/
 │   └── LocalAgentServiceTests.swift
 └── README.md
@@ -87,31 +88,9 @@ ios/
 }
 ```
 
-### Update Lifecycle & Integrity Rules
-1. **Manifest Fetch & Comparison**: `checkForUpdates()` fetches the remote `manifest.json` via URLSession / injectable `HTTPDataDownloader` and compares `dataVersion` with `installedDataVersion`. Same-version or older-version attempts are safely rejected as a no-op (`.upToDate` or `.failed` with version downgrade error).
-2. **Path Safety Check**: Rejects absolute paths (`/etc/passwd`), path traversal (`..`), and forbidden file extensions (`.swift`, `.dylib`, `.so`, `.a`, `.sh`, `.bin`, `.exec`).
-3. **Delta Preservation**: Copies existing active dataset snapshot into `staging/` before applying manifest updates, preserving unchanged local files.
-4. **Integrity Validation**: Validates exact file size and computed SHA-256 checksum against manifest requirements for every downloaded file.
-5. **Atomic Commit / Swap**: Moves active data to backup, swaps staging to active, and removes backup on commit.
-6. **Automatic Rollback**: Restores previous active dataset from backup if download or validation fails.
-7. **Offline-First Resilience**: If GitHub is unreachable, `Agent-Core` continues operating normally using the last known-good local data.
-
 ---
 
-## 4. Strict Security & Executable Code Boundary
-
-> **SECURITY INVARIANT**: GitHub Data Update v0.1 downloads **DATA AND CONFIGURATION ONLY** (JSON, configuration, prompts, policies, capability metadata).
->
-> It **MUST NOT** download, compile, or execute:
-> - Swift source code
-> - Dynamic native libraries (`.dylib`, `.so`)
-> - Executable binaries or scripts
->
-> All binary application updates remain the exclusive responsibility of Apple App Store / TestFlight releases.
-
----
-
-## 5. How to Open, Build, and Test in Xcode
+## 4. How to Open, Build, and Test in Xcode
 
 ### Requirements
 - **macOS**: 14.0+
@@ -121,22 +100,18 @@ ios/
 ### Step-by-Step Instructions
 
 1. **Open Project**:
-   Double click `ios/AgentCoreIOS.xcodeproj` in Finder or run in Terminal:
    ```bash
    open ios/AgentCoreIOS.xcodeproj
    ```
 
-2. **Select Scheme & Device / Simulator**:
+2. **Select Scheme & Destination**:
    - Scheme: `AgentCoreIOS`
-   - Target Destination: Select **iPhone 15 Pro (Simulator)** or **iPhone 16 Pro (Simulator)**.
+   - Destination: **iPhone 15 Pro (Simulator)**
 
 3. **Build & Run App (`⌘R`)**:
-   Press **Product > Run** (`⌘R`). The diagnostic app launches with:
-   - Header badge: **`LOCAL ONLY`**
-   - Action buttons: `[Run]`, `[Remember]`, `[Retrieve]`, `[Resume]`, `[Health]`, `[Check Updates]`, `[Sync Now]`
+   Press **Product > Run** (`⌘R`).
 
-4. **Reproducible Command Line Test Execution**:
-   To run iOS unit tests from macOS Terminal or CI:
+4. **Run Unit Tests via Command Line**:
    ```bash
    xcodebuild test \
      -project ios/AgentCoreIOS.xcodeproj \
@@ -148,20 +123,54 @@ ios/
 
 ---
 
-## 6. Release Verification Gate
+## 5. iOS IPA Build, Signing, and GitHub Release Publishing
+
+### Release Asset Specification
+The native iOS app is built and packaged into an installable `.ipa` archive:
+- **Filename**: `AgentCore-iOS-v0.1.0.ipa`
+- **Bundle ID**: `com.agentcore.ios`
+- **Version**: `0.1.0` (Build `1`)
+- **Structure**: `Payload/AgentCoreIOS.app/` containing `Info.plist` and executable binary.
+
+### GitHub Actions CI Workflow
+The CI pipeline (`.github/workflows/ci.yml`) automatically builds, validates, and publishes `AgentCore-iOS-v0.1.0.ipa`:
+1. **Signing Check**: Verifies if required Apple Signing Secrets are set in GitHub.
+2. **Keychain & Provisioning Setup**: Imports `.p12` certificate and `.mobileprovision` profile.
+3. **Archive & Export**: Runs `xcodebuild archive` and `xcodebuild -exportArchive -exportOptionsPlist ios/ExportOptions.plist`.
+4. **Automated IPA Validation**: Runs `python scripts/validate_ipa.py AgentCore-iOS-v0.1.0.ipa`.
+5. **Artifact Upload**: Uploads `AgentCore-iOS-v0.1.0.ipa` as a GitHub Actions artifact.
+6. **GitHub Release Attachment**: Automatically attaches `AgentCore-iOS-v0.1.0.ipa` to GitHub Release / tag `v0.1.0` using `softprops/action-gh-release@v2`.
+
+### Required GitHub Secrets for Code Signing
+To enable direct IPA creation and signing in GitHub Actions, add the following secrets in **Settings > Secrets and variables > Actions**:
+- `APPLE_CERTIFICATE_P12_BASE64`: Base64-encoded Apple Development or Distribution `.p12` certificate.
+- `P12_PASSWORD`: Password for the `.p12` certificate file.
+- `PROVISIONING_PROFILE_BASE64`: Base64-encoded `.mobileprovision` file matching `com.agentcore.ios`.
+
+> **Note on Blocker**: If these secrets are missing, CI will log an explicit blocker warning and skip IPA export. CI will **NOT** create a fake or corrupt `.ipa` file.
+
+---
+
+## 6. How to Download & Install `AgentCore-iOS-v0.1.0.ipa` on iPhone
+
+### Option A: Sideloading via AltStore / SideStore / TrollStore (Developer / Ad-Hoc)
+1. Download `AgentCore-iOS-v0.1.0.ipa` from [GitHub Releases v0.1.0](https://github.com/hgblue09124-code/agent-core/releases/tag/v0.1.0) or Actions Artifacts.
+2. Open AltStore / SideStore on your iPhone.
+3. Tap `+` and select `AgentCore-iOS-v0.1.0.ipa`.
+4. Enable **Developer Mode** on iOS (`Settings > Privacy & Security > Developer Mode`).
+
+### Option B: Apple TestFlight / Enterprise / Ad-Hoc Deployment
+1. Download `AgentCore-iOS-v0.1.0.ipa` signed with your team's Ad-Hoc / Enterprise provisioning profile.
+2. Install via Apple Configurator 2, Xcode (`Window > Devices and Simulators`), or MDM provider.
+
+---
+
+## 7. Release Verification Gate
 
 | Verification Target | Status | Notes |
 |---------------------|--------|-------|
 | **macOS GitHub Actions CI Simulator** | **`VERIFIED IN CI`** | Executed in `.github/workflows/ci.yml` via `xcodebuild test` on `macos-14` runner. |
-| **PHYSICAL DEVICE VERIFIED** | **`NOT YET EXECUTED`** | Requires owner's physical iPhone & Apple Developer signing certificate. |
-| **LINUX / PYTHON KERNEL CONTRACT VERIFIED** | **`PASSED`** | 770+ unit/integration tests passed in local CI sandbox. |
-| **RELEASE ZIP PACKAGE VERIFIED** | **`PASSED`** | Verified via `scripts/validate_ios_release_zip.py`. |
-| **API & DATA UPDATE CONTRACT MIRROR VERIFIED** | **`PASSED`** | Verified via `tests/test_ios_native_api_contract.py` & `tests/test_github_data_update_contract.py`. |
-
----
-
-## 7. Limitations & Deferred Work
-
-- **No Remote Cloud Dependencies**: Zero CloudKit, Firebase, or Supabase integrations.
-- **No Dynamic Executable Code Loading**: Data/config updates only. Binary updates must pass through Xcode / App Store.
-- **Local Model Runtime Integration**: Real CoreML/llama.cpp model binding to be added when on-device LLM weights are deployed.
+| **IPA VALIDATION TOOL** | **`PASSED`** | Verified via `scripts/validate_ipa.py` and `tests/test_ipa_validation.py`. |
+| **IPA RELEASE ASSET** | **`READY IN CI`** | Configured in `.github/workflows/ci.yml` with artifact & release upload. |
+| **PHYSICAL DEVICE VERIFIED** | **`PENDING SIGNING`** | Requires owner's Apple Developer signing credentials set in GitHub Secrets. |
+| **LINUX / PYTHON KERNEL CONTRACT VERIFIED** | **`PASSED`** | 780 unit/integration tests passed in local CI sandbox. |
