@@ -245,4 +245,27 @@ final class LocalAgentServiceTests: XCTestCase {
         await vm.deleteMemory(key: "ui_theme")
         XCTAssertFalse(vm.memories.contains(where: { $0.key == "ui_theme" }))
     }
+
+    func test14_runtimeRunPolicyEnforcementAndExecution() async {
+        // Mutating goal without user approval -> DENIED, authorized=false, verdict="FAIL"
+        let deniedRun = await service.run(goal: "Create backup of notes", userApproved: false)
+        XCTAssertEqual(deniedRun.status, .denied)
+        XCTAssertFalse(deniedRun.authorized)
+        XCTAssertEqual(deniedRun.verificationVerdict, "FAIL")
+
+        // Mutating goal with user approval -> SUCCESS, authorized=true, verdict="PASS"
+        let approvedRun = await service.run(goal: "Create backup of notes", userApproved: true)
+        XCTAssertEqual(approvedRun.status, .success)
+        XCTAssertTrue(approvedRun.authorized)
+        XCTAssertEqual(approvedRun.verificationVerdict, "PASS")
+
+        // Memory deletion without approval -> DENIED
+        let forgetDenied = await service.forget(key: "branch", userApproved: false)
+        XCTAssertEqual(forgetDenied.status, .denied)
+
+        // Memory deletion with approval -> SUCCESS
+        _ = await service.remember(key: "temp_key", value: "val")
+        let forgetApproved = await service.forget(key: "temp_key", userApproved: true)
+        XCTAssertEqual(forgetApproved.status, .success)
+    }
 }

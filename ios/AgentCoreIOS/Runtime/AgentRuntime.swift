@@ -56,18 +56,84 @@ public final class AgentRuntime: @unchecked Sendable {
         // Store run summary in vault
         _ = vaultStore.storeContext(key: "run_summary_\(runId)", value: goal, category: "run_history")
 
+        let lowerGoal = goal.lowercased()
+        let writeKeywords = ["create", "update", "delete", "post", "put", "patch", "write", "comment", "merge", "close", "backup", "draft", "modify"]
+        let isMutatingGoal = writeKeywords.contains(where: { lowerGoal.contains($0) })
+
+        // Target capability based on goal content
+        let targetCapabilityId = lowerGoal.contains("github") || lowerGoal.contains("issue") || lowerGoal.contains("repo") ? "github_integration" : "mock.echo"
+        let actionName = isMutatingGoal ? "create_action" : "get_action"
+
+        let capabilityInput: [String: String] = [
+            "action": actionName,
+            "text": goal,
+            "mock_offline": "true"
+        ]
+
+        // Enforce Policy Engine authorization check
+        if isMutatingGoal && !userApproved {
+            let deniedResult = AgentRunResult(
+                runId: runId,
+                status: .denied,
+                goal: goal,
+                output: "Policy Denial: Goal '\(goal)' requires explicit write approval.",
+                errorMessage: "Policy permission required for write/mutating operation.",
+                planSteps: planSteps,
+                authorized: false,
+                verificationVerdict: "FAIL"
+            )
+            checkpointStore.save(result: deniedResult)
+            _ = experienceStore.record(runId: runId, goal: goal, outcome: "denied")
+            return deniedResult
+        }
+
+        // Execute capability action through executeCapability
+        let capResult = await executeCapability(capabilityId: targetCapabilityId, input: capabilityInput, userApproved: userApproved)
+
+        if capResult.status == .denied {
+            let deniedResult = AgentRunResult(
+                runId: runId,
+                status: .denied,
+                goal: goal,
+                output: capResult.errorMessage ?? "Policy Denial during capability execution.",
+                errorMessage: capResult.errorMessage,
+                planSteps: planSteps,
+                authorized: false,
+                verificationVerdict: "FAIL"
+            )
+            checkpointStore.save(result: deniedResult)
+            _ = experienceStore.record(runId: runId, goal: goal, outcome: "denied")
+            return deniedResult
+        }
+
+        if capResult.status == .failed {
+            let failedResult = AgentRunResult(
+                runId: runId,
+                status: .failed,
+                goal: goal,
+                output: capResult.errorMessage ?? "Execution failed.",
+                errorMessage: capResult.errorMessage ?? "Capability execution failed.",
+                planSteps: planSteps,
+                authorized: true,
+                verificationVerdict: "FAIL"
+            )
+            checkpointStore.save(result: failedResult)
+            _ = experienceStore.record(runId: runId, goal: goal, outcome: "failed")
+            return failedResult
+        }
+
         let result = AgentRunResult(
             runId: runId,
             status: .success,
             goal: goal,
-            output: "Successfully executed goal '\(goal)' through local agent runtime pipeline.",
+            output: capResult.output ?? "Successfully executed goal '\(goal)' through local agent runtime pipeline.",
             planSteps: planSteps,
             authorized: true,
             verificationVerdict: "PASS"
         )
 
         checkpointStore.save(result: result)
-        _ = experienceStore.record(runId: runId, goal: goal, outcome: "success")
+        _ = experienceStore.record(runId: runId, goal: goal, outcome: "completed")
 
         return result
     }
@@ -121,7 +187,13 @@ public final class AgentRuntime: @unchecked Sendable {
         return MemoryResult(status: .success, item: created)
     }
 
-    public func forget(key: String) async -> MemoryResult {
+    public func forget(key: String, userApproved: Bool = false) async -> MemoryResult {
+        if !userApproved {
+            return MemoryResult(
+                status: .denied,
+                errorMessage: "Policy Denial: Memory deletion for key '\(key)' requires explicit user approval (userApproved = true)."
+            )
+        }
         let deleted = memoryStore.forget(key: key)
         if deleted {
             return MemoryResult(status: .success)

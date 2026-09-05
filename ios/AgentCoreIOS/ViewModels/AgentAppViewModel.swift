@@ -179,7 +179,7 @@ public final class AgentAppViewModel: ObservableObject {
     }
 
     public func retryTask() {
-        runTask(goal: currentGoal, userApproved: true)
+        runTask(goal: currentGoal, userApproved: false)
     }
 
     public func approveWritePolicy() {
@@ -192,7 +192,7 @@ public final class AgentAppViewModel: ObservableObject {
     }
 
     public func deleteMemory(key: String) async {
-        _ = await service.forget(key: key)
+        _ = await service.forget(key: key, userApproved: true)
         await refreshData()
     }
 
