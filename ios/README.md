@@ -123,38 +123,35 @@ ios/
 
 ---
 
-## 5. iOS IPA Build, Signing, and GitHub Release Publishing
+## 5. iOS IPA Build, Signing, and Artifact Upload
 
 ### Release Asset Specification
 The native iOS app is built and packaged into an installable `.ipa` archive:
 - **Filename**: `AgentCore-iOS-v0.1.0.ipa`
-- **Bundle ID**: `com.agentcore.ios`
+- **Bundle ID**: `com.agentcore.AgentCoreIOS`
 - **Version**: `0.1.0` (Build `1`)
 - **Structure**: `Payload/AgentCoreIOS.app/` containing `Info.plist` and executable binary.
 
 ### GitHub Actions CI Workflow
-The CI pipeline (`.github/workflows/ci.yml`) automatically builds, validates, and publishes `AgentCore-iOS-v0.1.0.ipa`:
-1. **Signing Check**: Verifies if required Apple Signing Secrets are set in GitHub.
+The CI pipeline (`.github/workflows/ci.yml`) automatically builds, validates, and uploads `AgentCore-iOS-v0.1.0.ipa`:
+1. **Signing Check**: Verifies if required Apple Signing Secrets are set in GitHub. Fails job with status code 1 if missing.
 2. **Keychain & Provisioning Setup**: Imports `.p12` certificate and `.mobileprovision` profile.
 3. **Archive & Export**: Runs `xcodebuild archive` and `xcodebuild -exportArchive -exportOptionsPlist ios/ExportOptions.plist`.
 4. **Automated IPA Validation**: Runs `python scripts/validate_ipa.py AgentCore-iOS-v0.1.0.ipa`.
-5. **Artifact Upload**: Uploads `AgentCore-iOS-v0.1.0.ipa` as a GitHub Actions artifact.
-6. **GitHub Release Attachment**: Automatically attaches `AgentCore-iOS-v0.1.0.ipa` to GitHub Release / tag `v0.1.0` using `softprops/action-gh-release@v2`.
+5. **Artifact Upload**: Uploads `AgentCore-iOS-v0.1.0.ipa` as a GitHub Actions artifact (`AgentCore-iOS-v0.1.0.ipa`).
 
 ### Required GitHub Secrets for Code Signing
 To enable direct IPA creation and signing in GitHub Actions, add the following secrets in **Settings > Secrets and variables > Actions**:
 - `APPLE_CERTIFICATE_P12_BASE64`: Base64-encoded Apple Development or Distribution `.p12` certificate.
 - `P12_PASSWORD`: Password for the `.p12` certificate file.
-- `PROVISIONING_PROFILE_BASE64`: Base64-encoded `.mobileprovision` file matching `com.agentcore.ios`.
-
-> **Note on Blocker**: If these secrets are missing, CI will log an explicit blocker warning and skip IPA export. CI will **NOT** create a fake or corrupt `.ipa` file.
+- `PROVISIONING_PROFILE_BASE64`: Base64-encoded `.mobileprovision` file matching `com.agentcore.AgentCoreIOS`.
 
 ---
 
 ## 6. How to Download & Install `AgentCore-iOS-v0.1.0.ipa` on iPhone
 
 ### Option A: Sideloading via AltStore / SideStore / TrollStore (Developer / Ad-Hoc)
-1. Download `AgentCore-iOS-v0.1.0.ipa` from [GitHub Releases v0.1.0](https://github.com/hgblue09124-code/agent-core/releases/tag/v0.1.0) or Actions Artifacts.
+1. Download `AgentCore-iOS-v0.1.0.ipa` from GitHub Actions Artifacts.
 2. Open AltStore / SideStore on your iPhone.
 3. Tap `+` and select `AgentCore-iOS-v0.1.0.ipa`.
 4. Enable **Developer Mode** on iOS (`Settings > Privacy & Security > Developer Mode`).
@@ -171,6 +168,6 @@ To enable direct IPA creation and signing in GitHub Actions, add the following s
 |---------------------|--------|-------|
 | **macOS GitHub Actions CI Simulator** | **`VERIFIED IN CI`** | Executed in `.github/workflows/ci.yml` via `xcodebuild test` on `macos-14` runner. |
 | **IPA VALIDATION TOOL** | **`PASSED`** | Verified via `scripts/validate_ipa.py` and `tests/test_ipa_validation.py`. |
-| **IPA RELEASE ASSET** | **`READY IN CI`** | Configured in `.github/workflows/ci.yml` with artifact & release upload. |
+| **IPA RELEASE ARTIFACT** | **`READY IN CI`** | Configured in `.github/workflows/ci.yml` with artifact upload (`AgentCore-iOS-v0.1.0.ipa`). |
 | **PHYSICAL DEVICE VERIFIED** | **`PENDING SIGNING`** | Requires owner's Apple Developer signing credentials set in GitHub Secrets. |
-| **LINUX / PYTHON KERNEL CONTRACT VERIFIED** | **`PASSED`** | 780 unit/integration tests passed in local CI sandbox. |
+| **LINUX / PYTHON KERNEL CONTRACT VERIFIED** | **`PASSED`** | 780+ unit/integration tests passed in local CI sandbox. |

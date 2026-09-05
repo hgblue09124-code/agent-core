@@ -12,7 +12,7 @@ from pathlib import Path
 # Ensure repo root is on sys.path for scripts import
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from scripts.validate_ipa import validate_ipa, REQUIRED_BUNDLE_IDS
+from scripts.validate_ipa import validate_ipa, REQUIRED_BUNDLE_ID
 
 
 class TestIPAValidation(unittest.TestCase):
@@ -29,7 +29,7 @@ class TestIPAValidation(unittest.TestCase):
         filename: str = "AgentCore-iOS-v0.1.0.ipa",
         include_payload: bool = True,
         include_app: bool = True,
-        bundle_id: str = "com.agentcore.AgentCoreIOS",
+        bundle_id: str = REQUIRED_BUNDLE_ID,
         version: str = "0.1.0",
         build: str = "1",
         include_plist: bool = True,

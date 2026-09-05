@@ -5,7 +5,7 @@
 **Target Repository**: `Agent-Core` (`hgblue09124-code/agent-core`)
 **Date**: 2026-09-04
 **Release Artifacts**:
-- `AgentCore-iOS-v0.1.0.ipa` (iOS Application Archive)
+- `AgentCore-iOS-v0.1.0.ipa` (iOS Application Archive Artifact)
 - `agent-core-ios-v0.1.0.zip` (Source & Xcode Project Package)
 
 ---
@@ -17,7 +17,7 @@
 | **Version** | `0.1.0` | **VERIFIED** | Set in `AgentAPIModels.swift`, `Info.plist`, `project.pbxproj` |
 | **Product Name** | `Native iOS Local Agent API` | **VERIFIED** | Target `AgentCoreIOS` in Xcode project |
 | **Minimum iOS Version** | `iOS 17.0+` | **VERIFIED** | `IPHONEOS_DEPLOYMENT_TARGET = 17.0` |
-| **Bundle ID** | `com.agentcore.ios` | **VERIFIED** | Set in `project.pbxproj` and verified by `validate_ipa.py` |
+| **Bundle ID** | `com.agentcore.AgentCoreIOS` | **VERIFIED** | Set in `project.pbxproj` and verified by `validate_ipa.py` |
 | **Architecture** | Native Local Agent-Core Kernel | **VERIFIED** | `LocalAgentServiceProtocol` & `AgentRuntime` |
 | **Offline-First** | 100% Offline-Capable | **VERIFIED** | Tested via `test_15_no_network_required` |
 | **Security Boundary** | Data/Config Only (Zero Executable Code Download) | **VERIFIED** | Enforced by `DataUpdateValidator` |
@@ -25,7 +25,7 @@
 | **Process-Restart Safety** | File-backed atomic state persistence | **VERIFIED** | Application Support file stores with `.tmp` -> `fsync` -> `os.replace` |
 | **Linux / CI Build Status** | `780+` tests passing | **PASSED** | Executed in CI sandbox (`python3 -m unittest discover -s tests`) |
 | **Xcode / Simulator Build** | Build & test in Xcode on macOS | **PASSED** | Executed in CI (`.github/workflows/ci.yml` on `macos-14`) |
-| **IPA Build & Release Asset** | `AgentCore-iOS-v0.1.0.ipa` | **CONFIGURED IN CI** | Built, validated, and published via GitHub Actions |
+| **IPA Build & Artifact** | `AgentCore-iOS-v0.1.0.ipa` | **CONFIGURED IN CI** | Built, validated, and uploaded as GitHub Actions artifact |
 
 ---
 
@@ -41,7 +41,7 @@
 - **`ios/ExportOptions.plist`**: Xcode IPA export options
 - **`scripts/validate_ipa.py`**: IPA archive inspection & integrity validator
 - **`tests/test_ipa_validation.py`**: Automated unit tests for IPA validation
-- **`AgentCore-iOS-v0.1.0.ipa`**: Signed iOS Application Package attached to GitHub Release v0.1.0
+- **`AgentCore-iOS-v0.1.0.ipa`**: Signed iOS Application Package artifact
 - **`agent-core-ios-v0.1.0.zip`**: Xcode project release zip package
 
 ---
@@ -58,5 +58,5 @@ To sign and build `.ipa` files in GitHub Actions, configure the following secret
 ## 4. Known Limitations & Deferred Work
 
 1. **Local Model Provider**: `LocalDeterministicPlanner` is explicitly labeled `TEST / DEVELOPMENT PROVIDER`. Real CoreML / Metal on-device LLM weights integration is deferred to post-Beta milestones.
-2. **Signing Credentials Requirement**: If Apple signing secrets are missing from GitHub Secrets, CI logs an explicit blocker warning and skips IPA export without generating a fake or corrupt file.
+2. **Signing Credentials Requirement**: If Apple signing secrets are missing from GitHub Secrets, CI job fails strictly with status code 1.
 3. **No Mandatory Cloud Backend**: Zero CloudKit, Firebase, or Supabase dependencies.

@@ -10,7 +10,7 @@ import zipfile
 import plistlib
 from pathlib import Path
 
-REQUIRED_BUNDLE_IDS = {"com.agentcore.AgentCoreIOS", "com.agentcore.ios"}
+REQUIRED_BUNDLE_ID = "com.agentcore.AgentCoreIOS"
 
 def validate_ipa(ipa_path: str) -> None:
     path = Path(ipa_path)
@@ -58,8 +58,8 @@ def validate_ipa(ipa_path: str) -> None:
             if not bundle_id:
                 raise ValueError("Info.plist missing CFBundleIdentifier")
 
-            if bundle_id not in REQUIRED_BUNDLE_IDS:
-                raise ValueError(f"Bundle ID mismatch: expected one of {sorted(list(REQUIRED_BUNDLE_IDS))}, got '{bundle_id}'")
+            if bundle_id != REQUIRED_BUNDLE_ID:
+                raise ValueError(f"Bundle ID mismatch: expected '{REQUIRED_BUNDLE_ID}', got '{bundle_id}'")
 
             version = plist.get("CFBundleShortVersionString")
             if not version:

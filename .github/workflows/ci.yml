@@ -66,7 +66,7 @@ jobs:
             CODE_SIGNING_ALLOWED=NO
 
   ios-ipa-build:
-    name: Build, Sign, Validate & Release iOS IPA
+    name: Build, Sign, Validate & Upload iOS IPA Artifact
     runs-on: macos-14
     needs: [test, ios-xcode-test]
     steps:
@@ -95,16 +95,16 @@ jobs:
             echo "✅ Apple Signing Credentials found in GitHub Secrets."
           else
             echo "has_credentials=false" >> $GITHUB_OUTPUT
-            echo "⚠️ BLOCKER: Missing required Apple Signing Secrets for direct IPA creation."
+            echo "❌ ERROR: Missing required Apple Signing Secrets for direct IPA creation."
             echo "   Required GitHub Secrets:"
             echo "   - APPLE_CERTIFICATE_P12_BASE64"
             echo "   - P12_PASSWORD"
             echo "   - PROVISIONING_PROFILE_BASE64"
-            echo "   Directly installable IPA build cannot proceed without signing credentials."
+            echo "   Failing job because signed IPA cannot be produced without credentials."
+            exit 1
           fi
 
       - name: Install Apple Certificate and Provisioning Profile
-        if: steps.check_secrets.outputs.has_credentials == 'true'
         env:
           CERT_BASE64: ${{ secrets.APPLE_CERTIFICATE_P12_BASE64 }}
           CERT_PASS: ${{ secrets.P12_PASSWORD }}
@@ -131,7 +131,6 @@ jobs:
           echo "✅ Certificate and Provisioning Profile installed successfully."
 
       - name: Archive iOS App
-        if: steps.check_secrets.outputs.has_credentials == 'true'
         run: |
           xcodebuild archive \
             -project ios/AgentCoreIOS.xcodeproj \
@@ -140,7 +139,6 @@ jobs:
             -archivePath $RUNNER_TEMP/AgentCoreIOS.xcarchive
 
       - name: Export IPA Package
-        if: steps.check_secrets.outputs.has_credentials == 'true'
         run: |
           xcodebuild -exportArchive \
             -archivePath $RUNNER_TEMP/AgentCoreIOS.xcarchive \
@@ -151,33 +149,12 @@ jobs:
           ls -la ./AgentCore-iOS-v0.1.0.ipa
 
       - name: Validate Exported IPA
-        if: steps.check_secrets.outputs.has_credentials == 'true'
         run: |
           python scripts/validate_ipa.py AgentCore-iOS-v0.1.0.ipa
 
       - name: Upload IPA Artifact
-        if: steps.check_secrets.outputs.has_credentials == 'true'
         uses: actions/upload-artifact@v4
         with:
           name: AgentCore-iOS-v0.1.0.ipa
           path: AgentCore-iOS-v0.1.0.ipa
           if-no-files-found: error
-
-      - name: Attach IPA to GitHub Release v0.1.0
-        if: steps.check_secrets.outputs.has_credentials == 'true' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master' || startsWith(github.ref, 'refs/tags/'))
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: v0.1.0
-          files: AgentCore-iOS-v0.1.0.ipa
-          append_body: true
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Report Blocker Status when Credentials Missing
-        if: steps.check_secrets.outputs.has_credentials == 'false'
-        run: |
-          echo "::warning title=IPA Signing Credentials Missing::IPA build step was skipped because Apple signing secrets are not configured in this repository."
-          echo "To enable direct IPA creation and automatic GitHub Release upload, configure:"
-          echo "  - APPLE_CERTIFICATE_P12_BASE64"
-          echo "  - P12_PASSWORD"
-          echo "  - PROVISIONING_PROFILE_BASE64"
