@@ -121,6 +121,14 @@ public final class AgentRuntime: @unchecked Sendable {
         return MemoryResult(status: .success, item: created)
     }
 
+    public func forget(key: String) async -> MemoryResult {
+        let deleted = memoryStore.forget(key: key)
+        if deleted {
+            return MemoryResult(status: .success)
+        }
+        return MemoryResult(status: .failed, errorMessage: "Memory key '\(key)' not found.")
+    }
+
     public func listCapabilities() async -> [Capability] {
         return Array(capabilities.values)
     }

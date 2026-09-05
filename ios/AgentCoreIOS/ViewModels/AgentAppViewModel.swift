@@ -154,13 +154,13 @@ public final class AgentAppViewModel: ObservableObject {
 
             try? await Task.sleep(nanoseconds: 500_000_000)
 
-            if result.status == .completed {
+            if result.status == .success {
                 self.progress = 1.0
                 self.state = .completed
                 self.liveSteps[4].status = "COMPLETED"
             } else {
                 self.state = .failed
-                self.failureReason = result.error ?? "Task execution failed"
+                self.failureReason = result.errorMessage ?? "Task execution failed"
                 self.liveSteps[4].status = "FAILED"
             }
 
