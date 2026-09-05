@@ -32,7 +32,7 @@ public struct VaultView: View {
                     TextField("Search memory...", text: $viewModel.searchQuery)
                         .font(.system(size: 13))
                         .foregroundColor(AgentTheme.text1)
-                        .onChange(of: viewModel.searchQuery) { _ in
+                        .onChange(of: viewModel.searchQuery) {
                             Task { await viewModel.refreshData() }
                         }
                 }

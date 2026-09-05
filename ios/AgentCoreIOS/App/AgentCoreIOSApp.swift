@@ -11,3 +11,10 @@ struct AgentCoreIOSApp: App {
         }
     }
 }
+
+public struct DiagnosticMainView: View {
+    public init() {}
+    public var body: some View {
+        MainTabView()
+    }
+}

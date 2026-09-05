@@ -46,7 +46,7 @@ public struct AgentOrbView: View {
         .onAppear {
             updateAnimation()
         }
-        .onChange(of: state) { _ in
+        .onChange(of: state) {
             updateAnimation()
         }
     }
