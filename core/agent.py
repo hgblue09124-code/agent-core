@@ -6,9 +6,9 @@ Composition Architecture:
     - agent-personal-vault: Persistent personal-data/storage layer (via PersonalVaultAdapter).
     - agent-capabilities: Replaceable capability adapters/dispatchers (via CapabilityRegistry & GitHubCapabilityAdapter).
 
-Beta v0.1 Acceptance Flow:
-    User Request → Observe → Retrieve Personal Context → Reason → Plan → Policy/Authority
-    → Capability Dispatch → Execute → Verify → Record Experience → Extract Lesson → Update Memory → Continue/Resume
+Beta v0.1 Closed-Loop Architecture:
+    Goal → Observe → Retrieve Personal Context → Reason → Plan → Decide Action →
+    Authorize → Execute → Observe Result → Verify → Update Memory/Experience → Continue / Replan / Ask User / Complete
 
 Precedence Hierarchy:
     Kernel / Security / Contracts > Verification requirements > Explicit task requirements > Learned strategies > Philosophy
@@ -43,6 +43,8 @@ from core.learning.evaluator import StrategyEvaluator
 from core.learning.retrieval import StrategyRanker
 from core.events.bus import EventBus
 from core.events.schema import new_event, EventPhase, EventStatus
+from core.runtime.loop import AgentLoopController, LoopStateStore
+from core.runtime.state import AgentLoopState, AgentLoopStatus
 
 
 @dataclass
@@ -86,7 +88,7 @@ class AgentRunResult:
 
 
 class Agent:
-    """Personal Agent — Corecomposition authority.
+    """Personal Agent — Core composition authority.
 
     Usage:
         agent = Agent(project_id="default")
@@ -124,6 +126,24 @@ class Agent:
         self._strategy_ranker = StrategyRanker(store=self._strategy_store)
         self._event_bus = EventBus()
         self._kernel = Kernel(project_id=self.project_id, budget=self.budget, policy=self._policy)
+
+        self._loop_controller = AgentLoopController(
+            project_id=self.project_id,
+            agent=self,
+            policy=self._policy,
+            capabilities=self._capabilities,
+            memory=self._memory,
+            vault=self._vault,
+            experience_engine=self._experience_engine,
+            strategy_store=self._strategy_store,
+            learning_pipeline=self._learning_pipeline,
+            strategy_evaluator=self._strategy_evaluator,
+            strategy_ranker=self._strategy_ranker,
+            event_bus=self._event_bus,
+            budget=self.budget,
+            kernel=self._kernel,
+        )
+        self._loop_store = LoopStateStore()
 
     # ── Capability API ──────────────────────────────────────────────────────
 
@@ -187,15 +207,17 @@ class Agent:
     def run(
         self,
         goal: str,
+        run_id: Optional[str] = None,
         project_id: Optional[str] = None,
         verbose: bool = False,
         capability_dispatch: Optional[tuple[str, dict[str, Any]]] = None,
         user_approved: bool = False,
     ) -> AgentRunResult:
-        """Execute a user task through the Personal Agent Beta v0.1 orchestration pipeline.
+        """Execute a user task through the closed-loop Agent Loop runtime pipeline.
 
         Pipeline:
-            OBSERVE → RETRIEVE PERSONAL CONTEXT → REASON → PLAN → POLICY → CAPABILITY DISPATCH → EXECUTE → VERIFY → RECORD EXPERIENCE → EXTRACT LESSON → UPDATE MEMORY → CONTINUE
+            OBSERVE → RETRIEVE PERSONAL CONTEXT → REASON → PLAN → DECIDE → AUTHORIZE →
+            EXECUTE → OBSERVE RESULT → VERIFY → UPDATE MEMORY/EXPERIENCE → CONTINUE / REPLAN / ASK USER / COMPLETE
         """
         t0 = time.time()
         pid = project_id or self.project_id
@@ -241,7 +263,7 @@ class Agent:
             task_context={"project_id": pid, "goal": goal}
         )
 
-        # Enforce strict precedence hierarchy: Kernel/Security > Verification > Task > Philosophy
+        # Enforce Philosophy precedence check
         try:
             self._philosophy.enforce_precedence_policy(requested_action=goal)
         except PhilosophyPrecedenceError as exc:
@@ -261,219 +283,120 @@ class Agent:
                 errors=[f"Authority violation: {exc}"],
             )
 
-        # 3. RETRIEVE PERSONAL CONTEXT & MEMORY: Retrieve personal vault context, memory, and strategies
-        identity_mem = self._memory.get_identity()
-        relevant_mems = self._memory.retrieve(MemoryQuery(query=goal, limit=3))
-        vault_contexts = self._vault.retrieve_context(query=goal, limit=3)
-        applicable_strategies = self._strategy_ranker.select_applicable_strategies(goal=goal, limit=2)
-
-        # Emit TASK_STARTED Event
-        self._event_bus.publish(
-            new_event(
-                run_id=f"RUN-{int(t0*1000):05d}",
-                phase=EventPhase.TASK_STARTED.value,
-                action=f"Started run for goal '{goal}'",
-            )
+        loop_state, exp_recorded = self._loop_controller.run(
+            goal=goal,
+            run_id=run_id,
+            project_id=pid,
+            user_approved=user_approved,
+            capability_dispatch=capability_dispatch,
         )
 
-        # 4. CAPABILITY DISPATCH (if requested)
-        cap_observations = []
-        cap_errors = []
-        if capability_dispatch:
-            cap_id, cap_inputs = capability_dispatch
-            cap_res = self.execute_capability(cap_id, cap_inputs, user_approved=user_approved)
-            if cap_res.success:
-                cap_observations.append(f"Capability '{cap_id}' executed successfully: {cap_res.output}")
-            elif cap_res.status == "DENIED":
-                cap_errors.append(f"Capability '{cap_id}' denied: {cap_res.error}")
-            else:
-                cap_errors.append(f"Capability '{cap_id}' failed: {cap_res.error}")
-
-        # Execute main kernel orchestration loop
-        res: KernelResult = self._kernel.run(goal=goal, project_id=pid)
-        ctx = self._kernel.get_run(res.run_id)
-
-        # 5. OBSERVATIONS & PLAN STEPS
-        plan_steps = []
-        observations = [f"Identity: {identity_mem.content[:60]}..."]
-        if vault_contexts:
-            observations.extend([f"Vault personal context: {vc.get('data')}" for vc in vault_contexts])
-        if relevant_mems:
-            observations.extend([f"Memory context: {m.content[:50]}" for m in relevant_mems])
-        if applicable_strategies:
-            observations.extend([f"Applied strategy: {s.name} ({s.rule[:40]})" for s in applicable_strategies])
-        if cap_observations:
-            observations.extend(cap_observations)
-
-        if ctx:
-            if ctx.plan and hasattr(ctx.plan, "steps"):
-                plan_steps = [f"{s.step_id}: {s.title}" for s in ctx.plan.steps]
-            elif ctx.plan and isinstance(ctx.plan, dict):
-                plan_steps = [
-                    f"{s.get('step_id', '')}: {s.get('title', '')}"
-                    for s in ctx.plan.get("steps", [])
-                ]
-            elif ctx.plan and isinstance(ctx.plan, str) and ctx.plan.strip():
-                plan_steps = [ctx.plan.strip()]
-
-            if ctx.knowledge_retrieved:
-                observations.extend([f"Retrieved: {k}" for k in ctx.knowledge_retrieved[:3]])
-            observations.append(f"Kernel phase: {ctx.kernel_phase}, status: {ctx.kernel_status}")
-
-        if not plan_steps:
-            tm = TaskManager()
-            tasks = tm.list_tasks(project_id=pid)
-            if tasks:
-                plan_steps = [f"{t.task_id}: {t.title}" for t in tasks[:5]]
-
-        # Combine errors
-        run_errors = list(res.errors) if res.errors else []
-        if cap_errors:
-            run_errors.extend(cap_errors)
-
-        # 6. RECORD EXPERIENCE
-        exp_recorded = False
-        exp = self._experience_engine.get_experience(res.run_id)
-        if exp is not None:
-            exp_recorded = True
-        else:
-            try:
-                new_exp = Experience(
-                    run_id=res.run_id,
-                    goal=goal,
-                    project_id=pid,
-                    action=f"Agent.run('{goal}')",
-                    observation=f"Kernel status={res.status}, phase={res.phase}",
-                    outcome="success" if res.success and not cap_errors else "failure",
-                    llm_calls=res.llm_calls,
-                    estimated_tokens=res.estimated_tokens,
-                )
-                exp = self._experience_engine.record_experience(new_exp)
-                exp_recorded = True
-            except (ExperienceStoreError, ValueError, OSError, RuntimeError) as exc:
-                exp_recorded = False
-                run_errors.append(f"Experience recording failed: {exc}")
-
-        # 7. EXTRACT LESSON -> FORM CANDIDATE STRATEGY -> EVALUATE STRATEGY
-        if exp is not None:
-            try:
-                # Process experience into candidate strategy
-                new_strat = self._learning_pipeline.process_experience(exp)
-
-                # Evaluate applied strategies against verification result
-                verdict = "PASS" if res.success and not cap_errors else "FAIL"
-                for strat in applicable_strategies:
-                    self._strategy_evaluator.evaluate_application(
-                        strategy_id=strat.strategy_id,
-                        run_id=res.run_id,
-                        task_id=res.run_id,
-                        verification_result=verdict,
-                        actual_outcome=f"status={res.status}, phase={res.phase}",
-                    )
-            except (ExperienceStoreError, ValueError, OSError, RuntimeError) as exc:
-                run_errors.append(f"Strategy learning pipeline notice: {exc}")
-                self._event_bus.publish(
-                    new_event(
-                        run_id=res.run_id,
-                        phase=EventPhase.EXPERIENCE.value,
-                        action=f"Learning pipeline exception: {exc}",
-                        status=EventStatus.FAIL.value,
-                    )
-                )
-
-        # 8. UPDATE MEMORY & VAULT
-        if res.success and not cap_errors:
-            self._memory.remember(
-                content=f"Successfully executed goal '{goal}' on project '{pid}'",
-                memory_type=MemoryType.SHORT_TERM.value,
-                source_run_id=res.run_id,
-                importance=0.6,
-            )
-            # Store summary in vault if relevant
-            self._vault.store_context(
-                key=f"run_summary_{res.run_id}",
-                data={"goal": goal, "run_id": res.run_id, "project_id": pid},
-                category="run_history",
-            )
-            self._event_bus.publish(
-                new_event(
-                    run_id=res.run_id,
-                    phase=EventPhase.MEMORY_UPDATED.value,
-                    action=f"Remembered successful run '{res.run_id}'",
-                    status=EventStatus.PASS.value,
-                )
-            )
-
         elapsed = time.time() - t0
+
+        # Map LoopState to AgentRunResult
+        verdict = "FAIL"
+        if loop_state.status == AgentLoopStatus.COMPLETED.value:
+            verdict = "PASS"
+        elif loop_state.status == AgentLoopStatus.WAITING_FOR_USER.value:
+            verdict = "PENDING"
+
+        obs_text = []
+        identity_mem = self._memory.get_identity()
+        if identity_mem:
+            obs_text.append(f"Identity: {identity_mem.content[:60]}...")
+        vault_contexts = self._vault.retrieve_context(query=goal, limit=3)
+        if vault_contexts:
+            obs_text.extend([f"Vault personal context: {vc.get('data')}" for vc in vault_contexts])
+
+        for o in loop_state.observations:
+            if isinstance(o.output, str) and "Capability '" in o.output:
+                obs_text.append(o.output)
+            else:
+                obs_text.append(f"Observation ({o.action_id}): status={o.status}, output={o.output}")
+
+        errors = [loop_state.error] if loop_state.error else []
+        is_authorized = not (loop_state.status == AgentLoopStatus.FAILED.value and ("Policy DENY" in loop_state.error or "denied" in loop_state.error or "requires explicit user approval" in loop_state.error))
+
         return AgentRunResult(
-            run_id=res.run_id,
-            project_id=pid,
-            goal=goal,
-            status=res.status if not cap_errors else ("FAILED" if res.success else res.status),
-            phase=res.phase,
-            plan_steps=plan_steps,
-            authorized=True,
-            verification_verdict="PASS" if (res.success and not cap_errors) else "FAIL",
+            run_id=loop_state.run_id,
+            project_id=loop_state.project_id,
+            goal=loop_state.goal,
+            status=loop_state.status,
+            phase=loop_state.phase,
+            plan_steps=loop_state.plan,
+            authorized=is_authorized,
+            verification_verdict=verdict,
             duration_seconds=elapsed,
-            llm_calls=res.llm_calls,
+            llm_calls=0,
             experience_recorded=exp_recorded,
-            errors=run_errors,
-            observations=observations,
+            errors=errors,
+            observations=obs_text,
         )
 
     # ── Continuation & Resumption ───────────────────────────────────────────
 
-    def resume(self, run_id: str) -> AgentRunResult:
-        """Resume an interrupted/non-terminal run from authoritative checkpoint."""
+    def resume(self, run_id: str, user_approved: bool = True) -> AgentRunResult:
+        """Resume an interrupted or WAITING_FOR_USER task from checkpoint."""
         t0 = time.time()
-        res = self._kernel.resume(run_id)
-        ctx = self._kernel.get_run(run_id)
-
-        plan_steps = []
-        if ctx and ctx.plan:
-            if hasattr(ctx.plan, "steps"):
-                plan_steps = [f"{s.step_id}: {s.title}" for s in ctx.plan.steps]
-            elif isinstance(ctx.plan, dict):
-                plan_steps = [f"{s.get('step_id', '')}: {s.get('title', '')}" for s in ctx.plan.get("steps", [])]
-
+        loop_state, exp_recorded = self._loop_controller.resume(run_id, user_approved=user_approved)
         elapsed = time.time() - t0
+
+        verdict = "PASS" if loop_state.status == AgentLoopStatus.COMPLETED.value else ("PENDING" if loop_state.status == AgentLoopStatus.WAITING_FOR_USER.value else "FAIL")
+        obs_text = [f"Resumed run '{run_id}'"]
+        obs_text.extend([f"Observation ({o.action_id}): status={o.status}, output={o.output}" for o in loop_state.observations])
+
         return AgentRunResult(
-            run_id=run_id,
-            project_id=getattr(res, "project_id", self.project_id),
-            goal=res.goal,
-            status=res.status,
-            phase=res.phase,
-            plan_steps=plan_steps,
+            run_id=loop_state.run_id,
+            project_id=loop_state.project_id,
+            goal=loop_state.goal,
+            status=loop_state.status,
+            phase=loop_state.phase,
+            plan_steps=loop_state.plan,
             authorized=True,
-            verification_verdict="PASS" if res.success else "FAIL",
+            verification_verdict=verdict,
             duration_seconds=elapsed,
-            llm_calls=res.llm_calls,
-            experience_recorded=True,
-            errors=list(res.errors),
-            observations=[f"Resumed run '{run_id}'"],
+            llm_calls=0,
+            experience_recorded=exp_recorded,
+            errors=[loop_state.error] if loop_state.error else [],
+            observations=obs_text,
         )
 
     def inspect_run(self, run_id: str) -> Optional[dict]:
         """Inspect detailed lifecycle state of a run."""
+        state = self._loop_store.load(run_id)
+        if state:
+            return state.to_dict()
         ctx = self._kernel.get_run(run_id)
-        if not ctx:
-            return None
-        return ctx.to_dict()
+        if ctx:
+            return ctx.to_dict()
+        return None
 
     def history(self) -> list[dict]:
         """List past runs history."""
         run_ids = self._kernel.list_runs()
         history_list = []
         for rid in reversed(run_ids):
-            ctx = self._kernel.get_run(rid)
-            if ctx:
+            state = self._loop_store.load(rid)
+            if state:
                 history_list.append({
-                    "run_id": ctx.run_id,
-                    "goal": ctx.goal,
-                    "project_id": ctx.project_id,
-                    "status": ctx.kernel_status,
-                    "phase": ctx.kernel_phase,
-                    "started_at": ctx.started_at,
-                    "finished_at": ctx.finished_at,
+                    "run_id": state.run_id,
+                    "goal": state.goal,
+                    "project_id": state.project_id,
+                    "status": state.status,
+                    "phase": state.phase,
+                    "started_at": state.started_at,
+                    "finished_at": state.finished_at,
                 })
+            else:
+                ctx = self._kernel.get_run(rid)
+                if ctx:
+                    history_list.append({
+                        "run_id": ctx.run_id,
+                        "goal": ctx.goal,
+                        "project_id": ctx.project_id,
+                        "status": ctx.kernel_status,
+                        "phase": ctx.kernel_phase,
+                        "started_at": ctx.started_at,
+                        "finished_at": ctx.finished_at,
+                    })
         return history_list

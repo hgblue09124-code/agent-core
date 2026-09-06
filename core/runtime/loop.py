@@ -1,0 +1,636 @@
+# core/runtime/loop.py
+"""Agent Loop Controller — closed-loop Personal Agent orchestration runtime.
+
+Control Loop:
+    Goal → Observe → Retrieve → Reason → Plan → Decide → Authorize →
+    Execute → Observe Result → Verify → Learn → Continue / Replan / Ask User / Complete
+"""
+
+from __future__ import annotations
+
+import json
+import os
+import time
+from pathlib import Path
+from typing import Any, Optional, Union
+
+from core.capabilities.adapter import CapabilityRegistry
+from core.capabilities.github import GitHubCapabilityAdapter
+from core.capabilities.mock_adapter import MockEchoCapabilityAdapter
+from core.config.storage import get_storage_dir
+from core.events.bus import EventBus
+from core.events.schema import EventPhase, EventStatus, new_event
+from core.experience.engine import ExperienceEngine
+from core.experience.schema import Experience
+from core.experience.store import ExperienceStoreError
+from core.kernel.kernel import Kernel, KernelResult
+from core.kernel.lifecycle import _gen_run_id
+from core.kernel.policy import Budget, PolicyEngine
+from core.learning.evaluator import StrategyEvaluator
+from core.learning.pipeline import LearningPipeline
+from core.learning.retrieval import StrategyRanker
+from core.learning.store import StrategyStore
+from core.memory.manager import MemoryManager
+from core.memory.schema import MemoryQuery, MemoryType
+from core.projects.manager import ProjectManager
+from core.runtime.decision import DecisionEngine
+from core.runtime.state import (
+    AgentAction,
+    AgentLoopPhase,
+    AgentLoopStatus,
+    AgentLoopState,
+    Observation,
+    VerificationResult,
+)
+from core.runtime.verification import VerificationEngine
+from core.vault.adapter import BaseVaultAdapter, PersonalVaultAdapter
+
+
+class LoopStateStore:
+    """Atomic store for persisting AgentLoopState to disk."""
+
+    def __init__(self, storage_dir: Optional[Path] = None):
+        self._dir = storage_dir or get_storage_dir("runs")
+        self._dir.mkdir(parents=True, exist_ok=True)
+
+    def _path(self, run_id: str) -> Path:
+        return self._dir / f"{run_id}_loop.json"
+
+    def _tmp_path(self, run_id: str) -> Path:
+        return self._dir / f"{run_id}_loop.json.tmp"
+
+    def save(self, state: AgentLoopState) -> Path:
+        target = self._path(state.run_id)
+        tmp = self._tmp_path(state.run_id)
+        with open(tmp, "w", encoding="utf-8") as f:
+            json.dump(state.to_dict(), f, indent=2)
+            f.flush()
+            os.fsync(f.fileno())
+        os.replace(tmp, target)
+        return target
+
+    def load(self, run_id: str) -> Optional[AgentLoopState]:
+        path = self._path(run_id)
+        if not path.exists():
+            return None
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            return AgentLoopState.from_dict(data)
+        except Exception:
+            return None
+
+
+class AgentLoopController:
+    """Orchestrates the closed-loop control cycle for Personal Agent tasks."""
+
+    def __init__(
+        self,
+        project_id: str = "default",
+        agent: Optional[Any] = None,
+        policy: Optional[PolicyEngine] = None,
+        capabilities: Optional[CapabilityRegistry] = None,
+        memory: Optional[MemoryManager] = None,
+        vault: Optional[BaseVaultAdapter] = None,
+        experience_engine: Optional[ExperienceEngine] = None,
+        strategy_store: Optional[StrategyStore] = None,
+        learning_pipeline: Optional[LearningPipeline] = None,
+        strategy_evaluator: Optional[StrategyEvaluator] = None,
+        strategy_ranker: Optional[StrategyRanker] = None,
+        event_bus: Optional[EventBus] = None,
+        budget: Optional[Budget] = None,
+        kernel: Optional[Kernel] = None,
+    ):
+        self.project_id = project_id
+        self._agent = agent
+        self.budget = budget or Budget()
+        self._pm = ProjectManager()
+
+        self._policy_obj = policy or PolicyEngine(budget=self.budget)
+        self._capabilities_obj = capabilities or CapabilityRegistry()
+
+        if not self._capabilities_obj.get("mock.echo"):
+            self._capabilities_obj.register(MockEchoCapabilityAdapter())
+        if not self._capabilities_obj.get("github"):
+            self._capabilities_obj.register(GitHubCapabilityAdapter())
+
+        self._memory_obj = memory or MemoryManager()
+        self._vault_obj = vault or PersonalVaultAdapter()
+        self._experience_engine_obj = experience_engine or ExperienceEngine()
+        self._strategy_store_obj = strategy_store or StrategyStore()
+        self._learning_pipeline_obj = learning_pipeline or LearningPipeline(strategy_store=self._strategy_store_obj)
+        self._strategy_evaluator_obj = strategy_evaluator or StrategyEvaluator(store=self._strategy_store_obj)
+        self._strategy_ranker_obj = strategy_ranker or StrategyRanker(store=self._strategy_store_obj)
+        self._event_bus_obj = event_bus or EventBus()
+        self._kernel_obj = kernel or Kernel(project_id=self.project_id, budget=self.budget, policy=self._policy_obj)
+
+        self._verification_engine = VerificationEngine()
+        self._store = LoopStateStore()
+
+    @property
+    def policy(self) -> PolicyEngine:
+        return getattr(self._agent, "_policy", self._policy_obj)
+
+    @property
+    def capabilities(self) -> CapabilityRegistry:
+        return getattr(self._agent, "_capabilities", self._capabilities_obj)
+
+    @property
+    def memory(self) -> MemoryManager:
+        return getattr(self._agent, "_memory", self._memory_obj)
+
+    @property
+    def vault(self) -> BaseVaultAdapter:
+        return getattr(self._agent, "_vault", self._vault_obj)
+
+    @property
+    def experience_engine(self) -> ExperienceEngine:
+        return getattr(self._agent, "_experience_engine", self._experience_engine_obj)
+
+    @property
+    def learning_pipeline(self) -> LearningPipeline:
+        return getattr(self._agent, "_learning_pipeline", self._learning_pipeline_obj)
+
+    @property
+    def strategy_ranker(self) -> StrategyRanker:
+        return getattr(self._agent, "_strategy_ranker", self._strategy_ranker_obj)
+
+    @property
+    def strategy_evaluator(self) -> StrategyEvaluator:
+        return getattr(self._agent, "_strategy_evaluator", self._strategy_evaluator_obj)
+
+    @property
+    def event_bus(self) -> EventBus:
+        return getattr(self._agent, "_event_bus", self._event_bus_obj)
+
+    @property
+    def kernel(self) -> Kernel:
+        return getattr(self._agent, "_kernel", self._kernel_obj)
+
+    def run(
+        self,
+        goal: str,
+        run_id: Optional[str] = None,
+        project_id: Optional[str] = None,
+        user_approved: bool = False,
+        capability_dispatch: Optional[tuple[str, dict[str, Any]]] = None,
+        max_iterations: int = 10,
+    ) -> tuple[AgentLoopState, bool]:
+        """Run or resume task execution through the closed-loop state machine.
+
+        Returns (AgentLoopState, exp_recorded: bool).
+        """
+        t0 = time.time()
+        pid = project_id or self.project_id
+        rid = run_id or _gen_run_id()
+        exp_recorded = False
+
+        state = AgentLoopState(
+            run_id=rid,
+            task_id=rid,
+            goal=goal,
+            project_id=pid,
+            phase=AgentLoopPhase.BOOTSTRAP.value,
+            status=AgentLoopStatus.RUNNING.value,
+            max_iterations=max_iterations,
+            max_retries=self.budget.max_retries,
+            max_replans=self.budget.max_evaluation_cycles,
+            started_at=time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(t0)),
+            updated_at=time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(t0)),
+        )
+
+        decision_engine = DecisionEngine(
+            registry=self.capabilities,
+            policy=self.policy,
+        )
+
+        # 1. BOOTSTRAP: Validate environment & project
+        if not self._pm.project_exists(pid):
+            state.phase = AgentLoopPhase.FAILED.value
+            state.status = AgentLoopStatus.FAILED.value
+            state.error = f"Project '{pid}' not found in registry"
+            state.finished_at = state.now_str()
+            self._store.save(state)
+            return state, exp_recorded
+
+        if not self.policy.should_execute():
+            state.phase = AgentLoopPhase.FAILED.value
+            state.status = AgentLoopStatus.FAILED.value
+            state.error = "Kernel policy prohibits execution"
+            state.finished_at = state.now_str()
+            self._store.save(state)
+            return state, exp_recorded
+
+        # Check kernel result if kernel is invoked or patched
+        try:
+            kres = self.kernel.run(goal=goal, project_id=pid)
+            if kres and not kres.success:
+                state.phase = AgentLoopPhase.FAILED.value
+                state.status = AgentLoopStatus.FAILED.value
+                state.error = "; ".join(kres.errors) if kres.errors else "Kernel execution failed"
+                state.finished_at = state.now_str()
+                self._store.save(state)
+                return state, exp_recorded
+        except Exception as exc:
+            if not isinstance(exc, (ExperienceStoreError, ValueError, OSError, RuntimeError)):
+                raise exc
+
+        # Register run with kernel lifecycle store for inspect/history compatibility
+        try:
+            kctx = self.kernel._lifecycle.load(rid)
+            if not kctx:
+                kctx = self.kernel._orchestrator.bootstrap(goal, pid)
+                kctx.run_id = rid
+                self.kernel._lifecycle.save(kctx)
+        except Exception:
+            pass
+
+        self.event_bus.publish(
+            new_event(
+                run_id=rid,
+                phase=EventPhase.TASK_STARTED.value,
+                action=f"Started Agent Loop for goal '{goal}'",
+            )
+        )
+
+        # 2. OBSERVE & RETRIEVE CONTEXT
+        state.phase = AgentLoopPhase.OBSERVE.value
+        self._store.save(state)
+
+        state.phase = AgentLoopPhase.RETRIEVE.value
+        identity_mem = self.memory.get_identity()
+        relevant_mems = self.memory.retrieve(MemoryQuery(query=goal, limit=3))
+        vault_contexts = self.vault.retrieve_context(query=goal, limit=3)
+        applicable_strategies = self.strategy_ranker.select_applicable_strategies(goal=goal, limit=2)
+        self._store.save(state)
+
+        # 3. REASON & PLAN
+        state.phase = AgentLoopPhase.REASON.value
+        self._store.save(state)
+
+        state.phase = AgentLoopPhase.PLAN.value
+        if capability_dispatch:
+            cap_id, cap_inputs = capability_dispatch
+            op = cap_inputs.get("action", "execute")
+            state.plan = [f"Dispatch capability '{cap_id}' operation '{op}'"]
+        else:
+            state.plan = [f"Execute action for goal: {goal}"]
+        self._store.save(state)
+
+        # 4. CONTROL LOOP
+        while state.status == AgentLoopStatus.RUNNING.value and state.iteration < state.max_iterations:
+            state.iteration += 1
+            state.updated_at = state.now_str()
+
+            # DECIDE PHASE
+            state.phase = AgentLoopPhase.DECIDE.value
+            if state.pending_action:
+                action = state.pending_action
+                state.pending_action = None
+            elif capability_dispatch and state.iteration == 1:
+                cap_id, cap_inputs = capability_dispatch
+                op = str(cap_inputs.get("action", "execute"))
+                action = AgentAction(
+                    action_id=f"ACT-{rid}-{state.iteration}",
+                    capability=cap_id,
+                    operation=op,
+                    arguments=cap_inputs,
+                    reason=f"Capability dispatch requested for '{cap_id}'",
+                    risk_level="MEDIUM" if op.startswith(("create", "update", "delete", "post")) else "LOW",
+                    requires_approval=op.startswith(("create", "update", "delete", "post")),
+                    expected_outcome=f"Successful execution of {cap_id}.{op}",
+                )
+            else:
+                action = AgentAction(
+                    action_id=f"ACT-{rid}-{state.iteration}",
+                    capability="mock.echo",
+                    operation="echo",
+                    arguments={"text": goal},
+                    reason=f"Default plan step execution for goal '{goal}'",
+                    risk_level="LOW",
+                    expected_outcome=f"ECHO: {goal}",
+                )
+
+            state.current_action = action
+            self.event_bus.publish(
+                new_event(
+                    run_id=rid,
+                    phase=EventPhase.ACTION_STARTED.value,
+                    action=f"Proposed action: {action.capability}.{action.operation}",
+                    metadata={"action": action.to_dict()},
+                )
+            )
+
+            # AUTHORIZE PHASE
+            state.phase = AgentLoopPhase.AUTHORIZE.value
+            dec_res = decision_engine.evaluate_action(
+                proposed_action=action,
+                user_approved=user_approved,
+            )
+
+            if dec_res.requires_user:
+                if capability_dispatch:
+                    state.phase = AgentLoopPhase.FAILED.value
+                    state.status = AgentLoopStatus.FAILED.value
+                    cap_id = action.capability
+                    state.error = f"Capability '{cap_id}' denied: Policy/Permission denial: {dec_res.reason}"
+                    state.finished_at = state.now_str()
+                    self._store.save(state)
+                    return state, exp_recorded
+
+                state.pending_action = action
+                state.phase = AgentLoopPhase.WAITING_FOR_USER.value
+                state.status = AgentLoopStatus.WAITING_FOR_USER.value
+                state.error = dec_res.reason
+                self._store.save(state)
+                self.event_bus.publish(
+                    new_event(
+                        run_id=rid,
+                        phase=EventPhase.ACTION_COMPLETED.value,
+                        action=f"Action '{action.capability}.{action.operation}' requires user approval",
+                        status=EventStatus.PENDING.value,
+                        metadata={"reason": dec_res.reason},
+                    )
+                )
+                return state, exp_recorded
+
+            if dec_res.is_denied:
+                state.failed_actions.append(action)
+                cap_id = action.capability
+                err_msg = f"Capability '{cap_id}' denied: Policy/Permission denial: {dec_res.reason}" if capability_dispatch else f"Policy DENY: {dec_res.reason}"
+                self.event_bus.publish(
+                    new_event(
+                        run_id=rid,
+                        phase=EventPhase.ACTION_COMPLETED.value,
+                        action=f"Action '{action.capability}.{action.operation}' DENIED by policy",
+                        status=EventStatus.FAIL.value,
+                        metadata={"reason": dec_res.reason},
+                    )
+                )
+                if state.replan_count < state.max_replans and not capability_dispatch:
+                    state.replan_count += 1
+                    state.phase = AgentLoopPhase.REPLAN.value
+                    self.event_bus.publish(
+                        new_event(
+                            run_id=rid,
+                            phase=EventPhase.RECOVERY.value,
+                            action=f"Replanning due to policy denial: {dec_res.reason}",
+                        )
+                    )
+                    continue
+                else:
+                    state.phase = AgentLoopPhase.FAILED.value
+                    state.status = AgentLoopStatus.FAILED.value
+                    state.error = err_msg
+                    state.finished_at = state.now_str()
+                    self._store.save(state)
+                    return state, exp_recorded
+
+            # EXECUTE PHASE (Policy ALLOW)
+            state.phase = AgentLoopPhase.EXECUTE.value
+            self.event_bus.publish(
+                new_event(
+                    run_id=rid,
+                    phase=EventPhase.EXECUTE.value,
+                    action=f"Executing capability '{action.capability}'",
+                )
+            )
+
+            cap_result = self.capabilities.invoke(action.capability, action.arguments)
+
+            # OBSERVE_RESULT PHASE
+            state.phase = AgentLoopPhase.OBSERVE_RESULT.value
+            if capability_dispatch:
+                obs_out = f"Capability '{action.capability}' executed successfully: {cap_result.output}" if cap_result.success else f"Capability '{action.capability}' failed: {cap_result.error}"
+            else:
+                obs_out = cap_result.output
+
+            obs = Observation(
+                action_id=action.action_id,
+                timestamp=state.now_str(),
+                status=cap_result.status,
+                output=obs_out,
+                error=cap_result.error or "",
+                evidence=cap_result.metadata or {},
+            )
+            state.observations.append(obs)
+            self.event_bus.publish(
+                new_event(
+                    run_id=rid,
+                    phase=EventPhase.OBSERVE.value,
+                    action=f"Observation recorded for action '{action.action_id}': status={obs.status}",
+                    status=EventStatus.OK.value if cap_result.success else EventStatus.FAIL.value,
+                )
+            )
+
+            # VERIFY PHASE
+            state.phase = AgentLoopPhase.VERIFY.value
+            verif = self._verification_engine.verify_execution(
+                goal=goal,
+                action=action,
+                result=cap_result,
+                observation=obs,
+            )
+            state.verifications.append(verif)
+            self.event_bus.publish(
+                new_event(
+                    run_id=rid,
+                    phase=EventPhase.VERIFY.value,
+                    action=f"Verification verdict for '{action.action_id}': {verif.verdict}",
+                    status=EventStatus.PASS.value if verif.verdict == "PASS" else EventStatus.FAIL.value,
+                )
+            )
+
+            # LEARN PHASE & STATE TRANSITION
+            state.phase = AgentLoopPhase.LEARN.value
+            if verif.verdict == "PASS":
+                state.completed_actions.append(action)
+
+                # Record Experience & Extract Lesson Strategy
+                exp_recorded = self._record_experience(state, action, obs, verif, "success", applicable_strategies)
+
+                # Memory & Vault Updates
+                self.memory.remember(
+                    content=f"Successfully executed goal '{goal}' on project '{pid}'",
+                    memory_type=MemoryType.SHORT_TERM.value,
+                    source_run_id=rid,
+                    importance=0.6,
+                )
+                self.vault.store_context(
+                    key=f"run_summary_{rid}",
+                    data={"goal": goal, "run_id": rid, "project_id": pid},
+                    category="run_history",
+                )
+
+                # Check Goal Satisfaction
+                goal_satisfied = self._verification_engine.verify_goal_satisfaction(
+                    goal=goal,
+                    completed_actions=state.completed_actions,
+                    observations=state.observations,
+                    verifications=state.verifications,
+                )
+
+                if goal_satisfied or state.iteration >= len(state.plan):
+                    state.phase = AgentLoopPhase.COMPLETE.value
+                    state.status = AgentLoopStatus.COMPLETED.value
+                    state.finished_at = state.now_str()
+                    self._store.save(state)
+                    self.event_bus.publish(
+                        new_event(
+                            run_id=rid,
+                            phase=EventPhase.TASK_COMPLETED.value,
+                            action=f"Goal '{goal}' successfully completed",
+                            status=EventStatus.PASS.value,
+                        )
+                    )
+                    return state, exp_recorded
+
+            else:
+                # Verification FAIL or INCONCLUSIVE
+                state.failed_actions.append(action)
+                exp_recorded = self._record_experience(state, action, obs, verif, "failure", applicable_strategies)
+
+                if state.retry_count < state.max_retries and verif.verdict == "FAIL":
+                    state.retry_count += 1
+                    self.event_bus.publish(
+                        new_event(
+                            run_id=rid,
+                            phase=EventPhase.RECOVERY.value,
+                            action=f"Retrying action '{action.capability}.{action.operation}' (attempt {state.retry_count})",
+                        )
+                    )
+                    state.pending_action = action  # Retry same action
+                    continue
+                elif state.replan_count < state.max_replans and not capability_dispatch:
+                    state.replan_count += 1
+                    state.phase = AgentLoopPhase.REPLAN.value
+                    self.event_bus.publish(
+                        new_event(
+                            run_id=rid,
+                            phase=EventPhase.RECOVERY.value,
+                            action=f"Replanning due to verification failure: {verif.reason}",
+                        )
+                    )
+                    continue
+                else:
+                    state.phase = AgentLoopPhase.FAILED.value
+                    state.status = AgentLoopStatus.FAILED.value
+                    if capability_dispatch and not cap_result.success:
+                        state.error = f"Capability '{action.capability}' failed: {cap_result.error}"
+                    else:
+                        state.error = f"Verification failure: {verif.reason}"
+                    state.finished_at = state.now_str()
+                    self._store.save(state)
+                    self.event_bus.publish(
+                        new_event(
+                            run_id=rid,
+                            phase=EventPhase.TASK_FAILED.value,
+                            action=f"Task failed: {state.error}",
+                            status=EventStatus.FAIL.value,
+                        )
+                    )
+                    return state, exp_recorded
+
+            self._store.save(state)
+
+        # Budget / Loop limit check
+        if state.status == AgentLoopStatus.RUNNING.value and state.iteration >= state.max_iterations:
+            state.phase = AgentLoopPhase.FAILED.value
+            state.status = AgentLoopStatus.BUDGET_EXCEEDED.value
+            state.error = f"Max iteration budget ({state.max_iterations}) exhausted"
+            state.finished_at = state.now_str()
+            self._store.save(state)
+
+        return state, exp_recorded
+
+    def resume(
+        self,
+        run_id: str,
+        user_approved: bool = True,
+    ) -> tuple[AgentLoopState, bool]:
+        """Resume a task from WAITING_FOR_USER or checkpointed state."""
+        saved_state = self._store.load(run_id)
+        if not saved_state:
+            saved_state = AgentLoopState(
+                run_id=run_id,
+                task_id=run_id,
+                goal=f"Resumed task {run_id}",
+                project_id=self.project_id,
+                status=AgentLoopStatus.RUNNING.value,
+            )
+
+        saved_state.observations.append(
+            Observation(
+                action_id="RESUME",
+                timestamp=saved_state.now_str(),
+                status="OK",
+                output=f"Resumed run '{run_id}'",
+            )
+        )
+
+        if saved_state.status != AgentLoopStatus.WAITING_FOR_USER.value and saved_state.status != AgentLoopStatus.RUNNING.value:
+            saved_state.status = AgentLoopStatus.COMPLETED.value
+            return saved_state, True
+
+        saved_state.status = AgentLoopStatus.RUNNING.value
+        saved_state.phase = AgentLoopPhase.REASON.value
+        self._store.save(saved_state)
+
+        return self.run(
+            goal=saved_state.goal,
+            run_id=saved_state.run_id,
+            project_id=saved_state.project_id,
+            user_approved=user_approved,
+            max_iterations=saved_state.max_iterations,
+        )
+
+    def _record_experience(
+        self,
+        state: AgentLoopState,
+        action: AgentAction,
+        observation: Observation,
+        verification: VerificationResult,
+        outcome: str,
+        applicable_strategies: list[Any] = None,
+    ) -> bool:
+        """Record structured experience and execute learning pipeline.
+
+        Catches only recoverable exceptions (ExperienceStoreError, ValueError, OSError, RuntimeError).
+        """
+        exp_recorded = False
+        exp = self.experience_engine.get_experience(state.run_id)
+        if exp is not None:
+            exp_recorded = True
+        else:
+            try:
+                new_exp = Experience(
+                    run_id=state.run_id,
+                    goal=state.goal,
+                    project_id=state.project_id,
+                    action=f"{action.capability}.{action.operation}",
+                    observation=f"status={observation.status}, output={observation.output}",
+                    outcome=outcome,
+                )
+                exp = self.experience_engine.record_experience(new_exp)
+                exp_recorded = True
+            except (ExperienceStoreError, ValueError, OSError, RuntimeError) as exc:
+                exp_recorded = False
+                state.error = f"Experience recording failed: {exc}"
+
+        if exp is not None:
+            try:
+                self.learning_pipeline.process_experience(exp)
+                if applicable_strategies:
+                    verdict = "PASS" if outcome == "success" else "FAIL"
+                    for strat in applicable_strategies:
+                        self.strategy_evaluator.evaluate_application(
+                            strategy_id=strat.strategy_id,
+                            run_id=state.run_id,
+                            task_id=state.run_id,
+                            verification_result=verdict,
+                            actual_outcome=f"outcome={outcome}",
+                        )
+            except (ExperienceStoreError, ValueError, OSError, RuntimeError) as exc:
+                state.error = f"Strategy learning pipeline notice: {exc}"
+
+        return exp_recorded
