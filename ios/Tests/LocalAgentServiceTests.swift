@@ -316,7 +316,7 @@ final class LocalAgentServiceTests: XCTestCase {
         let result = await service.runStreaming(
             goal: "Streamed test goal",
             userApproved: true,
-            capabilityDispatch: nil,
+            capabilityDispatch: (capabilityId: "mock.echo", input: ["action": "echo", "text": "hello"]),
             onEvent: { event in
                 collector.add(event.phase)
             }
@@ -325,21 +325,29 @@ final class LocalAgentServiceTests: XCTestCase {
         XCTAssertEqual(result.status, .success)
         let emittedPhases = collector.phases
         XCTAssertTrue(emittedPhases.contains(.taskStarted))
+        XCTAssertTrue(emittedPhases.contains(.execution))
         XCTAssertTrue(emittedPhases.contains(.planCreated))
         XCTAssertTrue(emittedPhases.contains(.verify))
         XCTAssertTrue(emittedPhases.contains(.taskCompleted))
     }
 
     func test20_cancel_stopsUnfinishedRun() async {
-        let result = await service.run(goal: "Goal to cancel via additive API", userApproved: true)
-        let cancelled = await service.cancel(runId: result.runId)
+        // 1. Cancelling a non-existent runId returns false
+        let nonExistentRes = await service.cancel(runId: "RUN-NONEXISTENT-999")
+        XCTAssertFalse(nonExistentRes)
 
-        // Finished run returns false
-        XCTAssertFalse(cancelled)
+        // 2. Cancelling an already finished run returns false
+        let finishedRun = await service.run(goal: "Goal to finish", userApproved: true)
+        let finishedCancelRes = await service.cancel(runId: finishedRun.runId)
+        XCTAssertFalse(finishedCancelRes)
 
-        // Active/pending cancellation
-        let newCancelRes = await service.cancel(runId: "RUN-PENDING-TEST")
-        XCTAssertTrue(newCancelRes)
+        // 3. Cancelling a non-terminal / checkpointed run returns true
+        let chkStore = LocalCheckpointStore(storageDir: tempDir.appendingPathComponent("runs"))
+        let pendingRun = AgentRunResult(runId: "RUN-PENDING-001", status: .notExecuted, goal: "Pending goal")
+        chkStore.save(result: pendingRun)
+
+        let pendingCancelRes = await service.cancel(runId: "RUN-PENDING-001")
+        XCTAssertTrue(pendingCancelRes)
     }
 
     func test21_pendingApproval_recordedOnPolicyDenial() async {
@@ -367,6 +375,7 @@ final class LocalAgentServiceTests: XCTestCase {
         XCTAssertGreaterThanOrEqual(all.count, 2)
         XCTAssertTrue(successOnly.allSatisfy { $0.status == .success })
         XCTAssertTrue(failedOnly.allSatisfy { $0.status == .failed || $0.status == .denied })
+        XCTAssertTrue(failedOnly.contains(where: { $0.status == .denied }))
     }
 
     func test23_vaultSummary_calculatesMetrics() async {
@@ -375,6 +384,7 @@ final class LocalAgentServiceTests: XCTestCase {
         let summary = await service.vaultSummary()
         XCTAssertTrue(summary.isOperational)
         XCTAssertGreaterThanOrEqual(summary.totalItemsCount, 1)
+        XCTAssertGreaterThanOrEqual(summary.categoriesCount["user_preference"] ?? 0, 1)
     }
 
     func test24_listConnections_returnsLocalAndRemoteCapabilities() async {

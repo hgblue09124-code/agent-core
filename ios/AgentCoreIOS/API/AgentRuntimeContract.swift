@@ -46,7 +46,7 @@ public protocol LocalAgentServiceProtocol: Sendable {
     /// Return current operational status (READY / THINKING / RUNNING / OFFLINE).
     func currentAgentStatus() async -> AgentStatus
 
-    /// Execute a task with live event streaming and capability dispatch.
+    /// Execute a task with milestone lifecycle event progress callbacks and optional capability dispatch.
     func runStreaming(
         goal: String,
         userApproved: Bool,
@@ -54,7 +54,7 @@ public protocol LocalAgentServiceProtocol: Sendable {
         onEvent: @escaping @Sendable (AgentRunEvent) -> Void
     ) async -> AgentRunResult
 
-    /// Cancel an active or pending run by run ID.
+    /// Cancel an active or pending run by run ID. Returns false if run does not exist or is already terminal.
     func cancel(runId: String) async -> Bool
 
     /// Get pending approval request for a given run ID if policy denied execution.

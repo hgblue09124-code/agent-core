@@ -14,7 +14,9 @@ public final class AgentRuntime: @unchecked Sendable {
     private var runEventsMap: [String: [AgentRunEvent]] = [:]
     private var pendingApprovals: [String: PermissionRequest] = [:]
     private var cancelledRuns: Set<String> = []
+    private var activeRunIds: Set<String> = []
     private var isRunningTask: Bool = false
+    private var isThinking: Bool = false
 
     public init(
         memoryStore: LocalMemoryStore? = nil,
@@ -57,6 +59,9 @@ public final class AgentRuntime: @unchecked Sendable {
         if !vaultStore.isAvailable() {
             return .offline
         }
+        if isThinking {
+            return .thinking
+        }
         if isRunningTask {
             return .running
         }
@@ -73,12 +78,17 @@ public final class AgentRuntime: @unchecked Sendable {
         capabilityDispatch: (capabilityId: String, input: [String: String])? = nil,
         onEvent: @escaping @Sendable (AgentRunEvent) -> Void
     ) async -> AgentRunResult {
-        isRunningTask = true
-        defer { isRunningTask = false }
-
         let trimmedGoal = goal.trimmingCharacters(in: .whitespacesAndNewlines)
         let seq = Int(Date().timeIntervalSince1970 * 1000) % 100000
         let runId = String(format: "RUN-%05d", seq)
+
+        activeRunIds.insert(runId)
+        isRunningTask = true
+        defer {
+            activeRunIds.remove(runId)
+            isRunningTask = false
+            isThinking = false
+        }
 
         if cancelledRuns.contains(runId) {
             let res = AgentRunResult(
@@ -157,6 +167,7 @@ public final class AgentRuntime: @unchecked Sendable {
         }
 
         if let dispatch = capabilityDispatch {
+            emit(.execution, .running, "Executing capability action: \(dispatch.input["action"] ?? dispatch.capabilityId)")
             let capRes = await executeCapability(
                 capabilityId: dispatch.capabilityId,
                 input: dispatch.input,
@@ -189,7 +200,9 @@ public final class AgentRuntime: @unchecked Sendable {
             }
         }
 
+        isThinking = true
         let planSteps = await planner.generatePlan(goal: trimmedGoal)
+        isThinking = false
         emit(.planCreated, .ok, "Generated plan with \(planSteps.count) steps")
 
         // Store run summary in vault
@@ -216,11 +229,19 @@ public final class AgentRuntime: @unchecked Sendable {
     }
 
     public func cancel(runId: String) async -> Bool {
+        let isCheckpointExist = checkpointStore.get(runId: runId) != nil
+        let isActive = activeRunIds.contains(runId)
+
+        guard isCheckpointExist || isActive else {
+            return false
+        }
+
         if let existing = checkpointStore.get(runId: runId) {
             if existing.status == .success || existing.status == .failed || existing.status == .denied {
                 return false
             }
         }
+
         cancelledRuns.insert(runId)
         _ = await cancelRun(runId: runId)
         return true
@@ -264,7 +285,7 @@ public final class AgentRuntime: @unchecked Sendable {
             if filter == .success && status != .success {
                 continue
             }
-            if filter == .failed && status != .failed {
+            if filter == .failed && (status != .failed && status != .denied) {
                 continue
             }
 
