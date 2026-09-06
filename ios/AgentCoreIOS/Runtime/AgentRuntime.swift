@@ -353,6 +353,7 @@ public final class AgentRuntime: @unchecked Sendable {
 
     public func remember(key: String, value: String) async -> MemoryResult {
         let item = memoryStore.remember(key: key, value: value)
+        _ = vaultStore.storeContext(key: key, value: value, category: "user_preference")
         return MemoryResult(status: .success, item: item)
     }
 
@@ -367,6 +368,7 @@ public final class AgentRuntime: @unchecked Sendable {
                 errorMessage: "Policy Denial: Memory update for key '\(key)' requires explicit user approval (userApproved = true)."
             )
         }
+        _ = vaultStore.storeContext(key: key, value: value, category: "user_preference")
         if let updated = memoryStore.update(key: key, value: value) {
             return MemoryResult(status: .success, item: updated)
         }
@@ -376,7 +378,8 @@ public final class AgentRuntime: @unchecked Sendable {
 
     public func forget(key: String) async -> MemoryResult {
         let removed = memoryStore.forget(key: key)
-        if removed {
+        let vaultRemoved = vaultStore.deleteContext(key: key)
+        if removed || vaultRemoved {
             return MemoryResult(status: .success)
         } else {
             return MemoryResult(status: .failed, errorMessage: "Memory key '\(key)' not found.")
