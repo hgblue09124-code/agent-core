@@ -3,10 +3,10 @@
 
 import SwiftUI
 
-public struct ExecuteView: View {
+struct ExecuteView: View {
     @EnvironmentObject private var viewModel: AgentAppViewModel
 
-    public init() {}
+    init() {}
 
     private var currentOrbStatus: AgentStatus {
         switch viewModel.executionState {

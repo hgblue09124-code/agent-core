@@ -3,10 +3,10 @@
 
 import SwiftUI
 
-public struct ActivityRowView: View {
-    public let record: ActivityRecord
+struct ActivityRowView: View {
+    let record: ActivityRecord
 
-    public init(record: ActivityRecord) {
+    init(record: ActivityRecord) {
         self.record = record
     }
 

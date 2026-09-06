@@ -3,11 +3,11 @@
 
 import SwiftUI
 
-public struct HomeView: View {
+struct HomeView: View {
     @EnvironmentObject private var viewModel: AgentAppViewModel
     @State private var inputText: String = ""
 
-    public init() {}
+    init() {}
 
     private var currentStatus: AgentStatus {
         switch viewModel.executionState {
@@ -129,7 +129,7 @@ public struct HomeView: View {
                     CurrentTaskCard(
                         goal: last.goal,
                         subtext: last.status == .success ? "Task finished cleanly" : (last.errorMessage ?? "Task failed"),
-                        progress: last.status == .success ? 1.0 : 0.4,
+                        progress: last.status == .success ? 1.0 : 0.0,
                         status: last.status == .success ? .ready : .running
                     )
                 }

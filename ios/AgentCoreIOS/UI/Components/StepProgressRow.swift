@@ -3,18 +3,18 @@
 
 import SwiftUI
 
-public enum ExecutionStepStatus {
+enum ExecutionStepStatus {
     case completed
     case active
     case pending
     case failed
 }
 
-public struct StepProgressRow: View {
-    public let title: String
-    public let status: ExecutionStepStatus
+struct StepProgressRow: View {
+    let title: String
+    let status: ExecutionStepStatus
 
-    public init(title: String, status: ExecutionStepStatus) {
+    init(title: String, status: ExecutionStepStatus) {
         self.title = title
         self.status = status
     }

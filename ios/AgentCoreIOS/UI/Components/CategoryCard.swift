@@ -3,12 +3,12 @@
 
 import SwiftUI
 
-public struct CategoryCard: View {
-    public let title: String
-    public let itemCount: Int
-    public let iconName: String
+struct CategoryCard: View {
+    let title: String
+    let itemCount: Int
+    let iconName: String
 
-    public init(title: String, itemCount: Int, iconName: String = "folder.fill") {
+    init(title: String, itemCount: Int, iconName: String = "folder.fill") {
         self.title = title
         self.itemCount = itemCount
         self.iconName = iconName

@@ -3,10 +3,10 @@
 
 import SwiftUI
 
-public struct SettingsCard<Content: View>: View {
-    public let content: Content
+struct SettingsCard<Content: View>: View {
+    let content: Content
 
-    public init(@ViewBuilder content: () -> Content) {
+    init(@ViewBuilder content: () -> Content) {
         self.content = content()
     }
 
@@ -25,12 +25,12 @@ public struct SettingsCard<Content: View>: View {
     }
 }
 
-public struct SettingsRowView: View {
-    public let title: String
-    public let detail: String?
-    public let showChevron: Bool
+struct SettingsRowView: View {
+    let title: String
+    let detail: String?
+    let showChevron: Bool
 
-    public init(title: String, detail: String? = nil, showChevron: Bool = true) {
+    init(title: String, detail: String? = nil, showChevron: Bool = true) {
         self.title = title
         self.detail = detail
         self.showChevron = showChevron

@@ -3,11 +3,11 @@
 
 import SwiftUI
 
-public struct PrivacyChipView: View {
-    public let label: String
-    public let isLocal: Bool
+struct PrivacyChipView: View {
+    let label: String
+    let isLocal: Bool
 
-    public init(label: String = "On-device", isLocal: Bool = true) {
+    init(label: String = "On-device", isLocal: Bool = true) {
         self.label = label
         self.isLocal = isLocal
     }

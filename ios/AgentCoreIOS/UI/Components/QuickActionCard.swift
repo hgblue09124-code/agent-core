@@ -3,13 +3,13 @@
 
 import SwiftUI
 
-public struct QuickActionCard: View {
-    public let title: String
-    public let iconName: String
-    public let isAccent: Bool
-    public let action: () -> Void
+struct QuickActionCard: View {
+    let title: String
+    let iconName: String
+    let isAccent: Bool
+    let action: () -> Void
 
-    public init(
+    init(
         title: String,
         iconName: String,
         isAccent: Bool = false,

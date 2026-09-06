@@ -40,7 +40,7 @@ struct AgentCoreIOSApp: App {
 
 // MARK: - Navigation Enums & Models
 
-public enum AppTab: String, CaseIterable, Identifiable {
+enum AppTab: String, CaseIterable, Identifiable {
     case home = "Home"
     case agent = "Agent"
     case activity = "Activity"
@@ -49,9 +49,9 @@ public enum AppTab: String, CaseIterable, Identifiable {
     case settings = "Settings"
     case review = "Review"
 
-    public var id: String { rawValue }
+    var id: String { rawValue }
 
-    public var iconName: String {
+    var iconName: String {
         switch self {
         case .home: return "house.fill"
         case .agent: return "bolt.fill"
@@ -64,7 +64,7 @@ public enum AppTab: String, CaseIterable, Identifiable {
     }
 }
 
-public enum ExecutionLifecycleState: String {
+enum ExecutionLifecycleState: String {
     case idle = "Idle"
     case preparing = "Preparing"
     case running = "Running"
@@ -73,7 +73,7 @@ public enum ExecutionLifecycleState: String {
     case failed = "Failed"
     case cancelled = "Cancelled"
 
-    public var color: Color {
+    var color: Color {
         switch self {
         case .idle: return AgentColor.offline
         case .preparing: return AgentColor.accent
@@ -86,13 +86,13 @@ public enum ExecutionLifecycleState: String {
     }
 }
 
-public enum ReviewCheckStatus: String, Codable, Equatable, Sendable {
+enum ReviewCheckStatus: String, Codable, Equatable, Sendable {
     case pass = "PASS"
     case fail = "FAIL"
     case warning = "WARNING"
     case notTested = "NOT TESTED"
 
-    public var color: Color {
+    var color: Color {
         switch self {
         case .pass: return AgentColor.success
         case .fail: return AgentColor.danger
@@ -102,15 +102,15 @@ public enum ReviewCheckStatus: String, Codable, Equatable, Sendable {
     }
 }
 
-public struct ReviewCheckItem: Identifiable {
-    public let id: Int
-    public let name: String
-    public var status: ReviewCheckStatus
-    public var component: String
-    public var message: String
-    public var isBlocker: Bool
+struct ReviewCheckItem: Identifiable {
+    let id: Int
+    let name: String
+    var status: ReviewCheckStatus
+    var component: String
+    var message: String
+    var isBlocker: Bool
 
-    public init(id: Int, name: String, status: ReviewCheckStatus = .notTested, component: String = "AgentRuntime", message: String = "Not executed yet", isBlocker: Bool = true) {
+    init(id: Int, name: String, status: ReviewCheckStatus = .notTested, component: String = "AgentRuntime", message: String = "Not executed yet", isBlocker: Bool = true) {
         self.id = id
         self.name = name
         self.status = status
@@ -120,39 +120,39 @@ public struct ReviewCheckItem: Identifiable {
     }
 }
 
-public struct MemoryStepResult: Identifiable {
-    public let id: Int
-    public let stepName: String
-    public var status: ReviewCheckStatus
-    public var detail: String
+struct MemoryStepResult: Identifiable {
+    let id: Int
+    let stepName: String
+    var status: ReviewCheckStatus
+    var detail: String
 }
 
 // MARK: - Central ViewModel
 
 @MainActor
-public final class AgentAppViewModel: ObservableObject {
-    @Published public var selectedTab: AppTab = .home
+final class AgentAppViewModel: ObservableObject {
+    @Published var selectedTab: AppTab = .home
 
     // Agent Execution State
-    @Published public var currentGoal: String = "Remember that my favorite color is blue."
-    @Published public var executionState: ExecutionLifecycleState = .idle
-    @Published public var showingPermissionAlert: Bool = false
-    @Published public var permissionActionTitle: String = "Execute Agent Task"
-    @Published public var lastRunResult: AgentRunResult?
-    @Published public var lastErrorPayload: String?
+    @Published var currentGoal: String = "Remember that my favorite color is blue."
+    @Published var executionState: ExecutionLifecycleState = .idle
+    @Published var showingPermissionAlert: Bool = false
+    @Published var permissionActionTitle: String = "Execute Agent Task"
+    @Published var lastRunResult: AgentRunResult?
+    @Published var lastErrorPayload: String?
 
     // Dashboard Statuses
-    @Published public var agentCoreStatus: ReviewCheckStatus = .notTested
-    @Published public var agentRuntimeStatus: ReviewCheckStatus = .notTested
-    @Published public var localStorageStatus: ReviewCheckStatus = .notTested
-    @Published public var memoryVaultStatus: ReviewCheckStatus = .notTested
-    @Published public var connectionStatus: ReviewCheckStatus = .notTested
-    @Published public var currentExecutionStatus: ReviewCheckStatus = .notTested
+    @Published var agentCoreStatus: ReviewCheckStatus = .notTested
+    @Published var agentRuntimeStatus: ReviewCheckStatus = .notTested
+    @Published var localStorageStatus: ReviewCheckStatus = .notTested
+    @Published var memoryVaultStatus: ReviewCheckStatus = .notTested
+    @Published var connectionStatus: ReviewCheckStatus = .notTested
+    @Published var currentExecutionStatus: ReviewCheckStatus = .notTested
 
     // Memory / Vault Test State
-    @Published public var testMemoryKey: String = "review.test"
-    @Published public var testMemoryValue: String = "Agent-Core interactive test"
-    @Published public var memoryStepResults: [MemoryStepResult] = [
+    @Published var testMemoryKey: String = "review.test"
+    @Published var testMemoryValue: String = "Agent-Core interactive test"
+    @Published var memoryStepResults: [MemoryStepResult] = [
         MemoryStepResult(id: 1, stepName: "1. Save Memory", status: .notTested, detail: "-"),
         MemoryStepResult(id: 2, stepName: "2. Read Memory", status: .notTested, detail: "-"),
         MemoryStepResult(id: 3, stepName: "3. Verify Value", status: .notTested, detail: "-"),
@@ -161,22 +161,22 @@ public final class AgentAppViewModel: ObservableObject {
     ]
 
     // Error Test State
-    @Published public var errorTestResult: String = "No error test executed yet."
+    @Published var errorTestResult: String = "No error test executed yet."
 
     // Activity Records
-    @Published public var activities: [ActivityRecord] = []
+    @Published var activities: [ActivityRecord] = []
 
     // Collections & Health
-    @Published public var memories: [MemoryItem] = []
-    @Published public var experiences: [Experience] = []
-    @Published public var capabilities: [Capability] = []
-    @Published public var connections: [ConnectionStatus] = []
-    @Published public var vaultSummary: VaultSummary?
-    @Published public var health: AgentHealth?
-    @Published public var updateReport: DataUpdateStateReport = DataUpdateStateReport()
+    @Published var memories: [MemoryItem] = []
+    @Published var experiences: [Experience] = []
+    @Published var capabilities: [Capability] = []
+    @Published var connections: [ConnectionStatus] = []
+    @Published var vaultSummary: VaultSummary?
+    @Published var health: AgentHealth?
+    @Published var updateReport: DataUpdateStateReport = DataUpdateStateReport()
 
     // Automated Review Checks
-    @Published public var reviewChecks: [ReviewCheckItem] = [
+    @Published var reviewChecks: [ReviewCheckItem] = [
         ReviewCheckItem(id: 1, name: "AgentRuntime Initialization", component: "AgentRuntime"),
         ReviewCheckItem(id: 2, name: "Agent-Core Availability", component: "AgentCore Kernel"),
         ReviewCheckItem(id: 3, name: "Memory Write / Read / Delete", component: "LocalMemoryStore"),
@@ -190,18 +190,18 @@ public final class AgentAppViewModel: ObservableObject {
     ]
 
     // Review Summary Counters
-    @Published public var passCount: Int = 0
-    @Published public var failCount: Int = 0
-    @Published public var warningCount: Int = 0
-    @Published public var notTestedCount: Int = 10
-    @Published public var blockerDetails: [String] = []
+    @Published var passCount: Int = 0
+    @Published var failCount: Int = 0
+    @Published var warningCount: Int = 0
+    @Published var notTestedCount: Int = 10
+    @Published var blockerDetails: [String] = []
 
     private let service: LocalAgentServiceProtocol
     private let updateManager: GitHubDataUpdateManager
     private var pendingPermissionContinuation: ((Bool) -> Void)?
     private var activeRunTask: Task<Void, Never>?
 
-    public init(service: LocalAgentServiceProtocol? = nil, updateManager: GitHubDataUpdateManager? = nil) {
+    init(service: LocalAgentServiceProtocol? = nil, updateManager: GitHubDataUpdateManager? = nil) {
         let s = service ?? LocalAgentService()
         self.service = s
         self.updateManager = updateManager ?? GitHubDataUpdateManager()
@@ -210,7 +210,7 @@ public final class AgentAppViewModel: ObservableObject {
         }
     }
 
-    public func refreshState() async {
+    func refreshState() async {
         health = await service.health()
         memories = await service.retrieve(query: "")
         experiences = await service.getExperience()
@@ -221,22 +221,22 @@ public final class AgentAppViewModel: ObservableObject {
         updateReport = updateManager.getStateReport()
     }
 
-    public func loadActivity(filter: ActivityFilter) async {
+    func loadActivity(filter: ActivityFilter) async {
         activities = await service.listActivity(filter: filter)
     }
 
-    public func loadVaultSummary() async {
+    func loadVaultSummary() async {
         vaultSummary = await service.vaultSummary()
         memories = await service.retrieve(query: "")
     }
 
-    public func loadConnections() async {
+    func loadConnections() async {
         connections = await service.listConnections()
     }
 
     // MARK: - Interactive Agent Execution Flow
 
-    public func runTask(requestPermissionPrompt: Bool = false) async {
+    func runTask(requestPermissionPrompt: Bool = false) async {
         activeRunTask = Task {
             executionState = .preparing
             lastErrorPayload = nil
@@ -290,13 +290,13 @@ public final class AgentAppViewModel: ObservableObject {
         await activeRunTask?.value
     }
 
-    public func handlePermissionResponse(allowed: Bool) {
+    func handlePermissionResponse(allowed: Bool) {
         showingPermissionAlert = false
         pendingPermissionContinuation?(allowed)
         pendingPermissionContinuation = nil
     }
 
-    public func cancelTask() {
+    func cancelTask() {
         activeRunTask?.cancel()
         executionState = .cancelled
         currentExecutionStatus = .warning
@@ -312,7 +312,7 @@ public final class AgentAppViewModel: ObservableObject {
         recordActivity(task: currentGoal, state: "CANCELLED", duration: "0.01s", resultOrError: "User initiated cancellation via runtime.")
     }
 
-    public func clearTask() {
+    func clearTask() {
         currentGoal = ""
         executionState = .idle
         lastRunResult = nil
@@ -321,24 +321,24 @@ public final class AgentAppViewModel: ObservableObject {
 
     // MARK: - Memory / Vault Interactive Testing
 
-    public func executeSaveMemory() async -> Bool {
+    func executeSaveMemory() async -> Bool {
         let res = await service.remember(key: testMemoryKey, value: testMemoryValue)
         await refreshState()
         return res.status == .success
     }
 
-    public func executeReadMemory() async -> String? {
+    func executeReadMemory() async -> String? {
         let items = await service.retrieve(query: testMemoryKey)
         return items.first(where: { $0.key == testMemoryKey })?.value
     }
 
-    public func executeForgetMemory() async -> Bool {
+    func executeForgetMemory() async -> Bool {
         let res = await service.forget(key: testMemoryKey)
         await refreshState()
         return res.status == .success
     }
 
-    public func runMemoryTestFlow() async {
+    func runMemoryTestFlow() async {
         let saveOk = await executeSaveMemory()
         memoryStepResults[0].status = saveOk ? .pass : .fail
         memoryStepResults[0].detail = saveOk ? "Saved '\(testMemoryKey)'" : "Save failed"
@@ -366,39 +366,39 @@ public final class AgentAppViewModel: ObservableObject {
 
     // MARK: - Error Test Scenarios
 
-    public func triggerInvalidInput() async {
+    func triggerInvalidInput() async {
         let result = await service.run(goal: "", userApproved: false)
         errorTestResult = "Invalid Input Result -> Status: \(result.status.rawValue), ErrorMessage: \(result.errorMessage ?? "None")"
     }
 
-    public func triggerRuntimeFailure() async {
+    func triggerRuntimeFailure() async {
         let result = await service.resume(runId: "RUN-NONEXISTENT-9999")
         errorTestResult = "Runtime Failure Result -> Status: \(result.status.rawValue), Code: \(result.errorCode ?? "None"), ErrorMessage: \(result.errorMessage ?? "None")"
     }
 
-    public func triggerPermissionDenied() async {
+    func triggerPermissionDenied() async {
         let result = await service.executeCapability(capabilityId: "github_integration", input: ["action": "create_issue_comment"], userApproved: false)
         errorTestResult = "Permission Denied Result -> Status: \(result.status.rawValue), ErrorMessage: \(result.errorMessage ?? "None")"
     }
 
-    public func triggerCancellation() {
+    func triggerCancellation() {
         cancelTask()
         errorTestResult = "Cancellation Triggered -> State: CANCELLED, ErrorMessage: \(lastErrorPayload ?? "None")"
     }
 
-    public func triggerMissingMemory() async {
+    func triggerMissingMemory() async {
         let res = await service.forget(key: "non_existent_key_xyz_999")
         errorTestResult = "Missing Memory Forget Result -> Status: \(res.status.rawValue), ErrorMessage: \(res.errorMessage ?? "None")"
     }
 
-    public func triggerConnectionUnavailable() async {
+    func triggerConnectionUnavailable() async {
         let result = await service.executeCapability(capabilityId: "github_integration", input: ["action": "get_repo"], userApproved: true)
         errorTestResult = "Connection Unavailable Result -> Status: \(result.status.rawValue), ErrorMessage: \(result.errorMessage ?? "None")"
     }
 
     // MARK: - Automated Review Checks (Run All Checks)
 
-    public func runAllReviewChecks() async {
+    func runAllReviewChecks() async {
         blockerDetails.removeAll()
 
         let h = await service.health()

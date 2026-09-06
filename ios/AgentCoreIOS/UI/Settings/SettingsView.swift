@@ -3,12 +3,12 @@
 
 import SwiftUI
 
-public struct SettingsView: View {
+struct SettingsView: View {
     @EnvironmentObject private var viewModel: AgentAppViewModel
     @State private var backgroundExecution: Bool = true
     @State private var privacyMode: Bool = true
 
-    public init() {}
+    init() {}
 
     var body: some View {
         ScrollView {

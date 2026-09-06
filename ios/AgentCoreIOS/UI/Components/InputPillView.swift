@@ -3,12 +3,12 @@
 
 import SwiftUI
 
-public struct InputPillView: View {
-    @Binding public var text: String
-    public let placeholder: String
-    public let onSubmit: () -> Void
+struct InputPillView: View {
+    @Binding var text: String
+    let placeholder: String
+    let onSubmit: () -> Void
 
-    public init(
+    init(
         text: Binding<String>,
         placeholder: String = "Ask your agent to do something…",
         onSubmit: @escaping () -> Void

@@ -3,13 +3,13 @@
 
 import SwiftUI
 
-public struct AgentOrbView: View {
-    public enum OrbSize {
+struct AgentOrbView: View {
+    enum OrbSize {
         case default118
         case mini14
         case custom(CGFloat)
 
-        public var dimension: CGFloat {
+        var dimension: CGFloat {
             switch self {
             case .default118: return 118
             case .mini14: return 14
@@ -17,7 +17,7 @@ public struct AgentOrbView: View {
             }
         }
 
-        public var coreSize: CGFloat {
+        var coreSize: CGFloat {
             switch self {
             case .default118: return 14
             case .mini14: return 3
@@ -26,12 +26,12 @@ public struct AgentOrbView: View {
         }
     }
 
-    public let status: AgentStatus
-    public let size: OrbSize
+    let status: AgentStatus
+    let size: OrbSize
     @Environment(\.accessibilityReduceMotion) var reduceMotion
     @State private var isSpinning: Bool = false
 
-    public init(status: AgentStatus = .ready, size: OrbSize = .default118) {
+    init(status: AgentStatus = .ready, size: OrbSize = .default118) {
         self.status = status
         self.size = size
     }
@@ -82,7 +82,7 @@ public struct AgentOrbView: View {
                 isSpinning = true
             }
         }
-        .onChange(of: status) { newStatus in
+        .onChange(of: status) { _, newStatus in
             if (newStatus == .thinking || newStatus == .running) && !reduceMotion {
                 isSpinning = true
             } else {

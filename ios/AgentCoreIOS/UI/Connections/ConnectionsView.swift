@@ -3,10 +3,10 @@
 
 import SwiftUI
 
-public struct ConnectionsView: View {
+struct ConnectionsView: View {
     @EnvironmentObject private var viewModel: AgentAppViewModel
 
-    public init() {}
+    init() {}
 
     var body: some View {
         ScrollView {

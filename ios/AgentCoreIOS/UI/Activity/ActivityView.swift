@@ -3,11 +3,11 @@
 
 import SwiftUI
 
-public struct ActivityView: View {
+struct ActivityView: View {
     @EnvironmentObject private var viewModel: AgentAppViewModel
     @State private var selectedFilter: ActivityFilter = .all
 
-    public init() {}
+    init() {}
 
     var body: some View {
         ScrollView {
@@ -68,7 +68,7 @@ public struct ActivityView: View {
             .padding(AgentSpacing.lg)
         }
         .background(AgentColor.background1.ignoresSafeArea())
-        .onChange(of: selectedFilter) { newFilter in
+        .onChange(of: selectedFilter) { _, newFilter in
             Task {
                 await viewModel.loadActivity(filter: newFilter)
             }

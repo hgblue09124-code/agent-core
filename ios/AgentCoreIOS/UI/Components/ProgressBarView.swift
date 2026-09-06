@@ -3,11 +3,11 @@
 
 import SwiftUI
 
-public struct ProgressBarView: View {
-    public let progress: Double // 0.0 to 1.0
-    public let fillColor: Color
+struct ProgressBarView: View {
+    let progress: Double
+    let fillColor: Color
 
-    public init(progress: Double, fillColor: Color = AgentColor.accent) {
+    init(progress: Double, fillColor: Color = AgentColor.accent) {
         self.progress = max(0.0, min(1.0, progress))
         self.fillColor = fillColor
     }

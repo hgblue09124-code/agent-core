@@ -3,10 +3,10 @@
 
 import SwiftUI
 
-public struct RememberedContextCard: View {
-    public let summary: String
+struct RememberedContextCard: View {
+    let summary: String
 
-    public init(summary: String) {
+    init(summary: String) {
         self.summary = summary
     }
 

@@ -3,10 +3,10 @@
 
 import SwiftUI
 
-public struct ReviewView: View {
+struct ReviewView: View {
     @EnvironmentObject private var viewModel: AgentAppViewModel
 
-    public init() {}
+    init() {}
 
     var body: some View {
         ScrollView {

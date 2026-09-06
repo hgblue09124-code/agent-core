@@ -3,11 +3,11 @@
 
 import SwiftUI
 
-public struct VaultView: View {
+struct VaultView: View {
     @EnvironmentObject private var viewModel: AgentAppViewModel
     @State private var searchQuery: String = ""
 
-    public init() {}
+    init() {}
 
     var body: some View {
         ScrollView {

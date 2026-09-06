@@ -3,13 +3,13 @@
 
 import SwiftUI
 
-public struct CurrentTaskCard: View {
-    public let goal: String
-    public let subtext: String
-    public let progress: Double
-    public let status: AgentStatus
+struct CurrentTaskCard: View {
+    let goal: String
+    let subtext: String
+    let progress: Double
+    let status: AgentStatus
 
-    public init(
+    init(
         goal: String,
         subtext: String,
         progress: Double = 0.5,

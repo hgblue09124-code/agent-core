@@ -3,11 +3,11 @@
 
 import SwiftUI
 
-public struct ConnectionRowView: View {
-    public let connection: ConnectionStatus
-    public let onToggle: (() -> Void)?
+struct ConnectionRowView: View {
+    let connection: ConnectionStatus
+    let onToggle: (() -> Void)?
 
-    public init(connection: ConnectionStatus, onToggle: (() -> Void)? = nil) {
+    init(connection: ConnectionStatus, onToggle: (() -> Void)? = nil) {
         self.connection = connection
         self.onToggle = onToggle
     }

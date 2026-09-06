@@ -3,11 +3,11 @@
 
 import SwiftUI
 
-public struct StatusPillView: View {
-    public let status: AgentStatus
-    public let customTitle: String?
+struct StatusPillView: View {
+    let status: AgentStatus
+    let customTitle: String?
 
-    public init(status: AgentStatus, customTitle: String? = nil) {
+    init(status: AgentStatus, customTitle: String? = nil) {
         self.status = status
         self.customTitle = customTitle
     }
