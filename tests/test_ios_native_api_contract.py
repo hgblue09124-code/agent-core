@@ -49,7 +49,7 @@ class LocalAgentServiceMirror:
         res: AgentRunResult = self.agent.run(goal=goal, user_approved=user_approved)
         return {
             "runId": res.run_id,
-            "status": "SUCCESS" if res.success else "FAILED",
+            "status": "WAITING_FOR_USER" if res.status == "WAITING_FOR_USER" else ("SUCCESS" if res.success else "FAILED"),
             "goal": res.goal,
             "output": f"Executed goal '{goal}'",
             "planSteps": res.plan_steps,
@@ -57,8 +57,8 @@ class LocalAgentServiceMirror:
             "verificationVerdict": res.verification_verdict,
         }
 
-    def resume(self, run_id: str) -> dict:
-        res: AgentRunResult = self.agent.resume(run_id)
+    def resume(self, run_id: str, user_approved: bool = True) -> dict:
+        res: AgentRunResult = self.agent.resume(run_id, user_approved=user_approved)
         return {
             "runId": res.run_id,
             "status": "SUCCESS" if res.success else "FAILED",
@@ -148,7 +148,7 @@ class LocalAgentServiceMirror:
         info = self.agent.inspect_run(run_id)
         if not info:
             return None
-        return {"runId": info.get("run_id"), "status": info.get("kernel_status"), "goal": info.get("goal")}
+        return {"runId": info.get("run_id"), "status": info.get("kernel_status") or info.get("status"), "goal": info.get("goal")}
 
     def get_experience(self) -> list[dict]:
         hist = self.agent.history()
@@ -241,9 +241,16 @@ class TestIOSNativeAPIContractMirror(unittest.TestCase):
         self.assertEqual(run_info["runId"], run_res["runId"])
 
     def test_12_resume(self):
-        run_res = self.service.run("Goal for resume check")
-        resumed = self.service.resume(run_res["runId"])
-        self.assertEqual(resumed["runId"], run_res["runId"])
+        # Create task requiring approval -> enters WAITING_FOR_USER
+        res_waiting = self.service.agent.run(
+            "Goal for resume check",
+            capability_dispatch=("github_integration", {"action": "create_issue", "owner": "owner", "repo": "repo", "title": "test", "mock_offline": True}),
+            user_approved=False,
+        )
+        run_id = res_waiting.run_id
+
+        resumed = self.service.resume(run_id, user_approved=True)
+        self.assertEqual(resumed["runId"], run_id)
         self.assertEqual(resumed["status"], "SUCCESS")
 
     def test_13_failed_capability(self):

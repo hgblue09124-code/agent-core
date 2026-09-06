@@ -69,6 +69,15 @@ class Kernel:
         self._budget = budget or Budget()
         self._project_id = project_id or "agent-core"
 
+    def bootstrap_run(self, goal: str, project_id: Optional[str] = None, run_id: Optional[str] = None) -> KernelContext:
+        """Public lifecycle contract to bootstrap and register a run context."""
+        pid = project_id or self._project_id
+        ctx = self._orchestrator.bootstrap(goal, pid)
+        if run_id:
+            ctx.run_id = run_id
+        self._lifecycle.save(ctx)
+        return ctx
+
     def run(self, goal: str, project_id: Optional[str] = None,
             resume_id: Optional[str] = None) -> KernelResult:
         """Execute the full kernel loop.

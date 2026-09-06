@@ -174,14 +174,18 @@ class TestPersonalAgentBeta15Missions(unittest.TestCase):
 
     def test_mission_12_resume_interrupted_task(self):
         """Mission 12: Resume Interrupted Task Across Process Restart [Mode: LOCAL]."""
-        # Instance 1: Initial run created and saved to file storage
-        initial_res = self.agent.run("Task for process-restart resume test")
-        self.assertTrue(initial_res.success)
+        # Instance 1: Initial run created and saved to file storage in WAITING_FOR_USER state
+        initial_res = self.agent.run(
+            "Task for process-restart resume test",
+            capability_dispatch=("github_integration", {"action": "create_issue_comment", "owner": "hgblue09124", "repo": "agent-core", "issue_number": 1, "body": "test comment", "mock_offline": True}),
+            user_approved=False,
+        )
+        self.assertEqual(initial_res.status, "WAITING_FOR_USER")
         run_id = initial_res.run_id
 
-        # Instance 2: New Agent instance simulating process restart
+        # Instance 2: New Agent instance simulating process restart, resuming with approval
         fresh_agent = Agent(project_id="default")
-        resumed_res = fresh_agent.resume(run_id)
+        resumed_res = fresh_agent.resume(run_id, user_approved=True)
         self.assertEqual(resumed_res.run_id, run_id)
         self.assertTrue(resumed_res.success)
 
