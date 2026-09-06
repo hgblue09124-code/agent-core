@@ -11,6 +11,7 @@ from typing import Any, Optional, Union
 
 from core.capabilities.adapter import CapabilityRegistry
 from core.kernel.policy import PolicyEngine
+from core.runtime.models import Action, ActionType
 from core.runtime.state import AgentAction
 
 
@@ -144,3 +145,38 @@ class DecisionEngine:
             authorization_status="DENY",
             reason=reason or "Policy prohibited action execution",
         )
+
+    def authorize(self, action: Action, *, user_approved: bool = False) -> tuple[str, str]:
+        """Policy-check a v0.3 Action. ALLOW | ASK_USER | DENY. No LLM."""
+        if action.type in {
+            ActionType.ECHO.value,
+            ActionType.WATCH.value,
+            ActionType.WAIT.value,
+            ActionType.FINISH.value,
+            ActionType.NONE.value,
+            ActionType.ASK_USER.value,
+        }:
+            return "ALLOW", "internal control action"
+        if action.type in {
+            ActionType.REMEMBER.value,
+            ActionType.FORGET.value,
+            ActionType.RETRIEVE_MEMORY.value,
+        }:
+            agent_action = AgentAction(
+                action_id=action.identifier,
+                capability="core.memory",
+                operation=action.type,
+                arguments=dict(action.arguments or {}),
+            )
+            result = self.evaluate_action(agent_action, user_approved=user_approved)
+            return result.authorization_status, result.reason
+        if action.type == ActionType.INVOKE_CAPABILITY.value:
+            agent_action = AgentAction(
+                action_id=action.identifier,
+                capability=action.capability,
+                operation=action.operation or str((action.arguments or {}).get("action") or "execute"),
+                arguments=dict(action.arguments or {}),
+            )
+            result = self.evaluate_action(agent_action, user_approved=user_approved)
+            return result.authorization_status, result.reason
+        return "DENY", f"Unauthorized action type '{action.type}'"
