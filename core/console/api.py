@@ -191,13 +191,26 @@ class LiveActivityHandler(BaseHTTPRequestHandler):
     def do_OPTIONS(self):
         self._set_headers(204)
 
+    def do_POST(self):
+        path = urllib.parse.urlparse(self.path).path
+        try:
+            if path == "/api/agent/submit":
+                self._agent_submit()
+            else:
+                self._not_found()
+        except Exception as exc:
+            logger.exception("API error: %s", exc)
+            self._json({"error": str(exc)}, code=500)
+
     def do_GET(self):
         path = urllib.parse.urlparse(self.path).path
         parsed = urllib.parse.urlparse(self.path)
         qs = urllib.parse.parse_qs(parsed.query)
 
         try:
-            if path == "/api/healthz":
+            if path == "/api/agent/objectives":
+                self._list_objectives()
+            elif path == "/api/healthz":
                 self._health()
             elif path == "/api/runs":
                 self._list_runs()
@@ -425,6 +438,41 @@ class LiveActivityHandler(BaseHTTPRequestHandler):
 
     def _not_found(self):
         self._json({"error": "Not found"}, code=404)
+
+    def _agent_submit(self):
+        content_len = int(self.headers.get("Content-Length", 0))
+        body = self.rfile.read(content_len) if content_len > 0 else b"{}"
+        try:
+            req_data = json.loads(body)
+        except json.JSONDecodeError:
+            self._json({"error": "Invalid JSON"}, code=400)
+            return
+
+        message = req_data.get("message", "")
+        user_approved = bool(req_data.get("user_approved", False))
+        if not message or not isinstance(message, str):
+            self._json({"error": "Field 'message' is required"}, code=400)
+            return
+
+        from core.runtime.agent_runtime import AgentRuntime
+        runtime = AgentRuntime()
+        res = runtime.submit(message, user_approved=user_approved)
+
+        self._json({
+            "event_id": res.event.event_id,
+            "objective": res.objective.to_dict() if res.objective else None,
+            "phase": res.agent_state.phase,
+            "last_outcome": res.agent_state.last_outcome,
+            "llm_calls": res.llm_calls,
+            "stages": res.stages,
+            "error": res.error,
+        })
+
+    def _list_objectives(self):
+        from core.runtime.agent_runtime import AgentRuntime
+        runtime = AgentRuntime()
+        objs = runtime.list_objectives()
+        self._json({"objectives": [o.to_dict() for o in objs], "total": len(objs)})
 
     def log_message(self, fmt, *args):
         # Suppress default noise; use logger instead

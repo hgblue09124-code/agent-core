@@ -327,6 +327,7 @@ public final class AgentRuntime: @unchecked Sendable {
         }
 
         _ = vaultStore.storeContext(key: "run_summary_\(runId)", value: trimmedGoal, category: "run_history")
+        _ = vaultStore.storeContext(key: "active_objective_\(runId)", value: trimmedGoal, category: "objectives")
 
         let duration = Date().timeIntervalSince(startTime)
         let result = AgentRunResult(
