@@ -128,15 +128,29 @@ class KernelOrchestrator:
 
     def reason(self, ctx: KernelContext) -> KernelContext:
         """Plan using knowledge context + LLM if allowed."""
+        from core.kernel.context import KernelContextBuilder
+        from core.context.pack import clip
+
+        packed = KernelContextBuilder().build(
+            ctx.goal,
+            ctx.knowledge_retrieved,
+            knowledge_engine=self.knowledge if ctx.knowledge_retrieved else None,
+        )
+        lines = []
+        for prim in packed.get("knowledge_primitives", [])[:5]:
+            concept = prim.get("concept") or prim.get("id") or ""
+            when = prim.get("when_to_use") or ""
+            lines.append(f"- {concept}: {when}".strip(": "))
+        ctx.packed_context = clip("\n".join(lines), 800)
+
         if self._policy.should_call_llm(Phase.REASONING.value):
-            # LLM planning would happen here
-            # For now, we record the intent
-            ctx.llm_calls += 1
+            # Real LLM planning happens in RuntimeEngine._plan / Planner.plan.
+            # Do not increment llm_calls here — that double-counted a stub.
             ctx.kernel_phase = KernelPhase.REASONING.value
             self._emit(ctx, EventPhase.PLAN.value,
-                       "LLM planning invoked",
+                       "Planning with retrieved knowledge",
                        EventStatus.RUNNING.value,
-                       metadata={"llm_calls": ctx.llm_calls})
+                       metadata={"retrieved": len(ctx.knowledge_retrieved)})
         else:
             ctx.kernel_phase = KernelPhase.PLAN_VALIDATION.value
             self._emit(ctx, EventPhase.PLAN.value,
@@ -175,7 +189,7 @@ class KernelOrchestrator:
         try:
             from core.runtime.engine import RuntimeEngine
             rt = RuntimeEngine()
-            state = rt.run(ctx.project_id, ctx.goal)
+            state = rt.run(ctx.project_id, ctx.goal, extra_context=ctx.packed_context)
             ctx.kernel_phase = KernelPhase.OBSERVATION.value
             self._lifecycle.save(ctx)
             self._emit(ctx, EventPhase.EXECUTE.value,

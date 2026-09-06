@@ -19,6 +19,7 @@ from core.capabilities.adapter import CapabilityRegistry
 from core.capabilities.github import GitHubCapabilityAdapter
 from core.capabilities.mock_adapter import MockEchoCapabilityAdapter
 from core.config.storage import get_storage_dir
+from core.context.pack import build_loop_pack, compact_tool_output
 from core.events.bus import EventBus
 from core.events.schema import EventPhase, EventStatus, new_event
 from core.experience.engine import ExperienceEngine
@@ -369,6 +370,14 @@ class AgentLoopController:
             relevant_mems = self.memory.retrieve(MemoryQuery(query=goal, limit=3))
             vault_contexts = self.vault.retrieve_context(query=goal, limit=3)
             applicable_strategies = self.strategy_ranker.select_applicable_strategies(goal=goal, limit=2)
+            pack = build_loop_pack(
+                goal,
+                identity=identity_mem,
+                memories=relevant_mems,
+                vault_items=vault_contexts,
+                strategies=applicable_strategies,
+            )
+            state.context_pack = pack.to_dict()
             state.telemetry.retrieval_calls += 1
             self._sync_telemetry(state, time_budget)
             self._store.save(state)
@@ -596,6 +605,10 @@ class AgentLoopController:
             )
             state.verifications.append(verif)
             state.telemetry.verification_calls += 1
+            # Compact tool output AFTER verify so evidence matching still sees the full result.
+            obs.output = compact_tool_output(obs.output)
+            if state.context_pack is not None:
+                state.context_pack["tool_output"] = compact_tool_output(obs.output)
             self._sync_telemetry(state, time_budget)
             self._store.save(state)  # Checkpoint at boundary: after verification
 
@@ -788,7 +801,7 @@ class AgentLoopController:
                     goal=state.goal,
                     project_id=state.project_id,
                     action=f"{action.capability}.{action.operation}",
-                    observation=f"status={observation.status}, output={observation.output}",
+                    observation=f"status={observation.status}, output={compact_tool_output(observation.output)}",
                     outcome=outcome,
                 )
                 exp = self.experience_engine.record_experience(new_exp)

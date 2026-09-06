@@ -76,77 +76,49 @@ They are the SOURCE OF TRUTH for what the system looks like.
 OUTPUT_SCHEMA = """\
 ## Required Output Schema
 
-Return a JSON object with exactly these fields:
+Return ONLY JSON (no markdown fences) with keys:
+objective, assumptions, steps, verification, risks, estimated_complexity, notes.
 
-{{
-  "objective": "string — restate the user's goal",
-  "assumptions": ["string — list of made assumptions"],
-  "steps": [
-    {{
-      "step_id": "string — unique, e.g. 'step-1'",
-      "title": "string — short label",
-      "description": "string — what this step does",
-      "step_type": "string — one of: shell | python | inspect",
-      "dependencies": ["string — step_ids this depends on, e.g. ['step-1']"],
-      "command": "string — command or module name",
-      "arguments": ["string — arguments as separate items"],
-      "expected_result": "string — what success looks like",
-      "verify_contains": ["string — substrings that stdout SHOULD contain"],
-      "verify_not_contains": ["string — substrings stdout MUST NOT contain"],
-      "expect_exit_code": 0
-    }}
-  ],
-  "verification": [
-    {{
-      "description": "string — what to check",
-      "method": "string — one of: manual | typecheck | test | diff | inspect",
-      "command": "string — optional command to run",
-      "args": ["string"],
-      "expect_exit_code": 0,
-      "verify_contains": ["string"]
-    }}
-  ],
-  "risks": ["string — potential issues"],
-  "estimated_complexity": "string — one of: trivial | simple | moderate | complex",
-  "notes": "string — any additional notes"
-}}
+Each step: step_id, title, description, step_type (shell|python|inspect),
+dependencies, command, arguments, expected_result, verify_contains,
+verify_not_contains, expect_exit_code.
 
-IMPORTANT:
-- Return ONLY the JSON. No markdown fences, no explanation, no preamble.
-- All step_ids must be unique within the plan.
-- All dependencies must reference existing step_ids.
-- If a step has no dependencies, use an empty array.
-- If verification criteria cannot be defined, return an empty array for "verification" and explain why in "notes".
+Each verification: description, method (manual|typecheck|test|diff|inspect),
+command, args, expect_exit_code, verify_contains.
 """
 
 
 def build_system_prompt() -> str:
-    return SYSTEM_PROLOGUE
+    # Static prefix: constraints live here so the user prompt is per-task only.
+    return SYSTEM_PROLOGUE + "\n\n" + CONSTRAINTS_BLOCK
 
 
 def build_user_prompt(
     config: PromptConfig,
     context_text: str,
+    extra_context: str = "",
 ) -> str:
-    """Build the full user prompt from objective + context."""
-    parts = []
-
-    parts.append(OBJECTIVE_BLOCK.format(objective=config.objective))
-    parts.append(VERIFICATION_HINTS)
-    parts.append(CONSTRAINTS_BLOCK)
+    """Build the user prompt from objective + selected context."""
+    parts = [
+        OBJECTIVE_BLOCK.format(objective=config.objective),
+        VERIFICATION_HINTS,
+    ]
+    extra = (extra_context or "").strip()
+    if extra:
+        parts.append("## Retrieved Context\n\n" + extra)
     parts.append(CONTEXT_BLOCK.format(context=context_text))
     parts.append(OUTPUT_SCHEMA)
-
     return "\n\n".join(parts)
 
 
 def build_full_prompt(
     config: PromptConfig,
     context_text: str,
+    extra_context: str = "",
 ) -> tuple[str, str]:
     """Build (system_prompt, user_prompt) tuple."""
     system_prompt = build_system_prompt()
-    user_prompt = build_user_prompt(config, context_text)
+    user_prompt = build_user_prompt(config, context_text, extra_context=extra_context)
     return system_prompt, user_prompt
 
 

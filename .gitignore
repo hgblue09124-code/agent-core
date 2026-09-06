@@ -33,3 +33,11 @@ tasks/task-*.json
 
 # Console runtime artifacts
 /tmp/agent-core-events.json
+
+# Build / release artifacts (generated in CI, not source)
+*.zip
+*.ipa
+DerivedData/
+xcuserdata/
+*.xcuserstate
+*.xcresult

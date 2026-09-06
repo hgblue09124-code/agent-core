@@ -255,6 +255,7 @@ class AgentLoopState:
     accumulated_runtime_seconds: float = 0.0
     original_start_time: Optional[float] = None
     telemetry: AgentLoopTelemetry = field(default_factory=AgentLoopTelemetry)
+    context_pack: dict[str, Any] = field(default_factory=dict)
 
     def now_str(self) -> str:
         return datetime.now(timezone.utc).isoformat()
@@ -318,6 +319,7 @@ class AgentLoopState:
             "accumulated_runtime_seconds": round(self.accumulated_runtime_seconds, 3),
             "original_start_time": self.original_start_time,
             "telemetry": self.telemetry.to_dict(),
+            "context_pack": copy.deepcopy(self.context_pack),
         }
 
     @classmethod
@@ -379,4 +381,5 @@ class AgentLoopState:
             accumulated_runtime_seconds=d.get("accumulated_runtime_seconds", 0.0),
             original_start_time=d.get("original_start_time"),
             telemetry=telem,
+            context_pack=d.get("context_pack") or {},
         )

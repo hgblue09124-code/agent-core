@@ -71,14 +71,14 @@ User Request
 - **Policy Engine Permissions**: Explicit capability constraint checks (`read_only`, `requires_user_approval`, `allowed_domains`) enforcing constitutional boundaries.
 - **Continuity & Resumption**: Checkpoint persistence (`core/runtime/checkpoint.py`) supporting run state restoration (`agent.resume(run_id)`).
 - **First-Class Strategy Subsystem**: Strategy lifecycle management (`CANDIDATE`, `VALIDATED`, `SUPPORTED`, `WEAKENED`, `RETIRED`, `SUPERSEDED`) with confidence scoring.
-- **Native iOS Local Agent API & Unsigned IPA Release Workflow**: Embedded Swift local agent API (`ios/AgentCoreIOS/`), Xcode project (`ios/AgentCoreIOS.xcodeproj`), offline-first GitHub Data Update manager, automated unsigned IPA build pipeline, and GitHub Release asset packaging (`AgentCore-iOS-v0.1.0-unsigned.ipa`).
+- **Native iOS Local Agent API & Unsigned IPA Release Workflow**: Embedded Swift local agent API (`ios/AgentCoreIOS/`), Xcode project (`ios/AgentCoreIOS.xcodeproj`), offline-first GitHub Data Update manager, tag-driven unsigned IPA pipeline, and GitHub Release assets named `AgentCore-iOS-vVERSION-bBUILD-unsigned.ipa`.
 
 ## Native iOS Local Agent API & Unsigned IPA Build
 
 Native Swift local agent service, runtime API, and offline-first data sync engine located in `ios/`:
 - **Local API Contract**: `LocalAgentServiceProtocol` & `AgentRuntime` (`ios/AgentCoreIOS/API/` & `ios/AgentCoreIOS/Runtime/`).
 - **Data Update Manager**: Offline-first, manifest-driven data and configuration sync (`ios/AgentCoreIOS/Update/`).
-- **Unsigned IPA Build & Release Asset**: `AgentCore-iOS-v0.1.0-unsigned.ipa` automatically compiled without Apple signing secrets, validated, uploaded as GitHub Actions artifact, and attached to GitHub Release `v0.1.0`.
+- **Unsigned IPA Build & Release Asset**: CI archives an unsigned IPA (`AgentCore-iOS-vVERSION-bBUILD-unsigned.ipa`) without Apple signing secrets, uploads it as an Actions artifact on `master`/`main`/tags, and attaches it to the matching GitHub Release **on tags only**. The iOS source zip is generated from live `ios/` (not stored in git).
 - **Re-Signing Notice**: Intentionally unsigned; requires local re-signing via AltStore, SideStore, or Sideloadly prior to device installation.
 
 For full iOS setup, building, local re-signing, and testing instructions, see [`ios/README.md`](ios/README.md).

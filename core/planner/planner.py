@@ -455,6 +455,7 @@ class Planner:
         self,
         project_id: str,
         objective: str,
+        extra_context: str = "",
     ) -> PlanResult:
         """Generate a plan for an objective against a registered project.
 
@@ -484,6 +485,7 @@ class Planner:
                 "status": proj_ctx.status,
             },
             max_tokens=self.max_context_tokens,
+            query=objective,
         )
 
         # 3. Build prompt
@@ -492,7 +494,9 @@ class Planner:
             project_name=proj_ctx.name,
             objective=objective,
         )
-        system_prompt, user_prompt = build_full_prompt(config, context.sections)
+        system_prompt, user_prompt = build_full_prompt(
+            config, context.sections, extra_context=extra_context
+        )
 
         # 4. Call LLM
         try:

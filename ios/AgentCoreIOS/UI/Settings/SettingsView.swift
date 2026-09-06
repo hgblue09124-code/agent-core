@@ -10,6 +10,12 @@ struct SettingsView: View {
 
     init() {}
 
+    private var appVersionLabel: String {
+        let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "0.1.0"
+        let build = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "1"
+        return "\(version) (Build \(build))"
+    }
+
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: AgentSpacing.lg) {
@@ -106,7 +112,7 @@ struct SettingsView: View {
                         .foregroundColor(AgentColor.textMuted)
 
                     SettingsCard {
-                        SettingsRowView(title: "Version", detail: "0.1.0 (Build 1)", showChevron: false)
+                        SettingsRowView(title: "Version", detail: appVersionLabel, showChevron: false)
 
                         Divider().background(AgentColor.hairline)
 

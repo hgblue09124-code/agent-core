@@ -13,7 +13,7 @@ from core.learning.store import StrategyStore
 from core.learning.pipeline import LearningPipeline
 from core.learning.evaluator import StrategyEvaluator
 
-__version__ = "0.1.0-beta"
+from core.version import __version__
 
 __all__ = [
     "__version__",

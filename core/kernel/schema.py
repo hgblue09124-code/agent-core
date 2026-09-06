@@ -51,6 +51,7 @@ class KernelContext:
     started_at: str = ""
     finished_at: str = ""
     created_at: str = ""
+    packed_context: str = ""
 
     def to_dict(self) -> dict:
         return {
@@ -68,6 +69,7 @@ class KernelContext:
             "started_at": self.started_at,
             "finished_at": self.finished_at,
             "created_at": self.created_at,
+            "packed_context": self.packed_context,
         }
 
     @classmethod
@@ -87,6 +89,7 @@ class KernelContext:
             started_at=d.get("started_at", ""),
             finished_at=d.get("finished_at", ""),
             created_at=d.get("created_at", ""),
+            packed_context=d.get("packed_context", ""),
         )
 
     def now_str(self) -> str:
