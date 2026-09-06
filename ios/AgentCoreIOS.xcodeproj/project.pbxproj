@@ -44,27 +44,6 @@
 		002119 /* ConnectionsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 002019 /* ConnectionsView.swift */; };
 		002120 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 002020 /* SettingsView.swift */; };
 		002121 /* ReviewView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 002021 /* ReviewView.swift */; };
-		002201 /* AgentDesignTokens.swift in Sources */ = {isa = PBXBuildFile; fileRef = 002001 /* AgentDesignTokens.swift */; };
-		002202 /* AgentOrbView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 002002 /* AgentOrbView.swift */; };
-		002203 /* StatusPillView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 002003 /* StatusPillView.swift */; };
-		002204 /* PrivacyChipView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 002004 /* PrivacyChipView.swift */; };
-		002205 /* InputPillView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 002005 /* InputPillView.swift */; };
-		002206 /* QuickActionCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 002006 /* QuickActionCard.swift */; };
-		002207 /* CurrentTaskCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 002007 /* CurrentTaskCard.swift */; };
-		002208 /* ActivityRowView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 002008 /* ActivityRowView.swift */; };
-		002209 /* StepProgressRow.swift in Sources */ = {isa = PBXBuildFile; fileRef = 002009 /* StepProgressRow.swift */; };
-		002210 /* ProgressBarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 002010 /* ProgressBarView.swift */; };
-		002211 /* CategoryCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 002011 /* CategoryCard.swift */; };
-		002212 /* RememberedContextCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 002012 /* RememberedContextCard.swift */; };
-		002213 /* ConnectionRowView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 002013 /* ConnectionRowView.swift */; };
-		002214 /* SettingsCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 002014 /* SettingsCard.swift */; };
-		002215 /* HomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 002015 /* HomeView.swift */; };
-		002216 /* ExecuteView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 002016 /* ExecuteView.swift */; };
-		002217 /* ActivityView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 002017 /* ActivityView.swift */; };
-		002218 /* VaultView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 002018 /* VaultView.swift */; };
-		002219 /* ConnectionsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 002019 /* ConnectionsView.swift */; };
-		002220 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 002020 /* SettingsView.swift */; };
-		002221 /* ReviewView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 002021 /* ReviewView.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -474,27 +453,27 @@
 				001025 /* DataUpdateValidator.swift in Sources */,
 				001027 /* GitHubDataUpdateConfiguration.swift in Sources */,
 				001029 /* GitHubDataUpdateManager.swift in Sources */,
-				002201 /* AgentDesignTokens.swift in Sources */,
-				002202 /* AgentOrbView.swift in Sources */,
-				002203 /* StatusPillView.swift in Sources */,
-				002204 /* PrivacyChipView.swift in Sources */,
-				002205 /* InputPillView.swift in Sources */,
-				002206 /* QuickActionCard.swift in Sources */,
-				002207 /* CurrentTaskCard.swift in Sources */,
-				002208 /* ActivityRowView.swift in Sources */,
-				002209 /* StepProgressRow.swift in Sources */,
-				002210 /* ProgressBarView.swift in Sources */,
-				002211 /* CategoryCard.swift in Sources */,
-				002212 /* RememberedContextCard.swift in Sources */,
-				002213 /* ConnectionRowView.swift in Sources */,
-				002214 /* SettingsCard.swift in Sources */,
-				002215 /* HomeView.swift in Sources */,
-				002216 /* ExecuteView.swift in Sources */,
-				002217 /* ActivityView.swift in Sources */,
-				002218 /* VaultView.swift in Sources */,
-				002219 /* ConnectionsView.swift in Sources */,
-				002220 /* SettingsView.swift in Sources */,
-				002221 /* ReviewView.swift in Sources */,
+				002101 /* AgentDesignTokens.swift in Sources */,
+				002102 /* AgentOrbView.swift in Sources */,
+				002103 /* StatusPillView.swift in Sources */,
+				002104 /* PrivacyChipView.swift in Sources */,
+				002105 /* InputPillView.swift in Sources */,
+				002106 /* QuickActionCard.swift in Sources */,
+				002107 /* CurrentTaskCard.swift in Sources */,
+				002108 /* ActivityRowView.swift in Sources */,
+				002109 /* StepProgressRow.swift in Sources */,
+				002110 /* ProgressBarView.swift in Sources */,
+				002111 /* CategoryCard.swift in Sources */,
+				002112 /* RememberedContextCard.swift in Sources */,
+				002113 /* ConnectionRowView.swift in Sources */,
+				002114 /* SettingsCard.swift in Sources */,
+				002115 /* HomeView.swift in Sources */,
+				002116 /* ExecuteView.swift in Sources */,
+				002117 /* ActivityView.swift in Sources */,
+				002118 /* VaultView.swift in Sources */,
+				002119 /* ConnectionsView.swift in Sources */,
+				002120 /* SettingsView.swift in Sources */,
+				002121 /* ReviewView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
