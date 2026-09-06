@@ -21,6 +21,7 @@ import time
 from dataclasses import dataclass, field
 from typing import Any, Optional
 
+from core.context.pack import compact_tool_output
 from core.kernel.kernel import Kernel, KernelResult
 from core.kernel.policy import PolicyEngine, Budget
 from core.projects.manager import ProjectManager
@@ -29,6 +30,7 @@ from core.experience.engine import ExperienceEngine
 from core.experience.schema import Experience
 from core.experience.store import ExperienceStoreError
 from core.memory.manager import MemoryManager
+from core.memory.schema import MemoryItem, MemoryQuery, MemoryType
 from core.capabilities.adapter import BaseCapabilityAdapter, CapabilityRegistry
 from core.capabilities.mock_adapter import MockEchoCapabilityAdapter
 from core.capabilities.github import GitHubCapabilityAdapter
@@ -303,17 +305,12 @@ class Agent:
             verdict = "PENDING"
 
         obs_text = []
-        pack = getattr(loop_state, "context_pack", None) or {}
-        retrieved = (pack.get("retrieved") or "").strip()
-        if retrieved:
-            first_line = retrieved.splitlines()[0][:120]
-            obs_text.append(f"Retrieved: {first_line}")
-
         for o in loop_state.observations:
+            out = compact_tool_output(o.output) if o.output is not None else ""
             if isinstance(o.output, str) and "Capability '" in o.output:
-                obs_text.append(o.output)
+                obs_text.append(compact_tool_output(o.output))
             else:
-                obs_text.append(f"Observation ({o.action_id}): status={o.status}, output={o.output}")
+                obs_text.append(f"Observation ({o.action_id}): status={o.status}, output={out}")
 
         errors = [loop_state.error] if loop_state.error else []
         is_authorized = not (loop_state.status == AgentLoopStatus.FAILED.value and ("Policy DENY" in loop_state.error or "denied" in loop_state.error))
@@ -380,6 +377,29 @@ class Agent:
             errors=[loop_state.error],
             observations=[],
         )
+
+    def remember(
+        self,
+        content: str,
+        memory_type: str = MemoryType.USER_CONTEXT.value,
+        tags: Optional[list[str]] = None,
+        importance: float = 0.8,
+    ) -> MemoryItem:
+        """Store a relevant personal fact. Does not inject it into every later prompt."""
+        return self._memory.remember(
+            content=content,
+            memory_type=memory_type,
+            tags=tags,
+            importance=importance,
+        )
+
+    def retrieve_memory(self, query: str, limit: int = 5) -> list[MemoryItem]:
+        """Relevance-gated memory retrieve."""
+        return self._memory.retrieve(MemoryQuery(query=query, limit=limit))
+
+    def forget(self, memory_id: str = "", query: str = "") -> bool:
+        """Remove a memory by id or query. Identity cannot be forgotten this way."""
+        return self._memory.forget(memory_id=memory_id, query=query)
 
     def inspect_run(self, run_id: str) -> Optional[dict]:
         """Inspect detailed lifecycle state of a run."""

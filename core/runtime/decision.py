@@ -86,6 +86,20 @@ class DecisionEngine:
                 reason="Action missing required 'capability' or 'operation' field",
             )
 
+        # In-process memory ops are owned by the loop, not the capability registry.
+        if action.capability == "core.memory":
+            if action.operation in ("remember", "forget", "retrieve"):
+                return DecisionResult(
+                    authorized_action=action,
+                    authorization_status="ALLOW",
+                    reason="Internal memory operation",
+                )
+            return DecisionResult(
+                authorized_action=action,
+                authorization_status="DENY",
+                reason=f"Unknown memory operation '{action.operation}'",
+            )
+
         # 2. Capability Registry validation
         adapter = self._registry.get(action.capability)
         if not adapter:

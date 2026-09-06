@@ -119,3 +119,41 @@ class MemoryManager:
     def get_user_context(self) -> list[MemoryItem]:
         """Get user context memories."""
         return self.store.list_all(memory_type=MemoryType.USER_CONTEXT.value)
+
+    def forget(self, memory_id: str = "", query: str = "") -> bool:
+        """Delete a memory by id, or every non-identity match of `query`."""
+        if memory_id:
+            return self.store.delete(memory_id)
+        if not query:
+            return False
+        hits = self.retrieve(MemoryQuery(query=query, limit=20))
+        removed = False
+        q_lower = query.lower().strip()
+        # Also match key-like content even if retrieve token-filter missed.
+        if not hits:
+            for item in self.store.list_all():
+                if item.memory_type == MemoryType.IDENTITY.value:
+                    continue
+                if q_lower and q_lower in (item.content or "").lower():
+                    hits.append(item)
+        for item in hits:
+            if item.memory_type == MemoryType.IDENTITY.value:
+                continue
+            if self.store.delete(item.memory_id):
+                removed = True
+        return removed
+
+    def summarize(self, limit: int = 5) -> str:
+        """One-line compact session summary. Never dumps identity."""
+        items = [
+            i for i in self.store.list_all()
+            if i.memory_type != MemoryType.IDENTITY.value
+        ]
+        items.sort(key=lambda x: (x.importance, x.updated_at or x.created_at or ""), reverse=True)
+        lines = []
+        for item in items[:limit]:
+            snippet = " ".join((item.content or "").split())[:80]
+            if snippet:
+                lines.append(f"- {snippet}")
+        return "\n".join(lines)
+

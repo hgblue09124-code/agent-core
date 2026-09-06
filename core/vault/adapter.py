@@ -133,16 +133,34 @@ class PersonalVaultAdapter(BaseVaultAdapter):
                 # Vault failure must not crash Core — fall back to local buffer
                 pass
 
-        # Fallback query matching over local buffer
-        q_lower = query.lower()
-        results: list[dict[str, Any]] = []
+        # Fallback query matching over local buffer. Exact key, then key substring, then data.
+        q_lower = query.lower().strip()
+        exact: list[dict[str, Any]] = []
+        key_hits: list[dict[str, Any]] = []
+        data_hits: list[dict[str, Any]] = []
         for key, entry in self._fallback_store.items():
-            content_str = str(entry.get("data", "")).lower() + " " + key.lower()
-            if any(term in content_str for term in q_lower.split()):
-                results.append({"key": key, "category": entry.get("category"), "data": entry.get("data")})
-            if len(results) >= limit:
-                break
-        return results
+            item = {"key": key, "category": entry.get("category"), "data": entry.get("data")}
+            key_l = key.lower()
+            content_str = str(entry.get("data", "")).lower()
+            if key_l == q_lower:
+                exact.append(item)
+            elif q_lower and q_lower in key_l:
+                key_hits.append(item)
+            elif q_lower and any(term in content_str for term in q_lower.split()):
+                data_hits.append(item)
+        results = exact + key_hits + data_hits
+        q = q_lower
+
+        def _score(item: dict[str, Any]) -> int:
+            data = item.get("data")
+            if isinstance(data, dict) and any(q == str(k).lower() or q in str(k).lower() for k in data):
+                return 0
+            if q and q in str(item.get("key", "")).lower():
+                return 1
+            return 2
+
+        results.sort(key=_score)
+        return results[:limit]
 
     def store_context(self, key: str, data: dict[str, Any], category: str = "user_preference") -> bool:
         """Store personal context item in vault."""

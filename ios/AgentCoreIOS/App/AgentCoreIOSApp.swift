@@ -447,6 +447,8 @@ final class AgentAppViewModel: ObservableObject {
             blockerDetails.append("Permission flow check failed")
         }
 
+        // Put the store in an in-flight phase, then cancel for real (idle cancel is a no-op).
+        runtimeStore.send(.executionStarted(goal: "cancel-probe", executionId: runRes.runId))
         cancelTask()
         if runtimeStore.state.phase == .cancelled {
             setCheck(id: 6, status: .pass, msg: "Task cancellation propagated correctly")

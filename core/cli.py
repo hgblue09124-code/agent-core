@@ -107,8 +107,8 @@ def cmd_run(args) -> int:
     for step in res.plan_steps[:5]:
         print(f"                 • {step}")
     print(f"  [AUTHORITY]    {'Authorized' if res.authorized else 'REJECTED'}")
-    print(f"  [EXECUTION]    Completed via TaskRunner")
-    print(f"  [OBSERVATION]  Captured stdout/stderr")
+    print(f"  [EXECUTION]    Completed via AgentLoop / CapabilityRegistry")
+    print(f"  [OBSERVATION]  Compacted tool output")
     print(f"  [VERIFICATION] {res.verification_verdict}")
     print(f"  [RESULT]       {res.status} ({res.duration_seconds:.3f}s)")
     print(f"  [EXPERIENCE]   {'Recorded' if res.experience_recorded else 'Not recorded'} (Run ID: {res.run_id})")
@@ -134,12 +134,15 @@ def cmd_inspect(args) -> int:
     print(f"Run ID     : {info.get('run_id')}")
     print(f"Goal       : {info.get('goal')}")
     print(f"Project    : {info.get('project_id')}")
-    print(f"Status     : {info.get('kernel_status')}")
-    print(f"Phase      : {info.get('kernel_phase')}")
+    print(f"Status     : {info.get('status') or info.get('kernel_status')}")
+    print(f"Phase      : {info.get('phase') or info.get('kernel_phase')}")
     print(f"Started    : {info.get('started_at')}")
     print(f"Finished   : {info.get('finished_at')}")
-    print(f"LLM Calls  : {info.get('llm_calls')}")
-    print(f"Retrieved  : {info.get('knowledge_retrieved')}")
+    telemetry = info.get("telemetry") or {}
+    print(f"LLM Calls  : {telemetry.get('llm_calls', info.get('llm_calls', 0))}")
+    pack = info.get("context_pack") or {}
+    retrieved = (pack.get("retrieved") or "")[:80]
+    print(f"Retrieved  : {retrieved or info.get('knowledge_retrieved') or '—'}")
 
     if info.get("errors"):
         print("\nErrors:")

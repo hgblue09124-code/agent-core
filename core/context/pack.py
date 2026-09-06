@@ -54,6 +54,14 @@ _PROJECT_HINTS = (
     "implement",
     "kernel",
 )
+_PREF_HINTS = (
+    "preference",
+    "favorite",
+    "theme",
+    "dark mode",
+    "giao diện",
+    "ui theo",
+)
 _TOKEN_RE = re.compile(r"[a-z0-9_]+")
 
 
@@ -107,6 +115,9 @@ def needed_layers(goal: str, *, has_session: bool = False, has_tool_output: bool
     g = (goal or "").lower()
     if any(h in g for h in _IDENTITY_HINTS):
         layers.add("persistent")
+    if any(h in g for h in _PREF_HINTS):
+        layers.add("persistent")
+        layers.add("retrieved")
     if any(h in g for h in _PROJECT_HINTS):
         layers.add("retrieved")
     # Capability / inspect tasks still benefit from a tiny retrieved slice

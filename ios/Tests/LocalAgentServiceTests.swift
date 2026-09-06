@@ -256,6 +256,15 @@ final class LocalAgentServiceTests: XCTestCase {
         XCTAssertEqual(nonExistentRes.status, .failed)
     }
 
+    func test12b_runRememberGoal_writesMemoryWithoutFakeSteps() async {
+        let res = await service.run(goal: "Remember that my favorite color is blue", userApproved: true)
+        XCTAssertEqual(res.status, .success)
+        XCTAssertEqual(res.verificationVerdict, "PASS")
+        XCTAssertEqual(res.planSteps.count, 1)
+        let items = await service.retrieve(query: "favorite color")
+        XCTAssertTrue(items.contains(where: { $0.value.lowercased().contains("blue") }), "remember goal must persist the fact")
+    }
+
     @MainActor
     func test13_agentAppViewModel_interactiveReviewChecksPass() async {
         let viewModel = AgentAppViewModel(service: service, updateManager: updateManager)

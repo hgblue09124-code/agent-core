@@ -145,7 +145,22 @@ public final class AgentRuntime: @unchecked Sendable {
             return res
         }
 
-        let writeKeywords = ["create", "update", "delete", "post", "put", "patch", "write", "comment", "merge", "close", "remove", "forget", "drop", "clear", "modify"]
+        let intent = classifyGoal(trimmedGoal)
+
+        // Cheap remember/forget skip the mutating-keyword gate (forget is a first-class memory op).
+        if intent.kind == .remember || intent.kind == .forget {
+            return await executeMemoryIntent(
+                intent: intent,
+                runId: runId,
+                trimmedGoal: trimmedGoal,
+                startTime: startTime,
+                emit: { phase, status, summary, payload in
+                    emit(phase, status, summary, payload: payload)
+                }
+            )
+        }
+
+        let writeKeywords = ["create", "update", "delete", "post", "put", "patch", "write", "comment", "merge", "close", "remove", "drop", "clear", "modify"]
         let goalWords = trimmedGoal.lowercased().components(separatedBy: CharacterSet.alphanumerics.inverted)
         let isMutatingGoal = writeKeywords.contains(where: { goalWords.contains($0) })
 
@@ -248,12 +263,13 @@ public final class AgentRuntime: @unchecked Sendable {
         }
 
         isThinking = true
-        let planSteps = await planner.generatePlan(goal: trimmedGoal)
+        let planSteps = await generatePlanSteps(goal: trimmedGoal)
         isThinking = false
         emit(.planCreated, .ok, "Generated plan with \(planSteps.count) steps", payload: ["planSteps": planSteps.joined(separator: "\n")])
 
+        var failedStep: String? = nil
         for (idx, step) in planSteps.enumerated() {
-            if cancelledRuns.contains(runId) {
+            if Task.isCancelled || cancelledRuns.contains(runId) {
                 let duration = Date().timeIntervalSince(startTime)
                 let res = AgentRunResult(
                     runId: runId,
@@ -273,12 +289,44 @@ public final class AgentRuntime: @unchecked Sendable {
 
             let stepId = "STEP-\(idx + 1)"
             emit(.execute, .running, step, payload: ["stepId": stepId, "stepIndex": "\(idx)"])
-            emit(.observeResult, .pass, "Completed step \(idx + 1)", payload: ["stepId": stepId, "stepIndex": "\(idx)"])
+            let capRes = await executeCapability(
+                capabilityId: "mock.echo",
+                input: ["action": "echo", "text": step, "mock_offline": "true"],
+                userApproved: userApproved
+            )
+            if capRes.status == .success {
+                emit(.observeResult, .pass, capRes.output ?? "Completed step \(idx + 1)", payload: ["stepId": stepId, "stepIndex": "\(idx)"])
+            } else {
+                failedStep = capRes.errorMessage ?? "Step \(idx + 1) failed"
+                emit(.observeResult, .fail, failedStep ?? "failed", payload: ["stepId": stepId, "stepIndex": "\(idx)"])
+                break
+            }
+        }
+
+        let verified = failedStep == nil && !planSteps.isEmpty
+        emit(.verify, verified ? .pass : .fail, verified ? "Verification verdict PASS" : "Verification verdict FAIL")
+
+        if !verified {
+            let duration = Date().timeIntervalSince(startTime)
+            let result = AgentRunResult(
+                runId: runId,
+                status: .failed,
+                goal: trimmedGoal,
+                output: failedStep,
+                errorCode: "VERIFY_FAIL",
+                errorMessage: failedStep ?? "Verification failed",
+                planSteps: planSteps,
+                authorized: true,
+                verificationVerdict: "FAIL"
+            )
+            emit(.taskFailed, .error, result.errorMessage ?? "failed")
+            runEventsMap[runId] = events
+            checkpointStore.save(result: result)
+            _ = experienceStore.record(runId: runId, goal: trimmedGoal, outcome: "failed", durationSeconds: duration)
+            return result
         }
 
         _ = vaultStore.storeContext(key: "run_summary_\(runId)", value: trimmedGoal, category: "run_history")
-
-        emit(.verify, .pass, "Verification verdict PASS")
 
         let duration = Date().timeIntervalSince(startTime)
         let result = AgentRunResult(
@@ -531,6 +579,161 @@ public final class AgentRuntime: @unchecked Sendable {
             storagePath: "Application Support/AgentCore/",
             activeCapabilitiesCount: capabilities.count
         )
+    }
+
+    // MARK: - Cheap classification + real plan/execute
+
+    private struct GoalIntent {
+        enum Kind { case remember, forget, status, other }
+        let kind: Kind
+        let key: String
+        let value: String
+    }
+
+    private func classifyGoal(_ goal: String) -> GoalIntent {
+        let trimmed = goal.trimmingCharacters(in: .whitespacesAndNewlines)
+        let lower = trimmed.lowercased()
+
+        if lower.hasPrefix("remember") {
+            var rest = trimmed
+            if let range = rest.range(of: "remember", options: [.caseInsensitive]) {
+                rest = String(rest[range.upperBound...]).trimmingCharacters(in: .whitespaces)
+            }
+            if rest.lowercased().hasPrefix("that ") {
+                rest = String(rest.dropFirst(5)).trimmingCharacters(in: .whitespaces)
+            }
+            rest = rest.trimmingCharacters(in: CharacterSet(charactersIn: "."))
+            let parts = splitFact(rest)
+            return GoalIntent(kind: .remember, key: parts.0, value: parts.1)
+        }
+
+        if lower.hasPrefix("forget") {
+            var rest = trimmed
+            if let range = rest.range(of: "forget", options: [.caseInsensitive]) {
+                rest = String(rest[range.upperBound...]).trimmingCharacters(in: .whitespaces)
+            }
+            for prefix in ["memory ", "the ", "key "] {
+                if rest.lowercased().hasPrefix(prefix) {
+                    rest = String(rest.dropFirst(prefix.count))
+                    break
+                }
+            }
+            rest = rest.trimmingCharacters(in: CharacterSet(charactersIn: "."))
+            return GoalIntent(kind: .forget, key: rest, value: rest)
+        }
+
+        let statusHints = ["status", "health", "version", "ping", "smoke"]
+        let wordCount = trimmed.split(separator: " ").count
+        if wordCount <= 8 && statusHints.contains(where: { lower.contains($0) }) {
+            return GoalIntent(kind: .status, key: "", value: trimmed)
+        }
+        return GoalIntent(kind: .other, key: "", value: trimmed)
+    }
+
+    private func splitFact(_ content: String) -> (String, String) {
+        let lower = content.lowercased()
+        if let range = lower.range(of: " is ") {
+            var key = String(content[..<range.lowerBound]).trimmingCharacters(in: .whitespaces)
+            let value = String(content[range.upperBound...]).trimmingCharacters(in: .whitespaces)
+            for prefix in ["that ", "my ", "the "] {
+                if key.lowercased().hasPrefix(prefix) {
+                    key = String(key.dropFirst(prefix.count))
+                }
+            }
+            return (String(key.prefix(80)), String(value.prefix(400)))
+        }
+        if let idx = content.firstIndex(of: ":") {
+            let key = content[..<idx].trimmingCharacters(in: .whitespaces)
+            let value = content[content.index(after: idx)...].trimmingCharacters(in: .whitespaces)
+            return (String(key.prefix(80)), String(value.prefix(400)))
+        }
+        return (String(content.prefix(80)), String(content.prefix(400)))
+    }
+
+    private func generatePlanSteps(goal: String) async -> [String] {
+        if let provider = languageModelProvider {
+            do {
+                if !provider.isLoaded {
+                    try await provider.load()
+                }
+                let request = LanguageModelRequest(
+                    systemPrompt: "Return 1 to 5 short plan steps, one per line. No chain-of-thought.",
+                    messages: [LanguageModelMessage(role: .user, content: goal)],
+                    parameters: LanguageModelGenerationParameters(maxTokens: 200)
+                )
+                let response = try await provider.generate(request)
+                let lines = response.text
+                    .split(separator: "\n")
+                    .map { $0.trimmingCharacters(in: .whitespaces) }
+                    .filter { !$0.isEmpty && !$0.hasPrefix("#") }
+                if !lines.isEmpty {
+                    return Array(lines.prefix(5))
+                }
+            } catch {
+                // Fall back to deterministic planner.
+            }
+        }
+        return await planner.generatePlan(goal: goal)
+    }
+
+    private func executeMemoryIntent(
+        intent: GoalIntent,
+        runId: String,
+        trimmedGoal: String,
+        startTime: Date,
+        emit: (AgentEventPhase, AgentEventStatus, String, [String: String]?) -> Void
+    ) async -> AgentRunResult {
+        let stepTitle: String
+        let mem: MemoryResult
+        if intent.kind == .remember {
+            stepTitle = "Remember \(intent.key)"
+            mem = await remember(key: intent.key, value: intent.value)
+        } else {
+            stepTitle = "Forget \(intent.key)"
+            mem = await forget(key: intent.key)
+        }
+
+        emit(.planCreated, .ok, "Generated plan with 1 steps", ["planSteps": stepTitle])
+        emit(.execute, .running, stepTitle, ["stepId": "STEP-1", "stepIndex": "0"])
+
+        let ok = mem.status == .success
+        emit(.observeResult, ok ? .pass : .fail, ok ? (intent.value.isEmpty ? stepTitle : intent.value) : (mem.errorMessage ?? "failed"), ["stepId": "STEP-1", "stepIndex": "0"])
+        emit(.verify, ok ? .pass : .fail, ok ? "Verification verdict PASS" : "Verification verdict FAIL", nil)
+
+        let duration = Date().timeIntervalSince(startTime)
+        if ok {
+            let result = AgentRunResult(
+                runId: runId,
+                status: .success,
+                goal: trimmedGoal,
+                output: intent.kind == .remember
+                    ? "Remembered '\(intent.key)' = '\(intent.value)'"
+                    : "Forgot '\(intent.key)'",
+                planSteps: [stepTitle],
+                authorized: true,
+                verificationVerdict: "PASS"
+            )
+            emit(.taskCompleted, .ok, "Task completed successfully", nil)
+            runEventsMap[runId] = runEventsMap[runId] ?? []
+            checkpointStore.save(result: result)
+            _ = experienceStore.record(runId: runId, goal: trimmedGoal, outcome: "success", durationSeconds: duration)
+            return result
+        }
+
+        let result = AgentRunResult(
+            runId: runId,
+            status: .failed,
+            goal: trimmedGoal,
+            errorCode: "MEMORY_FAIL",
+            errorMessage: mem.errorMessage ?? "Memory operation failed",
+            planSteps: [stepTitle],
+            authorized: true,
+            verificationVerdict: "FAIL"
+        )
+        emit(.taskFailed, .error, result.errorMessage ?? "failed", nil)
+        checkpointStore.save(result: result)
+        _ = experienceStore.record(runId: runId, goal: trimmedGoal, outcome: "failed", durationSeconds: duration)
+        return result
     }
 
     // MARK: - Language Model Provider Bridge (Step 1)
