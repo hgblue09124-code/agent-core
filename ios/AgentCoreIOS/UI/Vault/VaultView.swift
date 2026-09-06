@@ -92,10 +92,10 @@ struct VaultView: View {
 
                                         Spacer()
 
-                                        if memory.isEncrypted {
-                                            Image(systemName: "lock.fill")
+                                        if memory.importance > 0.7 {
+                                            Image(systemName: "star.fill")
                                                 .font(.system(size: 10))
-                                                .foregroundColor(AgentColor.success)
+                                                .foregroundColor(AgentColor.warning)
                                         }
                                     }
 
@@ -144,14 +144,14 @@ struct VaultView: View {
 
     private var documentsCount: Int {
         if let summary = viewModel.vaultSummary {
-            return summary.categories.first(where: { $0.category == .documents })?.itemCount ?? 0
+            return summary.categoriesCount["documents"] ?? 0
         }
         return viewModel.memories.filter { $0.key.contains("doc") || $0.key.contains("file") }.count
     }
 
     private var notesCount: Int {
         if let summary = viewModel.vaultSummary {
-            return summary.categories.first(where: { $0.category == .userPreference || $0.category == .customContext })?.itemCount ?? viewModel.memories.count
+            return summary.categoriesCount["user_preference"] ?? summary.totalItemsCount
         }
         return viewModel.memories.count
     }

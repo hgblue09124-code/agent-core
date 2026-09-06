@@ -46,7 +46,7 @@ struct ConnectionRowView: View {
             if connection.kind == .local {
                 PrivacyChipView(label: "Local", isLocal: true)
             } else {
-                if connection.state == .connected {
+                if connection.state == .remoteConfigured {
                     PrivacyChipView(label: "Remote", isLocal: false)
                 } else {
                     Button(action: { onToggle?() }) {
@@ -67,9 +67,12 @@ struct ConnectionRowView: View {
             return "On-device · always available"
         case .remote:
             switch connection.state {
-            case .connected: return "Connected · remote"
-            case .disconnected: return "Not connected"
-            case .error: return "Connection error"
+            case .localActive:
+                return "On-device · active"
+            case .remoteConfigured:
+                return "Connected · remote"
+            case .remoteNotConfigured:
+                return "Not connected"
             }
         }
     }
