@@ -19,7 +19,7 @@ public struct GitHubDataUpdateConfiguration: Codable, Sendable {
         branch: String = "master",
         manifestPath: String = "data-update/manifest.json",
         autoCheckOnLaunch: Bool = true,
-        currentClientVersion: String = "0.1.0"
+        currentClientVersion: String = "0.2.0"
     ) {
         self.owner = owner
         self.repo = repo

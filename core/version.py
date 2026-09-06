@@ -7,8 +7,8 @@ import os
 import re
 from typing import Optional
 
-__version__ = "0.1.0-beta"
-IOS_MARKETING_VERSION = "0.1.0"
+__version__ = "0.2.0"
+IOS_MARKETING_VERSION = "0.2.0"
 
 
 def marketing_version() -> str:

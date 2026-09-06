@@ -47,7 +47,7 @@ def package_ios_source_zip(dest: Path, ios_dir: Path = IOS_DIR) -> Path:
     return dest
 
 
-def default_zip_name(version: str = "0.1.0") -> str:
+def default_zip_name(version: str = "0.2.0") -> str:
     v = version[1:] if version.startswith("v") else version
     return f"agent-core-ios-v{v}.zip"
 
@@ -60,7 +60,7 @@ def main() -> int:
         default="",
         help="Output zip path (default: dist/agent-core-ios-v<version>.zip)",
     )
-    parser.add_argument("--version", default=os.environ.get("AGENTCORE_RELEASE_VERSION", "0.1.0"))
+    parser.add_argument("--version", default=os.environ.get("AGENTCORE_RELEASE_VERSION", "0.2.0"))
     args = parser.parse_args()
     dest = Path(args.output) if args.output else _root / "dist" / default_zip_name(args.version)
     path = package_ios_source_zip(dest)

@@ -18,7 +18,7 @@ from typing import Optional
 @dataclass
 class ProviderConfig:
     """Validated provider configuration. Secrets never printed/logged."""
-    provider: str           # "openai" | "openrouter" | "local" | "mock"
+    provider: str           # "openai" | "openrouter" | "local" | "xai" | "gguf" | "mock"
     api_key: str           # secret, in-memory only
     base_url: str
     model: str
@@ -49,6 +49,20 @@ _PROVIDER_ENVS = {
         "model": "AGENTCORE_PLANNER_MODEL",
         "default_base_url": "http://localhost:11434",
         "default_model": "llama3",
+    },
+    "xai": {
+        "key": "XAI_API_KEY",
+        "base_url": "AGENTCORE_PLANNER_BASE_URL",
+        "model": "AGENTCORE_PLANNER_MODEL",
+        "default_base_url": "https://api.x.ai/v1",
+        "default_model": "grok-3-mini",
+    },
+    "gguf": {
+        "key": "",
+        "base_url": "",
+        "model": "AGENTCORE_GGUF_MODEL",
+        "default_base_url": "",
+        "default_model": "qwen25-0.5b-q4",
     },
     "mock": {},
 }
@@ -110,6 +124,12 @@ class ConfigManager:
         """Validate configuration. Returns (ready, error)."""
         if self._provider == "mock":
             return True, None
+        if self._provider == "gguf":
+            return True, None
+        if self._provider == "local" and not self._api_key:
+            # Local Ollama / llama.cpp often run without a key.
+            if self._base_url and _URL_PATTERN.match(self._base_url):
+                return True, None
 
         # API key must be non-empty
         if not self._api_key:

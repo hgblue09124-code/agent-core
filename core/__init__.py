@@ -1,5 +1,5 @@
 # core/__init__.py
-"""Agent-Core v0.1.0-beta Developer Preview Package."""
+"""Agent-Core v0.2.0 package."""
 
 from core.agent import Agent, AgentRunResult
 from core.kernel.kernel import Kernel, KernelResult

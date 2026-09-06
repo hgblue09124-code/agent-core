@@ -33,6 +33,8 @@ REQUIRED = [
     "ios/AgentCoreIOS/Update/GitHubDataUpdateManager.swift",
     "ios/AgentCoreIOS/Update/DataUpdateValidator.swift",
     "ios/AgentCoreIOS/Providers/LanguageModelProvider.swift",
+    "ios/AgentCoreIOS/Providers/ModelCatalog.swift",
+    "ios/AgentCoreIOS/Providers/RoutingLanguageModelProvider.swift",
     "ios/Tests/LocalAgentServiceTests.swift",
     "ios/README.md",
 ]

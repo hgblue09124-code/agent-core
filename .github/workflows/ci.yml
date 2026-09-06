@@ -150,7 +150,7 @@ jobs:
           if [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
             VERSION="${GITHUB_REF_NAME#v}"
           else
-            VERSION="0.1.0"
+            VERSION="$(python3 -c 'from core.version import marketing_version; print(marketing_version())')"
           fi
           BUILD="${GITHUB_RUN_NUMBER}"
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"

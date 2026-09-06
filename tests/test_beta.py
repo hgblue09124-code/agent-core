@@ -33,8 +33,8 @@ class TestBetaPublicAPI(unittest.TestCase):
     """Test developer-facing public API exports."""
 
     def test_version_metadata(self):
-        self.assertEqual(agent_core.__version__, "0.1.0-beta")
-        self.assertEqual(Agent.VERSION, "0.1.0-beta")
+        self.assertEqual(agent_core.__version__, "0.2.0")
+        self.assertEqual(Agent.VERSION, "0.2.0")
 
     def test_package_exports_exist(self):
         self.assertTrue(hasattr(agent_core, "Agent"))

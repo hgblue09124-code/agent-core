@@ -6,36 +6,30 @@ All notable changes to Agent-Core will be documented in this file.
 
 ## [Unreleased]
 
+---
+
+## [0.2.0] - 2026-09-06
+
 ### Summary
-AgentLoop is the Personal Agent orchestrator. Cheap classification skips the planner. Retrieve is relevance-gated. Swift runtime executes real steps and remember/forget intents. Dual-stack (Python kernel vs Swift local runtime) is unchanged.
+Local LLM catalog (tiny → medium GGUF), on-device + cloud providers on iOS, new app icon, AgentLoop cheap path from 0.1.x unreleased work.
 
-### Agent loop
-- Cheap path: remember / forget / short status goals skip planner and capability keyword matching.
-- Retrieve uses `needed_layers` — identity, vault, and strategies are not fetched for unrelated goals.
-- Successful runs no longer dump "Successfully executed goal …" into prompt memory.
-- REPLAN produces a different action set (excludes the failed capability) or fails closed.
-- Planner is called only when classification is complex **and** `AGENTCORE_PLANNER_PROVIDER` is not `mock`.
-- In-process `core.memory` actions for remember/forget; write GitHub still requires approval.
-- GitHub keyword plan mocks only when `GITHUB_TOKEN` is absent.
+### Language models
+- Catalog: Qwen2.5 0.5B, Llama 3.2 1B/3B, Phi-3.5 Mini (Q4_K_M GGUF).
+- HTTPS download with host allow-list, optional SHA-256, GGUF header inspect. Weights only — no executable code.
+- iOS backends: On-device, OpenAI, OpenRouter, xAI, Ollama/llama.cpp, custom OpenAI-compatible.
+- Privacy mode blocks cloud providers. API keys stored in Keychain.
+- Download allow-list includes Hugging Face (`huggingface.co`, `hf.co`) and GitHub object storage.
+- Python `core.llm` catalog/download/OpenAI chat client; optional `llama-cpp-python` via `provider=gguf`.
+- App wires `RoutingLanguageModelProvider` into `AgentRuntime`. Cheap loop still runs if the LLM sidecar is down.
 
-### Token / context
-- Preference/UI goals pull persistent + retrieved layers.
-- Observation evidence compacted after verification.
-- `AgentRunResult.observations` no longer prepends retrieved pack text.
+### iOS
+- New App Icon (Assets.xcassets).
+- Settings: backend picker, model download, test generation.
+- Local networking ATS exception for Ollama/llama-server.
+- Marketing version 0.2.0.
 
-### Swift runtime
-- Remember/forget goals write the real memory store (no five fake PASS steps).
-- Other goals execute `mock.echo` per plan step; verify FAIL if a step fails.
-- `LanguageModelProvider` is used for planning when injected; otherwise `LocalDeterministicPlanner`.
-- Store adopts the runtime `runId` (no dual IDs). Idle cancel is a no-op.
-
-### CLI
-- Inspect prints loop `status`/`phase`. Run no longer claims TaskRunner.
-
-### Previously in this cycle
-- Empty placeholder packages and duplicate iOS zips / pbxproj blobs removed.
-- ContextPack layered budgets + hash dedup.
-- Tag-driven unsigned IPA pipeline.
+### Agent loop (from 0.1.x unreleased)
+- Cheap remember/forget/status path, gated retrieve, real replan, Swift real execution.
 
 ---
 

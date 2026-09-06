@@ -112,6 +112,8 @@ public enum LanguageModelError: Error, Sendable, Equatable {
     case generationFailed(String)
     case invalidRequest(String)
     case providerUnavailable(String)
+    case downloadFailed(String)
+    case invalidModelFile(String)
 }
 
 extension LanguageModelError: LocalizedError {
@@ -129,6 +131,10 @@ extension LanguageModelError: LocalizedError {
             return "Invalid language model request: \(message)"
         case .providerUnavailable(let message):
             return "Language model provider unavailable: \(message)"
+        case .downloadFailed(let message):
+            return "Model download failed: \(message)"
+        case .invalidModelFile(let message):
+            return "Invalid model file: \(message)"
         }
     }
 }
@@ -144,6 +150,9 @@ public protocol LanguageModelProvider: Sendable {
     /// Whether the underlying model resources are currently loaded.
     var isLoaded: Bool { get }
 
+    /// Cloud/network provider vs on-device or local server.
+    var isRemote: Bool { get }
+
     /// Load model resources. Idempotent implementations may treat a second load as a no-op or throw `.alreadyLoaded`.
     func load() async throws
 
@@ -155,4 +164,8 @@ public protocol LanguageModelProvider: Sendable {
 
     /// Streaming generation. Callers must respect Task cancellation; providers should stop promptly when cancelled.
     func stream(_ request: LanguageModelRequest) -> AsyncThrowingStream<LanguageModelStreamChunk, Error>
+}
+
+extension LanguageModelProvider {
+    public var isRemote: Bool { false }
 }
