@@ -31,26 +31,27 @@ public final class AgentRuntimeStore: ObservableObject {
         let runId = String(format: "RUN-%05d", Int(Date().timeIntervalSince1970 * 1000) % 100000)
         send(.executionStarted(goal: trimmedGoal, executionId: runId))
 
+        let store = self
         activeTask = Task {
-            let result = await service.runStreaming(
+            let result = await store.service.runStreaming(
                 goal: trimmedGoal,
                 userApproved: userApproved,
                 capabilityDispatch: nil,
-                onEvent: { [weak self] runEvent in
-                    Task { @MainActor in
-                        self?.handleRunEvent(runEvent)
+                onEvent: { runEvent in
+                    Task { @MainActor [weak store] in
+                        store?.handleRunEvent(runEvent)
                     }
                 }
             )
 
             if result.status == .success {
-                send(.executionCompleted(output: result.output))
+                store.send(.executionCompleted(output: result.output))
             } else if result.status == .denied {
-                send(.executionFailed(error: result.errorMessage ?? "Policy Denial: Explicit user approval required."))
+                store.send(.executionFailed(error: result.errorMessage ?? "Policy Denial: Explicit user approval required."))
             } else if result.errorCode == "CANCELLED" {
-                send(.executionCancelled)
+                store.send(.executionCancelled)
             } else {
-                send(.executionFailed(error: result.errorMessage ?? "Execution failed."))
+                store.send(.executionFailed(error: result.errorMessage ?? "Execution failed."))
             }
         }
 
@@ -59,8 +60,9 @@ public final class AgentRuntimeStore: ObservableObject {
 
     public func cancel() {
         if let runId = state.executionId {
+            let currentService = service
             Task {
-                _ = await service.cancel(runId: runId)
+                _ = await currentService.cancel(runId: runId)
             }
         }
         activeTask?.cancel()
