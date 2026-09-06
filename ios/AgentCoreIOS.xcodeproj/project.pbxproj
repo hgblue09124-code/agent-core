@@ -31,3 +31,9 @@
 		004003 /* MockLanguageModelProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 004002 /* MockLanguageModelProvider.swift */; };
 		004005 /* LanguageModelProviderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 004004 /* LanguageModelProviderTests.swift */; };
 /* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		001060 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 001000000000000000000001 /* Project object */;
+			proxyType = 1;
