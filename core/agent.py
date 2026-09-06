@@ -28,9 +28,7 @@ from core.philosophy.engine import PhilosophyEngine, PhilosophyPrecedenceError
 from core.experience.engine import ExperienceEngine
 from core.experience.schema import Experience
 from core.experience.store import ExperienceStoreError
-from core.tasks.manager import TaskManager
 from core.memory.manager import MemoryManager
-from core.memory.schema import MemoryQuery, MemoryType
 from core.capabilities.adapter import BaseCapabilityAdapter, CapabilityRegistry
 from core.capabilities.mock_adapter import MockEchoCapabilityAdapter
 from core.capabilities.github import GitHubCapabilityAdapter
@@ -305,12 +303,11 @@ class Agent:
             verdict = "PENDING"
 
         obs_text = []
-        identity_mem = self._memory.get_identity()
-        if identity_mem:
-            obs_text.append(f"Identity: {identity_mem.content[:60]}...")
-        vault_contexts = self._vault.retrieve_context(query=goal, limit=3)
-        if vault_contexts:
-            obs_text.extend([f"Vault personal context: {vc.get('data')}" for vc in vault_contexts])
+        pack = getattr(loop_state, "context_pack", None) or {}
+        retrieved = (pack.get("retrieved") or "").strip()
+        if retrieved:
+            first_line = retrieved.splitlines()[0][:120]
+            obs_text.append(f"Retrieved: {first_line}")
 
         for o in loop_state.observations:
             if isinstance(o.output, str) and "Capability '" in o.output:

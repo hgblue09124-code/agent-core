@@ -25,7 +25,6 @@ from core.kernel.policy import PolicyEngine, Budget, Phase
 from core.kernel.lifecycle import KernelLifecycle, _gen_run_id
 from core.kernel.orchestrator import KernelOrchestrator
 from core.kernel.evidence import KernelEvidence
-from core.kernel.context import KernelContextBuilder
 
 
 class KernelError(Exception):
@@ -65,7 +64,6 @@ class Kernel:
         )
         self._lifecycle = KernelLifecycle()
         self._evidence = KernelEvidence()
-        self._ctx_builder = KernelContextBuilder()
         self._budget = budget or Budget()
         self._project_id = project_id or "agent-core"
 
