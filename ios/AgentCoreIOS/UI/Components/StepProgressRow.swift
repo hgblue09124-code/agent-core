@@ -3,13 +3,6 @@
 
 import SwiftUI
 
-enum ExecutionStepStatus {
-    case completed
-    case active
-    case pending
-    case failed
-}
-
 struct StepProgressRow: View {
     let title: String
     let status: ExecutionStepStatus

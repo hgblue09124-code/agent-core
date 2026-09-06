@@ -5,8 +5,8 @@ import SwiftUI
 
 struct SettingsView: View {
     @EnvironmentObject private var viewModel: AgentAppViewModel
-    @State private var backgroundExecution: Bool = true
-    @State private var privacyMode: Bool = true
+    @AppStorage("backgroundExecution") private var backgroundExecution: Bool = true
+    @AppStorage("privacyMode") private var privacyMode: Bool = true
 
     init() {}
 
@@ -58,11 +58,11 @@ struct SettingsView: View {
                         .foregroundColor(AgentColor.textMuted)
 
                     SettingsCard {
-                        SettingsRowView(title: "Storage", detail: "Local On-Device", showChevron: true)
+                        SettingsRowView(title: "Storage", detail: "Local On-Device", showChevron: false)
 
                         Divider().background(AgentColor.hairline)
 
-                        SettingsRowView(title: "Appearance", detail: "Dark", showChevron: true)
+                        SettingsRowView(title: "Appearance", detail: "Dark (Read-Only)", showChevron: false)
 
                         Divider().background(AgentColor.hairline)
 

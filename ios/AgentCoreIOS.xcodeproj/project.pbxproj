@@ -14,6 +14,10 @@
 		001009 /* AgentModelProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 001008 /* AgentModelProvider.swift */; };
 		001011 /* LocalDeterministicPlanner.swift in Sources */ = {isa = PBXBuildFile; fileRef = 001010 /* LocalDeterministicPlanner.swift */; };
 		001013 /* AgentRuntime.swift in Sources */ = {isa = PBXBuildFile; fileRef = 001012 /* AgentRuntime.swift */; };
+		003001 /* AgentRuntimeState.swift in Sources */ = {isa = PBXBuildFile; fileRef = 003000 /* AgentRuntimeState.swift */; };
+		003003 /* AgentRuntimeEvent.swift in Sources */ = {isa = PBXBuildFile; fileRef = 003002 /* AgentRuntimeEvent.swift */; };
+		003005 /* AgentRuntimeReducer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 003004 /* AgentRuntimeReducer.swift */; };
+		003007 /* AgentRuntimeStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 003006 /* AgentRuntimeStore.swift */; };
 		001015 /* LocalCheckpointStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 001014 /* LocalCheckpointStore.swift */; };
 		001017 /* LocalExperienceStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 001016 /* LocalExperienceStore.swift */; };
 		001019 /* LocalMemoryStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 001018 /* LocalMemoryStore.swift */; };
@@ -64,6 +68,10 @@
 		001008 /* AgentModelProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentModelProvider.swift; sourceTree = "<group>"; };
 		001010 /* LocalDeterministicPlanner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalDeterministicPlanner.swift; sourceTree = "<group>"; };
 		001012 /* AgentRuntime.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentRuntime.swift; sourceTree = "<group>"; };
+		003000 /* AgentRuntimeState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentRuntimeState.swift; sourceTree = "<group>"; };
+		003002 /* AgentRuntimeEvent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentRuntimeEvent.swift; sourceTree = "<group>"; };
+		003004 /* AgentRuntimeReducer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentRuntimeReducer.swift; sourceTree = "<group>"; };
+		003006 /* AgentRuntimeStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentRuntimeStore.swift; sourceTree = "<group>"; };
 		001014 /* LocalCheckpointStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalCheckpointStore.swift; sourceTree = "<group>"; };
 		001016 /* LocalExperienceStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalExperienceStore.swift; sourceTree = "<group>"; };
 		001018 /* LocalMemoryStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalMemoryStore.swift; sourceTree = "<group>"; };
@@ -172,6 +180,10 @@
 			isa = PBXGroup;
 			children = (
 				001012 /* AgentRuntime.swift */,
+				003000 /* AgentRuntimeState.swift */,
+				003002 /* AgentRuntimeEvent.swift */,
+				003004 /* AgentRuntimeReducer.swift */,
+				003006 /* AgentRuntimeStore.swift */,
 			);
 			path = Runtime;
 			sourceTree = "<group>";
@@ -401,6 +413,10 @@
 				001009 /* AgentModelProvider.swift in Sources */,
 				001011 /* LocalDeterministicPlanner.swift in Sources */,
 				001013 /* AgentRuntime.swift in Sources */,
+				003001 /* AgentRuntimeState.swift in Sources */,
+				003003 /* AgentRuntimeEvent.swift in Sources */,
+				003005 /* AgentRuntimeReducer.swift in Sources */,
+				003007 /* AgentRuntimeStore.swift in Sources */,
 				001015 /* LocalCheckpointStore.swift in Sources */,
 				001017 /* LocalExperienceStore.swift in Sources */,
 				001019 /* LocalMemoryStore.swift in Sources */,
@@ -445,6 +461,10 @@
 				001009 /* AgentModelProvider.swift in Sources */,
 				001011 /* LocalDeterministicPlanner.swift in Sources */,
 				001013 /* AgentRuntime.swift in Sources */,
+				003001 /* AgentRuntimeState.swift in Sources */,
+				003003 /* AgentRuntimeEvent.swift in Sources */,
+				003005 /* AgentRuntimeReducer.swift in Sources */,
+				003007 /* AgentRuntimeStore.swift in Sources */,
 				001015 /* LocalCheckpointStore.swift in Sources */,
 				001017 /* LocalExperienceStore.swift in Sources */,
 				001019 /* LocalMemoryStore.swift in Sources */,

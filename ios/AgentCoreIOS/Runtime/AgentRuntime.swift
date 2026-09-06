@@ -245,7 +245,31 @@ public final class AgentRuntime: @unchecked Sendable {
         isThinking = true
         let planSteps = await planner.generatePlan(goal: trimmedGoal)
         isThinking = false
-        emit(.planCreated, .ok, "Generated plan with \(planSteps.count) steps")
+        emit(.planCreated, .ok, "Generated plan with \(planSteps.count) steps", payload: ["planSteps": planSteps.joined(separator: "\n")])
+
+        for (idx, step) in planSteps.enumerated() {
+            if cancelledRuns.contains(runId) {
+                let duration = Date().timeIntervalSince(startTime)
+                let res = AgentRunResult(
+                    runId: runId,
+                    status: .failed,
+                    goal: trimmedGoal,
+                    errorCode: "CANCELLED",
+                    errorMessage: "Task execution was cancelled by user.",
+                    authorized: false,
+                    verificationVerdict: "CANCELLED"
+                )
+                emit(.taskFailed, .error, "Task execution cancelled by user", payload: ["errorCode": "CANCELLED"])
+                runEventsMap[runId] = events
+                checkpointStore.save(result: res)
+                _ = experienceStore.record(runId: runId, goal: trimmedGoal, outcome: "cancelled", durationSeconds: duration)
+                return res
+            }
+
+            let stepId = "STEP-\(idx + 1)"
+            emit(.execute, .running, step, payload: ["stepId": stepId, "stepIndex": "\(idx)"])
+            emit(.observeResult, .pass, "Completed step \(idx + 1)", payload: ["stepId": stepId, "stepIndex": "\(idx)"])
+        }
 
         // Store run summary in vault
         _ = vaultStore.storeContext(key: "run_summary_\(runId)", value: trimmedGoal, category: "run_history")

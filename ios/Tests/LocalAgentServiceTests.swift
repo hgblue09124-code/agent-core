@@ -399,4 +399,182 @@ final class LocalAgentServiceTests: XCTestCase {
         XCTAssertNotNil(remoteCap)
         XCTAssertEqual(localCap?.state, .localActive)
     }
+
+    // MARK: - Reducer Unit Tests (Phase 2 Requirement 13)
+
+    func test25_reducer_idleToExecutionStarted() {
+        let initial = AgentRuntimeState()
+        XCTAssertEqual(initial.phase, .idle)
+
+        let next = AgentRuntimeReducer.reduce(
+            state: initial,
+            event: .executionStarted(goal: "Test Goal", executionId: "RUN-100")
+        )
+
+        XCTAssertEqual(next.phase, .thinking)
+        XCTAssertEqual(next.currentGoal, "Test Goal")
+        XCTAssertEqual(next.executionId, "RUN-100")
+        XCTAssertEqual(next.progress, 0.0)
+    }
+
+    func test26_reducer_executionStartedToExecuting() {
+        var state = AgentRuntimeState()
+        state = AgentRuntimeReducer.reduce(
+            state: state,
+            event: .executionStarted(goal: "Test Goal", executionId: "RUN-101")
+        )
+
+        let planSteps = ["Step 1", "Step 2", "Step 3", "Step 4"]
+        state = AgentRuntimeReducer.reduce(
+            state: state,
+            event: .planGenerated(steps: planSteps)
+        )
+
+        XCTAssertEqual(state.phase, .executing)
+        XCTAssertEqual(state.totalSteps, 4)
+        XCTAssertEqual(state.steps.count, 4)
+        XCTAssertEqual(state.progress, 0.0)
+    }
+
+    func test27_reducer_stepStartedAndCompleted() {
+        var state = AgentRuntimeState()
+        state = AgentRuntimeReducer.reduce(
+            state: state,
+            event: .executionStarted(goal: "Test Goal", executionId: "RUN-102")
+        )
+        state = AgentRuntimeReducer.reduce(
+            state: state,
+            event: .planGenerated(steps: ["Step 1", "Step 2", "Step 3", "Step 4"])
+        )
+
+        state = AgentRuntimeReducer.reduce(
+            state: state,
+            event: .stepStarted(stepId: "STEP-1", title: "Step 1", index: 0)
+        )
+        XCTAssertEqual(state.steps[0].status, .active)
+
+        state = AgentRuntimeReducer.reduce(
+            state: state,
+            event: .stepCompleted(stepId: "STEP-1")
+        )
+        XCTAssertEqual(state.steps[0].status, .completed)
+        XCTAssertEqual(state.progress, 0.25)
+    }
+
+    func test28_reducer_multipleStepProgressCalculation() {
+        var state = AgentRuntimeState()
+        state = AgentRuntimeReducer.reduce(
+            state: state,
+            event: .executionStarted(goal: "Progress Calculation Goal", executionId: "RUN-103")
+        )
+        state = AgentRuntimeReducer.reduce(
+            state: state,
+            event: .planGenerated(steps: ["Step 1", "Step 2", "Step 3", "Step 4"])
+        )
+
+        // 0/4 completed -> progress = 0.0
+        XCTAssertEqual(state.progress, 0.0)
+
+        // 1/4 completed -> progress = 0.25
+        state = AgentRuntimeReducer.reduce(state: state, event: .stepCompleted(stepId: "STEP-1"))
+        XCTAssertEqual(state.progress, 0.25)
+
+        // 2/4 completed -> progress = 0.5
+        state = AgentRuntimeReducer.reduce(state: state, event: .stepCompleted(stepId: "STEP-2"))
+        XCTAssertEqual(state.progress, 0.5)
+
+        // 4/4 completed -> progress = 1.0
+        state = AgentRuntimeReducer.reduce(state: state, event: .stepCompleted(stepId: "STEP-3"))
+        state = AgentRuntimeReducer.reduce(state: state, event: .stepCompleted(stepId: "STEP-4"))
+        XCTAssertEqual(state.progress, 1.0)
+    }
+
+    func test29_reducer_stepFailedAndErrorPropagation() {
+        var state = AgentRuntimeState()
+        state = AgentRuntimeReducer.reduce(
+            state: state,
+            event: .executionStarted(goal: "Failing Goal", executionId: "RUN-104")
+        )
+        state = AgentRuntimeReducer.reduce(
+            state: state,
+            event: .planGenerated(steps: ["Step 1", "Step 2"])
+        )
+
+        state = AgentRuntimeReducer.reduce(
+            state: state,
+            event: .stepFailed(stepId: "STEP-1", error: "Network Timeout")
+        )
+
+        XCTAssertEqual(state.phase, .failed)
+        XCTAssertEqual(state.error, "Network Timeout")
+        XCTAssertEqual(state.steps[0].status, .failed)
+        XCTAssertEqual(state.steps[0].errorMessage, "Network Timeout")
+    }
+
+    func test30_reducer_executionCompletedAndCancelled() {
+        var state = AgentRuntimeState()
+        state = AgentRuntimeReducer.reduce(
+            state: state,
+            event: .executionStarted(goal: "Completion Goal", executionId: "RUN-105")
+        )
+        state = AgentRuntimeReducer.reduce(
+            state: state,
+            event: .planGenerated(steps: ["Step 1", "Step 2"])
+        )
+
+        state = AgentRuntimeReducer.reduce(
+            state: state,
+            event: .executionCompleted(output: "Done")
+        )
+
+        XCTAssertEqual(state.phase, .completed)
+        XCTAssertEqual(state.progress, 1.0)
+
+        // Test cancellation
+        var cancelState = AgentRuntimeState()
+        cancelState = AgentRuntimeReducer.reduce(
+            state: cancelState,
+            event: .executionStarted(goal: "Cancellation Goal", executionId: "RUN-106")
+        )
+        cancelState = AgentRuntimeReducer.reduce(
+            state: cancelState,
+            event: .executionCancelled
+        )
+
+        XCTAssertEqual(cancelState.phase, .cancelled)
+        XCTAssertEqual(cancelState.error, "Execution cancelled by user")
+    }
+
+    func test31_reducer_newExecutionResetsPreviousState() {
+        var state = AgentRuntimeState()
+        state = AgentRuntimeReducer.reduce(
+            state: state,
+            event: .executionStarted(goal: "Old Goal", executionId: "RUN-OLD")
+        )
+        state = AgentRuntimeReducer.reduce(
+            state: state,
+            event: .planGenerated(steps: ["Old Step 1", "Old Step 2"])
+        )
+        state = AgentRuntimeReducer.reduce(
+            state: state,
+            event: .executionFailed(error: "Previous Error")
+        )
+
+        XCTAssertEqual(state.phase, .failed)
+        XCTAssertEqual(state.error, "Previous Error")
+
+        // Start new execution
+        state = AgentRuntimeReducer.reduce(
+            state: state,
+            event: .executionStarted(goal: "New Goal", executionId: "RUN-NEW")
+        )
+
+        XCTAssertEqual(state.phase, .thinking)
+        XCTAssertEqual(state.currentGoal, "New Goal")
+        XCTAssertEqual(state.executionId, "RUN-NEW")
+        XCTAssertNil(state.error)
+        XCTAssertEqual(state.totalSteps, 0)
+        XCTAssertEqual(state.steps.count, 0)
+        XCTAssertEqual(state.progress, 0.0)
+    }
 }

@@ -9,15 +9,12 @@ struct HomeView: View {
 
     init() {}
 
+    private var runtimeState: AgentRuntimeState {
+        viewModel.runtimeStore.state
+    }
+
     private var currentStatus: AgentStatus {
-        switch viewModel.executionState {
-        case .idle, .completed, .cancelled:
-            return .ready
-        case .preparing, .running, .waitingForPermission:
-            return .running
-        case .failed:
-            return .ready
-        }
+        runtimeState.status
     }
 
     var body: some View {
@@ -118,11 +115,11 @@ struct HomeView: View {
                 }
 
                 // 4. Current Task Card
-                if viewModel.executionState == .running || viewModel.executionState == .preparing {
+                if runtimeState.phase == .executing || runtimeState.phase == .thinking || runtimeState.phase == .planning {
                     CurrentTaskCard(
-                        goal: viewModel.currentGoal,
+                        goal: runtimeState.currentGoal,
                         subtext: "Executing task on local kernel",
-                        progress: 0.5,
+                        progress: runtimeState.progress,
                         status: .running
                     )
                 } else if let last = viewModel.lastRunResult {
@@ -185,13 +182,11 @@ struct HomeView: View {
     }
 
     private var orbStatusSubtext: String {
-        switch viewModel.executionState {
+        switch runtimeState.phase {
         case .idle:
             return "Idle · ready for tasks"
-        case .preparing, .running:
+        case .thinking, .planning, .executing:
             return "Executing · processing goal"
-        case .waitingForPermission:
-            return "Waiting · permission required"
         case .completed:
             return "Completed · task finished"
         case .failed:

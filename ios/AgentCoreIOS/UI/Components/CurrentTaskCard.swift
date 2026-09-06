@@ -12,7 +12,7 @@ struct CurrentTaskCard: View {
     init(
         goal: String,
         subtext: String,
-        progress: Double = 0.5,
+        progress: Double = 0.0,
         status: AgentStatus = .running
     ) {
         self.goal = goal

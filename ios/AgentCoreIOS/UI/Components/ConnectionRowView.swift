@@ -5,11 +5,9 @@ import SwiftUI
 
 struct ConnectionRowView: View {
     let connection: ConnectionStatus
-    let onToggle: (() -> Void)?
 
     init(connection: ConnectionStatus, onToggle: (() -> Void)? = nil) {
         self.connection = connection
-        self.onToggle = onToggle
     }
 
     private var iconName: String {
@@ -49,12 +47,14 @@ struct ConnectionRowView: View {
                 if connection.state == .remoteConfigured {
                     PrivacyChipView(label: "Remote", isLocal: false)
                 } else {
-                    Button(action: { onToggle?() }) {
-                        Text("Connect")
-                            .font(AgentFont.caption)
-                            .fontWeight(.semibold)
-                            .foregroundColor(AgentColor.accent)
-                    }
+                    Text("Not configured")
+                        .font(AgentFont.captionSmall)
+                        .fontWeight(.medium)
+                        .foregroundColor(AgentColor.textMuted)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 4)
+                        .background(AgentColor.background3)
+                        .cornerRadius(6)
                 }
             }
         }
@@ -72,7 +72,7 @@ struct ConnectionRowView: View {
             case .remoteConfigured:
                 return "Connected · remote"
             case .remoteNotConfigured:
-                return "Not connected"
+                return "Not configured · requires GITHUB_TOKEN"
             }
         }
     }
