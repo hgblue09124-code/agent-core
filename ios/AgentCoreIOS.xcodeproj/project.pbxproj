@@ -473,7 +473,7 @@
 				001023 /* AppDataUpdateModels.swift in Sources */,
 				001025 /* DataUpdateValidator.swift in Sources */,
 				001027 /* GitHubDataUpdateConfiguration.swift in Sources */,
-				001028 /* GitHubDataUpdateManager.swift in Sources */,
+				001029 /* GitHubDataUpdateManager.swift in Sources */,
 				002201 /* AgentDesignTokens.swift in Sources */,
 				002202 /* AgentOrbView.swift in Sources */,
 				002203 /* StatusPillView.swift in Sources */,
