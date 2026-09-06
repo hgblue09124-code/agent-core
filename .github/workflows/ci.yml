@@ -56,11 +56,27 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Restore & patch project.pbxproj for LanguageModelProvider
+      - name: Verify project.pbxproj integrity
         run: |
-          python3 scripts/fix_ios_pbxproj.py
-          echo "--- LanguageModelProvider markers ---"
-          grep -n "LanguageModelProvider\|MockLanguageModelProvider\|00400" ios/AgentCoreIOS.xcodeproj/project.pbxproj | head -40
+          PBX=ios/AgentCoreIOS.xcodeproj/project.pbxproj
+          SIZE=$(wc -c < "$PBX" | tr -d ' ')
+          echo "project.pbxproj size=$SIZE"
+          if [ "$SIZE" -lt 10000 ]; then
+            echo "ERROR: project.pbxproj looks truncated ($SIZE bytes)"
+            exit 1
+          fi
+          grep -q "LanguageModelProvider.swift in Sources" "$PBX"
+          grep -q "MockLanguageModelProvider.swift in Sources" "$PBX"
+          grep -q "LanguageModelProviderTests.swift in Sources" "$PBX"
+          # Must appear in BOTH Sources phases (app + tests) for app sources
+          LMP=$(grep -c "LanguageModelProvider.swift in Sources" "$PBX")
+          MOCK=$(grep -c "MockLanguageModelProvider.swift in Sources" "$PBX")
+          echo "LMP markers=$LMP MOCK markers=$MOCK"
+          if [ "$LMP" -lt 2 ] || [ "$MOCK" -lt 2 ]; then
+            echo "ERROR: LanguageModelProvider sources must be registered in BOTH app and test Sources phases"
+            exit 1
+          fi
+          echo "pbxproj integrity OK"
 
       - name: Select Xcode Version
         run: |
@@ -112,10 +128,6 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-
-      - name: Restore & patch project.pbxproj for LanguageModelProvider
-        run: |
-          python3 scripts/fix_ios_pbxproj.py
 
       - name: Select Xcode Version
         run: |
