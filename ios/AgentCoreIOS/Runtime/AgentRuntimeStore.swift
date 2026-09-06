@@ -31,27 +31,28 @@ public final class AgentRuntimeStore: ObservableObject {
         let runId = String(format: "RUN-%05d", Int(Date().timeIntervalSince1970 * 1000) % 100000)
         send(.executionStarted(goal: trimmedGoal, executionId: runId))
 
-        let store = self
-        activeTask = Task {
-            let result = await store.service.runStreaming(
+        activeTask = Task { @MainActor [weak self] in
+            guard let self else { return }
+
+            let result = await self.service.runStreaming(
                 goal: trimmedGoal,
                 userApproved: userApproved,
                 capabilityDispatch: nil,
-                onEvent: { runEvent in
-                    Task { @MainActor [weak store] in
-                        store?.handleRunEvent(runEvent)
+                onEvent: { [weak self] runEvent in
+                    Task { @MainActor in
+                        self?.handleRunEvent(runEvent)
                     }
                 }
             )
 
             if result.status == .success {
-                store.send(.executionCompleted(output: result.output))
+                self.send(.executionCompleted(output: result.output))
             } else if result.status == .denied {
-                store.send(.executionFailed(error: result.errorMessage ?? "Policy Denial: Explicit user approval required."))
+                self.send(.executionFailed(error: result.errorMessage ?? "Policy Denial: Explicit user approval required."))
             } else if result.errorCode == "CANCELLED" {
-                store.send(.executionCancelled)
+                self.send(.executionCancelled)
             } else {
-                store.send(.executionFailed(error: result.errorMessage ?? "Execution failed."))
+                self.send(.executionFailed(error: result.errorMessage ?? "Execution failed."))
             }
         }
 
