@@ -31,19 +31,23 @@ public final class AgentRuntimeStore: ObservableObject {
         let runId = String(format: "RUN-%05d", Int(Date().timeIntervalSince1970 * 1000) % 100000)
         send(.executionStarted(goal: trimmedGoal, executionId: runId))
 
-        activeTask = Task { @MainActor [weak self] in
-            guard let self else { return }
+        // Capture service (Sendable) immutably so the concurrent Task does not
+        // need to touch the MainActor-isolated `self` until after the await.
+        let service = self.service
 
-            let result = await self.service.runStreaming(
+        activeTask = Task { @MainActor [weak self] in
+            let result = await service.runStreaming(
                 goal: trimmedGoal,
                 userApproved: userApproved,
                 capabilityDispatch: nil,
                 onEvent: { [weak self] runEvent in
-                    Task { @MainActor in
+                    Task { @MainActor [weak self] in
                         self?.handleRunEvent(runEvent)
                     }
                 }
             )
+
+            guard let self else { return }
 
             if result.status == .success {
                 self.send(.executionCompleted(output: result.output))
