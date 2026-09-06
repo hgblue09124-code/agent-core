@@ -59,35 +59,44 @@ jobs:
       - name: Restore & patch project.pbxproj for LanguageModelProvider
         run: |
           python3 scripts/fix_ios_pbxproj.py
-          echo "--- pbxproj markers ---"
-          grep -n "LanguageModelProvider" ios/AgentCoreIOS.xcodeproj/project.pbxproj | head -20
-          echo "--- Providers group ---"
-          grep -A12 "001074 /\* Providers" ios/AgentCoreIOS.xcodeproj/project.pbxproj || true
+          echo "--- LanguageModelProvider markers ---"
+          grep -n "LanguageModelProvider\|MockLanguageModelProvider\|00400" ios/AgentCoreIOS.xcodeproj/project.pbxproj | head -40
 
       - name: Select Xcode Version
         run: |
           sudo xcode-select -s /Applications/Xcode_15.4.app/Contents/Developer || true
           xcodebuild -version
-          xcrun simctl list devices available | head -40
+          xcrun simctl list devices available | head -50
 
       - name: Build & Run iOS Unit Tests via xcodebuild
+        id: xcodebuild
         run: |
           set -o pipefail
+          DEST='platform=iOS Simulator,name=iPhone 15,OS=latest'
           xcodebuild test \
             -project ios/AgentCoreIOS.xcodeproj \
             -scheme AgentCoreIOS \
-            -destination 'generic/platform=iOS Simulator' \
+            -destination "$DEST" \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGNING_ALLOWED=NO \
-            2>&1 | tee /tmp/xcodebuild.log
-          status=${PIPESTATUS[0]}
-          if [ "$status" -ne 0 ]; then
-            echo "===== xcodebuild failure excerpt ====="
-            grep -E "error:|warning:|FAILED|Testing failed|fatal error" /tmp/xcodebuild.log | tail -80 || true
-            echo "===== last 100 lines ====="
-            tail -100 /tmp/xcodebuild.log
-            exit $status
-          fi
+            2>&1 | tee xcodebuild.log
+          exit ${PIPESTATUS[0]}
+
+      - name: Upload xcodebuild log
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: xcodebuild-log
+          path: xcodebuild.log
+          if-no-files-found: ignore
+
+      - name: Print xcodebuild errors
+        if: failure()
+        run: |
+          echo "===== error/warning lines ====="
+          grep -E "error:|warning:|FAILED|Testing failed|fatal error|Cannot find|Use of undeclared" xcodebuild.log | tail -100 || true
+          echo "===== tail ====="
+          tail -80 xcodebuild.log || true
 
   ios-ipa-build:
     name: Build, Package, Validate & Release Unsigned iOS IPA
