@@ -33,10 +33,7 @@ struct ConnectionsView: View {
                     } else {
                         ForEach(viewModel.connections) { connection in
                             ConnectionRowView(
-                                connection: connection,
-                                onToggle: {
-                                    // Non-destructive connection interaction
-                                }
+                                connection: connection
                             )
 
                             if connection.id != viewModel.connections.last?.id {

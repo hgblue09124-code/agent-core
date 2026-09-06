@@ -8,34 +8,12 @@ struct ExecuteView: View {
 
     init() {}
 
+    private var runtimeState: AgentRuntimeState {
+        viewModel.runtimeStore.state
+    }
+
     private var currentOrbStatus: AgentStatus {
-        switch viewModel.executionState {
-        case .idle, .completed, .cancelled:
-            return .ready
-        case .preparing, .running, .waitingForPermission:
-            return .thinking
-        case .failed:
-            return .ready
-        }
-    }
-
-    private var totalSteps: Int { 4 }
-
-    private var completedStepCount: Int {
-        switch viewModel.executionState {
-        case .idle: return 0
-        case .preparing: return 0
-        case .waitingForPermission: return 1
-        case .running: return 2
-        case .completed: return 4
-        case .failed, .cancelled: return 2
-        }
-    }
-
-    private var currentProgress: Double {
-        if viewModel.executionState == .idle { return 0.0 }
-        if viewModel.executionState == .completed { return 1.0 }
-        return Double(completedStepCount) / Double(totalSteps)
+        runtimeState.status
     }
 
     var body: some View {
@@ -83,7 +61,7 @@ struct ExecuteView: View {
                                 .background(AgentColor.accent)
                                 .clipShape(RoundedRectangle(cornerRadius: AgentRadius.button))
                         }
-                        .disabled(viewModel.executionState == .running || viewModel.executionState == .preparing)
+                        .disabled(runtimeState.phase == .executing || runtimeState.phase == .thinking || runtimeState.phase == .planning)
 
                         Button(action: {
                             Task {
@@ -102,7 +80,7 @@ struct ExecuteView: View {
                                 )
                                 .clipShape(RoundedRectangle(cornerRadius: AgentRadius.button))
                         }
-                        .disabled(viewModel.executionState == .running || viewModel.executionState == .preparing)
+                        .disabled(runtimeState.phase == .executing || runtimeState.phase == .thinking || runtimeState.phase == .planning)
                     }
                 }
                 .padding(AgentSpacing.lg)
@@ -120,29 +98,23 @@ struct ExecuteView: View {
                         .foregroundColor(AgentColor.textMuted)
 
                     VStack(alignment: .leading, spacing: AgentSpacing.sm) {
-                        StepProgressRow(
-                            title: "Initialize runtime context & policy checks",
-                            status: stepStatusForPhase(0)
-                        )
-
-                        StepProgressRow(
-                            title: "Generate execution plan & resolve capabilities",
-                            status: stepStatusForPhase(1)
-                        )
-
-                        StepProgressRow(
-                            title: "Execute goal steps on Agent Core",
-                            status: stepStatusForPhase(2)
-                        )
-
-                        StepProgressRow(
-                            title: "Verify execution output & record experience",
-                            status: stepStatusForPhase(3)
-                        )
+                        if runtimeState.steps.isEmpty {
+                            StepProgressRow(
+                                title: runtimeState.phase == .idle ? "Ready to execute goal" : "Generating execution plan...",
+                                status: runtimeState.phase == .idle ? .pending : .active
+                            )
+                        } else {
+                            ForEach(runtimeState.steps) { step in
+                                StepProgressRow(
+                                    title: step.title,
+                                    status: step.status
+                                )
+                            }
+                        }
                     }
 
                     ProgressBarView(
-                        progress: currentProgress,
+                        progress: runtimeState.progress,
                         fillColor: progressFillColor
                     )
                 }
@@ -191,13 +163,13 @@ struct ExecuteView: View {
                     .clipShape(RoundedRectangle(cornerRadius: AgentRadius.card))
                 }
 
-                if let errPayload = viewModel.lastErrorPayload, viewModel.lastRunResult == nil {
+                if let err = runtimeState.error, viewModel.lastRunResult == nil {
                     VStack(alignment: .leading, spacing: AgentSpacing.xs) {
                         Text("Execution Error")
                             .font(AgentFont.headline)
                             .foregroundColor(AgentColor.danger)
 
-                        Text(errPayload)
+                        Text(err)
                             .font(AgentFont.secondary)
                             .foregroundColor(AgentColor.danger)
                     }
@@ -231,7 +203,7 @@ struct ExecuteView: View {
 
                     Button(action: {
                         Task {
-                            await viewModel.runTask(requestPermissionPrompt: false)
+                            await viewModel.retryTask()
                         }
                     }) {
                         Text("Retry")
@@ -247,8 +219,8 @@ struct ExecuteView: View {
                             )
                             .clipShape(RoundedRectangle(cornerRadius: AgentRadius.button))
                     }
-                    .disabled(viewModel.executionState == .running || viewModel.executionState == .preparing)
-                    .opacity((viewModel.executionState == .running || viewModel.executionState == .preparing) ? 0.5 : 1.0)
+                    .disabled(runtimeState.phase == .executing || runtimeState.phase == .thinking || runtimeState.phase == .planning)
+                    .opacity((runtimeState.phase == .executing || runtimeState.phase == .thinking || runtimeState.phase == .planning) ? 0.5 : 1.0)
                 }
             }
             .padding(AgentSpacing.lg)
@@ -256,31 +228,11 @@ struct ExecuteView: View {
         .background(AgentColor.background1.ignoresSafeArea())
     }
 
-    private func stepStatusForPhase(_ stepIndex: Int) -> ExecutionStepStatus {
-        switch viewModel.executionState {
-        case .idle:
-            return .pending
-        case .preparing:
-            return stepIndex == 0 ? .active : .pending
-        case .waitingForPermission:
-            return stepIndex <= 1 ? .completed : (stepIndex == 2 ? .active : .pending)
-        case .running:
-            if stepIndex < 2 { return .completed }
-            if stepIndex == 2 { return .active }
-            return .pending
-        case .completed:
-            return .completed
-        case .failed, .cancelled:
-            if stepIndex < 2 { return .completed }
-            return .failed
-        }
-    }
-
     private var progressFillColor: Color {
-        switch viewModel.executionState {
+        switch runtimeState.phase {
         case .completed: return AgentColor.success
         case .failed, .cancelled: return AgentColor.danger
-        case .running, .preparing, .waitingForPermission: return AgentColor.warning
+        case .executing, .thinking, .planning: return AgentColor.warning
         case .idle: return AgentColor.accent
         }
     }
