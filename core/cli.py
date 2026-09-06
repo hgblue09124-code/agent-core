@@ -1,5 +1,5 @@
 # core/cli.py
-"""Agent-Core Beta v0.1.0-beta CLI Entrypoint.
+"""Agent-Core CLI Entrypoint.
 
 Commands:
     agent-core run "<goal>" [--project <id>] [--provider <name>]
@@ -23,12 +23,13 @@ if str(_root) not in sys.path:
     sys.path.insert(0, str(_root))
 
 from core.agent import Agent, AgentRunResult
+from core.version import __version__
 
 
-BANNER = """
+BANNER = f"""
 ==========================================================
-              AGENT-CORE BETA (v0.1.0-beta)
-    Reference Developer Preview & Runtime Inspection
+              AGENT-CORE (v{__version__})
+    Personal Agent Runtime & Local LLM Providers
 ==========================================================
 """
 
@@ -39,7 +40,7 @@ from core.tasks.schema import Task
 
 
 def cmd_version(args) -> int:
-    print("Agent-Core v0.1.0-beta (Developer Preview)")
+    print(f"Agent-Core v{__version__}")
     print("Kernel Version: v1.0")
     print("Constitution Version: 1.0.0")
     return 0
@@ -184,7 +185,7 @@ def cmd_benchmark(args) -> int:
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         prog="agent-core",
-        description="Agent-Core Beta v0.1.0-beta CLI",
+        description="Agent-Core CLI",
     )
     subparsers = parser.add_subparsers(dest="command", help="Available commands")
 
@@ -192,7 +193,7 @@ def main(argv: list[str] | None = None) -> int:
     p_run = subparsers.add_parser("run", help="Run a task on Agent-Core")
     p_run.add_argument("goal", type=str, help="Task objective/goal")
     p_run.add_argument("--project", "-p", type=str, default="default", help="Project ID")
-    p_run.add_argument("--provider", type=str, default=None, help="LLM planner provider (mock | openrouter | openai | local)")
+    p_run.add_argument("--provider", type=str, default=None, help="LLM planner provider (mock | openrouter | openai | xai | local | gguf)")
     p_run.set_defaults(func=cmd_run)
 
     # queue

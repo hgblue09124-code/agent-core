@@ -204,7 +204,12 @@ final class AgentAppViewModel: ObservableObject {
     private var activeRunTask: Task<Void, Never>?
 
     init(service: LocalAgentServiceProtocol? = nil, updateManager: GitHubDataUpdateManager? = nil) {
-        let s = service ?? LocalAgentService()
+        let s: LocalAgentServiceProtocol
+        if let service {
+            s = service
+        } else {
+            s = LocalAgentService(runtime: AgentRuntime(languageModelProvider: RoutingLanguageModelProvider.shared))
+        }
         self.service = s
         self.runtimeStore = AgentRuntimeStore(service: s)
         self.updateManager = updateManager ?? GitHubDataUpdateManager()

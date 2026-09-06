@@ -1,5 +1,5 @@
 # agent_core/__init__.py
-"""Agent-Core v0.1.0-beta Top-Level Developer API."""
+"""Agent-Core v0.2.0 top-level developer API."""
 
 from core import (
     __version__,

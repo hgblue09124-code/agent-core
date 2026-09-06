@@ -36,6 +36,15 @@ def main() -> int:
     if tests < 2:
         print("ERROR: LanguageModelProviderTests missing from test Sources phase", file=sys.stderr)
         return 1
+    catalog = text.count("005001 /* ModelCatalog.swift in Sources */")
+    routing = text.count("005007 /* RoutingLanguageModelProvider.swift in Sources */")
+    print(f"CATALOG markers={catalog} ROUTING markers={routing}")
+    if catalog < 3 or routing < 3:
+        print("ERROR: ModelCatalog/RoutingLanguageModelProvider must be in BOTH app and test Sources phases", file=sys.stderr)
+        return 1
+    if "005021 /* Assets.xcassets in Resources */" not in text:
+        print("ERROR: Assets.xcassets missing from Resources phase", file=sys.stderr)
+        return 1
     print("pbxproj integrity OK")
     return 0
 

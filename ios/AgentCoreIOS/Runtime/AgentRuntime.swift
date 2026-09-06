@@ -570,11 +570,21 @@ public final class AgentRuntime: @unchecked Sendable {
     }
 
     public func health() async -> AgentHealth {
+        let routed = languageModelProvider as? RoutingLanguageModelProvider
+        let display = routed?.displayStatus()
+        let localOnly: Bool
+        if let display {
+            localOnly = display.localOnly
+        } else if let languageModelProvider {
+            localOnly = !languageModelProvider.isRemote
+        } else {
+            localOnly = true
+        }
         return AgentHealth(
             status: "HEALTHY",
-            isLocalOnly: true,
-            providerName: planner.providerName,
-            providerStatus: planner.providerStatus.rawValue,
+            isLocalOnly: localOnly,
+            providerName: display?.name ?? languageModelProvider?.providerId ?? planner.providerName,
+            providerStatus: display?.status ?? planner.providerStatus.rawValue,
             isVaultAvailable: vaultStore.isAvailable(),
             storagePath: "Application Support/AgentCore/",
             activeCapabilitiesCount: capabilities.count

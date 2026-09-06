@@ -51,6 +51,12 @@
 		004001 /* LanguageModelProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 004000 /* LanguageModelProvider.swift */; };
 		004003 /* MockLanguageModelProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 004002 /* MockLanguageModelProvider.swift */; };
 		004005 /* LanguageModelProviderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 004004 /* LanguageModelProviderTests.swift */; };
+		005001 /* ModelCatalog.swift in Sources */ = {isa = PBXBuildFile; fileRef = 005000 /* ModelCatalog.swift */; };
+		005003 /* ModelDownloadManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 005002 /* ModelDownloadManager.swift */; };
+		005005 /* OpenAICompatibleProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 005004 /* OpenAICompatibleProvider.swift */; };
+		005007 /* RoutingLanguageModelProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 005006 /* RoutingLanguageModelProvider.swift */; };
+		005011 /* LLMProviderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 005010 /* LLMProviderTests.swift */; };
+		005021 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 005020 /* Assets.xcassets */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -150,6 +156,7 @@
 				001076 /* Storage */,
 				001077 /* Update */,
 				002050 /* UI */,
+				005020 /* Assets.xcassets */,
 			);
 			path = AgentCoreIOS;
 			sourceTree = "<group>";
@@ -180,6 +187,10 @@
 				001010 /* LocalDeterministicPlanner.swift */,
 				004000 /* LanguageModelProvider.swift */,
 				004002 /* MockLanguageModelProvider.swift */,
+				005000 /* ModelCatalog.swift */,
+				005002 /* ModelDownloadManager.swift */,
+				005004 /* OpenAICompatibleProvider.swift */,
+				005006 /* RoutingLanguageModelProvider.swift */,
 			);
 			path = Providers;
 			sourceTree = "<group>";
@@ -323,6 +334,7 @@
 			children = (
 				001030 /* LocalAgentServiceTests.swift */,
 				004004 /* LanguageModelProviderTests.swift */,
+				005010 /* LLMProviderTests.swift */,
 			);
 			path = Tests;
 			sourceTree = "<group>";
@@ -345,6 +357,7 @@
 			buildPhases = (
 				001090 /* Sources */,
 				001060 /* Frameworks */,
+				005090 /* Resources */,
 			);
 			buildRules = (
 			);
@@ -410,6 +423,17 @@
 		};
 /* End PBXProject section */
 
+/* Begin PBXResourcesBuildPhase section */
+		005090 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				005021 /* Assets.xcassets in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
 /* Begin PBXSourcesBuildPhase section */
 		001090 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
@@ -424,6 +448,10 @@
 				001013 /* AgentRuntime.swift in Sources */,
 				004001 /* LanguageModelProvider.swift in Sources */,
 				004003 /* MockLanguageModelProvider.swift in Sources */,
+				005001 /* ModelCatalog.swift in Sources */,
+				005003 /* ModelDownloadManager.swift in Sources */,
+				005005 /* OpenAICompatibleProvider.swift in Sources */,
+				005007 /* RoutingLanguageModelProvider.swift in Sources */,
 				003001 /* AgentRuntimeState.swift in Sources */,
 				003003 /* AgentRuntimeEvent.swift in Sources */,
 				003005 /* AgentRuntimeReducer.swift in Sources */,
@@ -475,6 +503,10 @@
 				001013 /* AgentRuntime.swift in Sources */,
 				004001 /* LanguageModelProvider.swift in Sources */,
 				004003 /* MockLanguageModelProvider.swift in Sources */,
+				005001 /* ModelCatalog.swift in Sources */,
+				005003 /* ModelDownloadManager.swift in Sources */,
+				005005 /* OpenAICompatibleProvider.swift in Sources */,
+				005007 /* RoutingLanguageModelProvider.swift in Sources */,
 				003001 /* AgentRuntimeState.swift in Sources */,
 				003003 /* AgentRuntimeEvent.swift in Sources */,
 				003005 /* AgentRuntimeReducer.swift in Sources */,
@@ -537,7 +569,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 0.1.0;
+				MARKETING_VERSION = 0.2.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.agentcore.AgentCoreIOS;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
@@ -561,7 +593,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 0.1.0;
+				MARKETING_VERSION = 0.2.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.agentcore.AgentCoreIOS;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
@@ -584,7 +616,7 @@
 					"@executable_path/Frameworks",
 					"@loader_path/Frameworks",
 				);
-				MARKETING_VERSION = 0.1.0;
+				MARKETING_VERSION = 0.2.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.agentcore.AgentCoreIOSTests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
@@ -608,7 +640,7 @@
 					"@executable_path/Frameworks",
 					"@loader_path/Frameworks",
 				);
-				MARKETING_VERSION = 0.1.0;
+				MARKETING_VERSION = 0.2.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.agentcore.AgentCoreIOSTests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;

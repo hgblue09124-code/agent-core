@@ -1,5 +1,5 @@
 # core/agent.py
-"""Reference Agent — v0.1.0-beta developer-facing composition point for Agent-Core.
+"""Reference Agent — v0.2.0 composition point for Agent-Core.
 
 Composition Architecture:
     - Agent-Core: Authority, identity, cognition, policy, orchestration, experience, learning, continuity.
@@ -95,7 +95,7 @@ class Agent:
         result = agent.run("Inspect system architecture")
     """
 
-    VERSION = "0.1.0-beta"
+    VERSION = "0.2.0"
 
     def __init__(
         self,

@@ -20,7 +20,7 @@ from pathlib import Path
 
 REQUIRED_BUNDLE_ID = "com.agentcore.AgentCoreIOS"
 EXPECTED_APP_BUNDLE_NAME = "AgentCoreIOS.app"
-EXPECTED_VERSION = os.environ.get("AGENTCORE_RELEASE_VERSION", "0.1.0")
+EXPECTED_VERSION = os.environ.get("AGENTCORE_RELEASE_VERSION", "0.2.0")
 EXPECTED_BUILD = os.environ.get("AGENTCORE_BUILD_NUMBER", "1")
 
 
