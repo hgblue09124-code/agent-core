@@ -59,20 +59,35 @@ jobs:
       - name: Restore & patch project.pbxproj for LanguageModelProvider
         run: |
           python3 scripts/fix_ios_pbxproj.py
+          echo "--- pbxproj markers ---"
+          grep -n "LanguageModelProvider" ios/AgentCoreIOS.xcodeproj/project.pbxproj | head -20
+          echo "--- Providers group ---"
+          grep -A12 "001074 /\* Providers" ios/AgentCoreIOS.xcodeproj/project.pbxproj || true
 
       - name: Select Xcode Version
         run: |
           sudo xcode-select -s /Applications/Xcode_15.4.app/Contents/Developer || true
           xcodebuild -version
+          xcrun simctl list devices available | head -40
 
       - name: Build & Run iOS Unit Tests via xcodebuild
         run: |
+          set -o pipefail
           xcodebuild test \
             -project ios/AgentCoreIOS.xcodeproj \
             -scheme AgentCoreIOS \
-            -destination 'platform=iOS Simulator,name=iPhone 15 Pro,OS=latest' \
+            -destination 'generic/platform=iOS Simulator' \
             CODE_SIGNING_REQUIRED=NO \
-            CODE_SIGNING_ALLOWED=NO
+            CODE_SIGNING_ALLOWED=NO \
+            2>&1 | tee /tmp/xcodebuild.log
+          status=${PIPESTATUS[0]}
+          if [ "$status" -ne 0 ]; then
+            echo "===== xcodebuild failure excerpt ====="
+            grep -E "error:|warning:|FAILED|Testing failed|fatal error" /tmp/xcodebuild.log | tail -80 || true
+            echo "===== last 100 lines ====="
+            tail -100 /tmp/xcodebuild.log
+            exit $status
+          fi
 
   ios-ipa-build:
     name: Build, Package, Validate & Release Unsigned iOS IPA
