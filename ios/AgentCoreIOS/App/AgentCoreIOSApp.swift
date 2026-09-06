@@ -99,24 +99,6 @@ public struct ReviewCheckItem: Identifiable {
     }
 }
 
-public struct ActivityRecord: Identifiable {
-    public let id: String
-    public let timestamp: String
-    public let task: String
-    public let state: String
-    public let duration: String
-    public let resultOrError: String
-
-    public init(id: String = UUID().uuidString, timestamp: String = ISO8601DateFormatter().string(from: Date()), task: String, state: String, duration: String, resultOrError: String) {
-        self.id = id
-        self.timestamp = timestamp
-        self.task = task
-        self.state = state
-        self.duration = duration
-        self.resultOrError = resultOrError
-    }
-}
-
 public struct MemoryStepResult: Identifiable {
     public let id: Int
     public let stepName: String
@@ -210,6 +192,7 @@ public final class AgentAppViewModel: ObservableObject {
         memories = await service.retrieve(query: "")
         experiences = await service.getExperience()
         capabilities = await service.listCapabilities()
+        activities = await service.listActivity(filter: .all)
         updateReport = updateManager.getStateReport()
     }
 
@@ -507,8 +490,9 @@ public final class AgentAppViewModel: ObservableObject {
     }
 
     private func recordActivity(task: String, state: String, duration: String, resultOrError: String) {
-        let rec = ActivityRecord(task: task, state: state, duration: duration, resultOrError: resultOrError)
-        activities.insert(rec, at: 0)
+        Task {
+            activities = await service.listActivity(filter: .all)
+        }
     }
 
     private func formatDuration(_ start: Date) -> String {
