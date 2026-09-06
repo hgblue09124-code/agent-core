@@ -4,6 +4,23 @@
 import XCTest
 @testable import AgentCoreIOS
 
+private final class EventCollector: @unchecked Sendable {
+    private let lock = NSLock()
+    private var _phases: [AgentEventPhase] = []
+
+    func add(_ phase: AgentEventPhase) {
+        lock.lock()
+        _phases.append(phase)
+        lock.unlock()
+    }
+
+    var phases: [AgentEventPhase] {
+        lock.lock()
+        defer { lock.unlock() }
+        return _phases
+    }
+}
+
 final class LocalAgentServiceTests: XCTestCase {
     private var tempDir: URL!
     private var service: LocalAgentService!
@@ -295,17 +312,18 @@ final class LocalAgentServiceTests: XCTestCase {
     }
 
     func test19_runStreaming_emitsLifecycleEvents() async {
-        var emittedPhases: [AgentEventPhase] = []
+        let collector = EventCollector()
         let result = await service.runStreaming(
             goal: "Streamed test goal",
             userApproved: true,
             capabilityDispatch: nil,
             onEvent: { event in
-                emittedPhases.append(event.phase)
+                collector.add(event.phase)
             }
         )
 
         XCTAssertEqual(result.status, .success)
+        let emittedPhases = collector.phases
         XCTAssertTrue(emittedPhases.contains(.taskStarted))
         XCTAssertTrue(emittedPhases.contains(.planCreated))
         XCTAssertTrue(emittedPhases.contains(.verify))
