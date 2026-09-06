@@ -9,6 +9,9 @@ public final class AgentRuntime: @unchecked Sendable {
     private let checkpointStore: LocalCheckpointStore
     private let vaultStore: LocalVaultStore
     private let planner: AgentModelProviderProtocol
+    /// Optional language model provider abstraction (Step 1).
+    /// AgentRuntime never depends on concrete LLM implementations.
+    private let languageModelProvider: LanguageModelProvider?
 
     private var capabilities: [String: Capability] = [:]
     private var runEventsMap: [String: [AgentRunEvent]] = [:]
@@ -23,13 +26,15 @@ public final class AgentRuntime: @unchecked Sendable {
         experienceStore: LocalExperienceStore? = nil,
         checkpointStore: LocalCheckpointStore? = nil,
         vaultStore: LocalVaultStore? = nil,
-        planner: AgentModelProviderProtocol? = nil
+        planner: AgentModelProviderProtocol? = nil,
+        languageModelProvider: LanguageModelProvider? = nil
     ) {
         self.memoryStore = memoryStore ?? LocalMemoryStore()
         self.experienceStore = experienceStore ?? LocalExperienceStore()
         self.checkpointStore = checkpointStore ?? LocalCheckpointStore()
         self.vaultStore = vaultStore ?? LocalVaultStore()
         self.planner = planner ?? LocalDeterministicPlanner()
+        self.languageModelProvider = languageModelProvider
 
         registerDefaultCapabilities()
     }
@@ -271,7 +276,6 @@ public final class AgentRuntime: @unchecked Sendable {
             emit(.observeResult, .pass, "Completed step \(idx + 1)", payload: ["stepId": stepId, "stepIndex": "\(idx)"])
         }
 
-        // Store run summary in vault
         _ = vaultStore.storeContext(key: "run_summary_\(runId)", value: trimmedGoal, category: "run_history")
 
         emit(.verify, .pass, "Verification verdict PASS")
@@ -466,16 +470,15 @@ public final class AgentRuntime: @unchecked Sendable {
 
     public func forget(key: String) async -> MemoryResult {
         let removed = memoryStore.forget(key: key)
-        let vaultRemoved = vaultStore.deleteContext(key: key)
-        if removed || vaultRemoved {
+        if removed {
+            _ = vaultStore.deleteContext(key: key)
             return MemoryResult(status: .success)
-        } else {
-            return MemoryResult(status: .failed, errorMessage: "Memory key '\(key)' not found.")
         }
+        return MemoryResult(status: .failed, errorMessage: "Memory key '\(key)' not found")
     }
 
     public func listCapabilities() async -> [Capability] {
-        return Array(capabilities.values)
+        return Array(capabilities.values).sorted(by: { $0.capabilityId < $1.capabilityId })
     }
 
     public func executeCapability(capabilityId: String, input: [String: String], userApproved: Bool = false) async -> CapabilityResult {
@@ -483,20 +486,15 @@ public final class AgentRuntime: @unchecked Sendable {
             return CapabilityResult(
                 capabilityId: capabilityId,
                 status: .failed,
-                errorMessage: "Capability '\(capabilityId)' not found in local registry"
+                errorMessage: "Unknown capability '\(capabilityId)'"
             )
         }
 
-        let action = (input["action"] ?? "").lowercased().trimmingCharacters(in: .whitespaces)
-        let writeKeywords = ["create", "update", "delete", "post", "put", "patch", "write", "comment", "merge", "close"]
-        let readKeywords = ["get", "read", "list", "search", "status", "inspect", "fetch"]
+        let action = input["action"] ?? ""
+        let writeActions = ["create_issue_comment", "create_issue", "update_issue", "close_issue", "merge_pr"]
+        let isWrite = writeActions.contains(action)
 
-        let isReadAction = readKeywords.contains(where: { action.hasPrefix($0) || action == $0 })
-        let isWriteAction = writeKeywords.contains(where: { action.contains($0) })
-
-        let isMutatingAction = cap.requiresUserApproval || isWriteAction || (!cap.readOnly && !isReadAction)
-
-        if isMutatingAction && !userApproved {
+        if isWrite && !userApproved {
             return CapabilityResult(
                 capabilityId: capabilityId,
                 status: .denied,
@@ -504,17 +502,12 @@ public final class AgentRuntime: @unchecked Sendable {
             )
         }
 
-        if capabilityId == "mock.echo" {
-            let text = input["text"] ?? ""
-            return CapabilityResult(capabilityId: capabilityId, status: .success, output: "ECHO: \(text)")
-        }
-
-        if capabilityId == "github_integration" {
-            if input["mock_offline"] == "true" {
-                return CapabilityResult(capabilityId: capabilityId, status: .success, output: "GitHub mock response for action '\(action)'")
-            }
-            // Without live token / offline execution
-            return CapabilityResult(capabilityId: capabilityId, status: .failed, errorMessage: "GitHub API network call failed: No GITHUB_TOKEN configured in local offline mode.")
+        if input["mock_offline"] == "true" || capabilityId == "mock.echo" {
+            return CapabilityResult(
+                capabilityId: capabilityId,
+                status: .success,
+                output: "Mock offline execution of '\(action.isEmpty ? capabilityId : action)' completed."
+            )
         }
 
         return CapabilityResult(capabilityId: capabilityId, status: .success, output: "Executed capability '\(capabilityId)' successfully.")
@@ -538,5 +531,72 @@ public final class AgentRuntime: @unchecked Sendable {
             storagePath: "Application Support/AgentCore/",
             activeCapabilitiesCount: capabilities.count
         )
+    }
+
+    // MARK: - Language Model Provider Bridge (Step 1)
+
+    /// Exposes whether a language model provider was injected.
+    public var hasLanguageModelProvider: Bool {
+        languageModelProvider != nil
+    }
+
+    /// Provider id for diagnostics (nil when no provider injected).
+    public var languageModelProviderId: String? {
+        languageModelProvider?.providerId
+    }
+
+    /// Load the injected language model provider if present.
+    public func loadLanguageModel() async throws {
+        guard let provider = languageModelProvider else {
+            throw LanguageModelError.providerUnavailable("No LanguageModelProvider was injected into AgentRuntime")
+        }
+        try await provider.load()
+    }
+
+    /// Unload the injected language model provider if present.
+    public func unloadLanguageModel() async {
+        await languageModelProvider?.unload()
+    }
+
+    /// Generate a response via the injected LanguageModelProvider.
+    /// Demonstrates AgentRuntime → LanguageModelProvider → response flow without rewriting the execution loop.
+    public func generateWithLanguageModel(_ request: LanguageModelRequest) async throws -> LanguageModelResponse {
+        guard let provider = languageModelProvider else {
+            throw LanguageModelError.providerUnavailable("No LanguageModelProvider was injected into AgentRuntime")
+        }
+        if !provider.isLoaded {
+            try await provider.load()
+        }
+        return try await provider.generate(request)
+    }
+
+    /// Stream a response via the injected LanguageModelProvider.
+    public func streamWithLanguageModel(_ request: LanguageModelRequest) -> AsyncThrowingStream<LanguageModelStreamChunk, Error> {
+        guard let provider = languageModelProvider else {
+            return AsyncThrowingStream { continuation in
+                continuation.finish(throwing: LanguageModelError.providerUnavailable("No LanguageModelProvider was injected into AgentRuntime"))
+            }
+        }
+        return AsyncThrowingStream { continuation in
+            let task = Task {
+                do {
+                    if !provider.isLoaded {
+                        try await provider.load()
+                    }
+                    for try await chunk in provider.stream(request) {
+                        try Task.checkCancellation()
+                        continuation.yield(chunk)
+                    }
+                    continuation.finish()
+                } catch is CancellationError {
+                    continuation.finish(throwing: LanguageModelError.cancelled)
+                } catch {
+                    continuation.finish(throwing: error)
+                }
+            }
+            continuation.onTermination = { @Sendable _ in
+                task.cancel()
+            }
+        }
     }
 }

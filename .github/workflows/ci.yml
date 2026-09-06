@@ -2,7 +2,7 @@ name: Agent-Core CI
 
 on:
   push:
-    branches: [ main, master, "jules-*", "feat/*", "fix/*", "release/*" ]
+    branches: [ main, master, "jules-*", "feat/*", "fix/*", "release/*", "step1-*" ]
     tags: [ "v*" ]
   pull_request:
     branches: [ main, master ]
@@ -53,20 +53,48 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Verify project.pbxproj integrity
+        run: |
+          python3 scripts/validate_ios_pbxproj.py
 
       - name: Select Xcode Version
         run: |
           sudo xcode-select -s /Applications/Xcode_15.4.app/Contents/Developer || true
           xcodebuild -version
+          xcrun simctl list devices available | head -50
 
       - name: Build & Run iOS Unit Tests via xcodebuild
+        id: xcodebuild
         run: |
+          set -o pipefail
+          DEST='platform=iOS Simulator,name=iPhone 15,OS=latest'
           xcodebuild test \
             -project ios/AgentCoreIOS.xcodeproj \
             -scheme AgentCoreIOS \
-            -destination 'platform=iOS Simulator,name=iPhone 15 Pro,OS=latest' \
+            -destination "$DEST" \
             CODE_SIGNING_REQUIRED=NO \
-            CODE_SIGNING_ALLOWED=NO
+            CODE_SIGNING_ALLOWED=NO \
+            2>&1 | tee xcodebuild.log
+          exit ${PIPESTATUS[0]}
+
+      - name: Upload xcodebuild log
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: xcodebuild-log
+          path: xcodebuild.log
+          if-no-files-found: ignore
+
+      - name: Print xcodebuild errors
+        if: failure()
+        run: |
+          echo "===== error/warning lines ====="
+          grep -E "error:|warning:|FAILED|Testing failed|fatal error|Cannot find|Use of undeclared" xcodebuild.log | tail -100 || true
+          echo "===== tail ====="
+          tail -80 xcodebuild.log || true
 
   ios-ipa-build:
     name: Build, Package, Validate & Release Unsigned iOS IPA
@@ -75,11 +103,17 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.12'
+
+      - name: Verify project.pbxproj integrity
+        run: |
+          python3 scripts/validate_ios_pbxproj.py
 
       - name: Select Xcode Version
         run: |
