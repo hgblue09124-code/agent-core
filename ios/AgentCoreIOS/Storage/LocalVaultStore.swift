@@ -68,4 +68,39 @@ public final class LocalVaultStore: @unchecked Sendable {
         }
         return results
     }
+
+    public func deleteContext(key: String) -> Bool {
+        if vaultData.removeValue(forKey: key) != nil {
+            saveToDisk()
+            return true
+        }
+        return false
+    }
+
+    public func summarize() -> VaultSummary {
+        guard isAvailable() else {
+            return VaultSummary(isOperational: false, totalItemsCount: 0, categoriesCount: [:], storageBytes: 0)
+        }
+
+        let totalItems = vaultData.count
+        var categoriesCount: [String: Int] = [:]
+        for dict in vaultData.values {
+            let cat = dict["category"] ?? "user_preference"
+            categoriesCount[cat, default: 0] += 1
+        }
+
+        var storageBytes: Int64 = 0
+        if FileManager.default.fileExists(atPath: fileURL.path),
+           let attr = try? FileManager.default.attributesOfItem(atPath: fileURL.path),
+           let size = attr[.size] as? Int64 {
+            storageBytes = size
+        }
+
+        return VaultSummary(
+            isOperational: true,
+            totalItemsCount: totalItems,
+            categoriesCount: categoriesCount,
+            storageBytes: storageBytes
+        )
+    }
 }

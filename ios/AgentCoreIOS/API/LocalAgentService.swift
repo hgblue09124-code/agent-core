@@ -59,4 +59,44 @@ public final class LocalAgentService: LocalAgentServiceProtocol, @unchecked Send
     public func health() async -> AgentHealth {
         return await runtime.health()
     }
+
+    // MARK: - Additive UI Contract Methods Forwarding
+
+    public func currentAgentStatus() async -> AgentStatus {
+        return await runtime.currentAgentStatus()
+    }
+
+    public func runStreaming(
+        goal: String,
+        userApproved: Bool = false,
+        capabilityDispatch: (capabilityId: String, input: [String: String])? = nil,
+        onEvent: @escaping @Sendable (AgentRunEvent) -> Void
+    ) async -> AgentRunResult {
+        return await runtime.runStreaming(
+            goal: goal,
+            userApproved: userApproved,
+            capabilityDispatch: capabilityDispatch,
+            onEvent: onEvent
+        )
+    }
+
+    public func cancel(runId: String) async -> Bool {
+        return await runtime.cancel(runId: runId)
+    }
+
+    public func pendingApproval(runId: String) async -> PermissionRequest? {
+        return await runtime.pendingApproval(runId: runId)
+    }
+
+    public func listActivity(filter: ActivityFilter = .all) async -> [ActivityRecord] {
+        return await runtime.listActivity(filter: filter)
+    }
+
+    public func vaultSummary() async -> VaultSummary {
+        return await runtime.vaultSummary()
+    }
+
+    public func listConnections() async -> [ConnectionStatus] {
+        return await runtime.listConnections()
+    }
 }

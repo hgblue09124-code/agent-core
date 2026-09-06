@@ -286,4 +286,88 @@ final class LocalAgentServiceTests: XCTestCase {
         let storedRun = await service.getRun(runId: runRes.runId)
         XCTAssertEqual(storedRun?.errorCode, "CANCELLED")
     }
+
+    // MARK: - Additive UI Contract Tests
+
+    func test18_currentAgentStatus_returnsReady() async {
+        let status = await service.currentAgentStatus()
+        XCTAssertEqual(status, .ready)
+    }
+
+    func test19_runStreaming_emitsLifecycleEvents() async {
+        var emittedPhases: [AgentEventPhase] = []
+        let result = await service.runStreaming(
+            goal: "Streamed test goal",
+            userApproved: true,
+            capabilityDispatch: nil,
+            onEvent: { event in
+                emittedPhases.append(event.phase)
+            }
+        )
+
+        XCTAssertEqual(result.status, .success)
+        XCTAssertTrue(emittedPhases.contains(.taskStarted))
+        XCTAssertTrue(emittedPhases.contains(.planCreated))
+        XCTAssertTrue(emittedPhases.contains(.verify))
+        XCTAssertTrue(emittedPhases.contains(.taskCompleted))
+    }
+
+    func test20_cancel_stopsUnfinishedRun() async {
+        let result = await service.run(goal: "Goal to cancel via additive API", userApproved: true)
+        let cancelled = await service.cancel(runId: result.runId)
+
+        // Finished run returns false
+        XCTAssertFalse(cancelled)
+
+        // Active/pending cancellation
+        let newCancelRes = await service.cancel(runId: "RUN-PENDING-TEST")
+        XCTAssertTrue(newCancelRes)
+    }
+
+    func test21_pendingApproval_recordedOnPolicyDenial() async {
+        let runRes = await service.runStreaming(
+            goal: "Delete all files in folder",
+            userApproved: false,
+            capabilityDispatch: nil,
+            onEvent: { _ in }
+        )
+
+        XCTAssertEqual(runRes.status, .denied)
+        let req = await service.pendingApproval(runId: runRes.runId)
+        XCTAssertNotNil(req)
+        XCTAssertEqual(req?.runId, runRes.runId)
+    }
+
+    func test22_listActivity_returnsFilterableRecords() async {
+        _ = await service.run(goal: "Success task", userApproved: true)
+        _ = await service.run(goal: "Delete database", userApproved: false)
+
+        let all = await service.listActivity(filter: .all)
+        let successOnly = await service.listActivity(filter: .success)
+        let failedOnly = await service.listActivity(filter: .failed)
+
+        XCTAssertGreaterThanOrEqual(all.count, 2)
+        XCTAssertTrue(successOnly.allSatisfy { $0.status == .success })
+        XCTAssertTrue(failedOnly.allSatisfy { $0.status == .failed || $0.status == .denied })
+    }
+
+    func test23_vaultSummary_calculatesMetrics() async {
+        _ = await service.remember(key: "preference1", value: "val1")
+
+        let summary = await service.vaultSummary()
+        XCTAssertTrue(summary.isOperational)
+        XCTAssertGreaterThanOrEqual(summary.totalItemsCount, 1)
+    }
+
+    func test24_listConnections_returnsLocalAndRemoteCapabilities() async {
+        let connections = await service.listConnections()
+        XCTAssertGreaterThanOrEqual(connections.count, 2)
+
+        let localCap = connections.first(where: { $0.kind == .local })
+        let remoteCap = connections.first(where: { $0.kind == .remote })
+
+        XCTAssertNotNil(localCap)
+        XCTAssertNotNil(remoteCap)
+        XCTAssertEqual(localCap?.state, .localActive)
+    }
 }

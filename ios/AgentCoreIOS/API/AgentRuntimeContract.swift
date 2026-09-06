@@ -40,4 +40,32 @@ public protocol LocalAgentServiceProtocol: Sendable {
 
     /// Return diagnostic health status of the local native agent service.
     func health() async -> AgentHealth
+
+    // MARK: - Additive UI Contract Methods
+
+    /// Return current operational status (READY / THINKING / RUNNING / OFFLINE).
+    func currentAgentStatus() async -> AgentStatus
+
+    /// Execute a task with live event streaming and capability dispatch.
+    func runStreaming(
+        goal: String,
+        userApproved: Bool,
+        capabilityDispatch: (capabilityId: String, input: [String: String])?,
+        onEvent: @escaping @Sendable (AgentRunEvent) -> Void
+    ) async -> AgentRunResult
+
+    /// Cancel an active or pending run by run ID.
+    func cancel(runId: String) async -> Bool
+
+    /// Get pending approval request for a given run ID if policy denied execution.
+    func pendingApproval(runId: String) async -> PermissionRequest?
+
+    /// List filterable historical activity records.
+    func listActivity(filter: ActivityFilter) async -> [ActivityRecord]
+
+    /// Return summary metrics and category counts of personal vault.
+    func vaultSummary() async -> VaultSummary
+
+    /// List operational status of all capability connections (local vs remote).
+    func listConnections() async -> [ConnectionStatus]
 }

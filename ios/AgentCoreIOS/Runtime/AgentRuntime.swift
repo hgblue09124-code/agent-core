@@ -11,6 +11,10 @@ public final class AgentRuntime: @unchecked Sendable {
     private let planner: AgentModelProviderProtocol
 
     private var capabilities: [String: Capability] = [:]
+    private var runEventsMap: [String: [AgentRunEvent]] = [:]
+    private var pendingApprovals: [String: PermissionRequest] = [:]
+    private var cancelledRuns: Set<String> = []
+    private var isRunningTask: Bool = false
 
     public init(
         memoryStore: LocalMemoryStore? = nil,
@@ -34,23 +38,76 @@ public final class AgentRuntime: @unchecked Sendable {
             name: "Mock Echo Capability",
             description: "Local echo test capability",
             readOnly: true,
-            requiresUserApproval: false
+            requiresUserApproval: false,
+            isRemote: false
         )
         let github = Capability(
             capabilityId: "github_integration",
             name: "GitHub Integration Capability",
             description: "Access GitHub repositories, issues, and issue comments",
             readOnly: false,
-            requiresUserApproval: false
+            requiresUserApproval: false,
+            isRemote: true
         )
         capabilities[mockEcho.capabilityId] = mockEcho
         capabilities[github.capabilityId] = github
     }
 
+    public func currentAgentStatus() async -> AgentStatus {
+        if !vaultStore.isAvailable() {
+            return .offline
+        }
+        if isRunningTask {
+            return .running
+        }
+        return .ready
+    }
+
     public func run(goal: String, userApproved: Bool = false) async -> AgentRunResult {
+        return await runStreaming(goal: goal, userApproved: userApproved, capabilityDispatch: nil, onEvent: { _ in })
+    }
+
+    public func runStreaming(
+        goal: String,
+        userApproved: Bool = false,
+        capabilityDispatch: (capabilityId: String, input: [String: String])? = nil,
+        onEvent: @escaping @Sendable (AgentRunEvent) -> Void
+    ) async -> AgentRunResult {
+        isRunningTask = true
+        defer { isRunningTask = false }
+
         let trimmedGoal = goal.trimmingCharacters(in: .whitespacesAndNewlines)
         let seq = Int(Date().timeIntervalSince1970 * 1000) % 100000
         let runId = String(format: "RUN-%05d", seq)
+
+        if cancelledRuns.contains(runId) {
+            let res = AgentRunResult(
+                runId: runId,
+                status: .failed,
+                goal: trimmedGoal,
+                errorCode: "CANCELLED",
+                errorMessage: "Run was cancelled before execution",
+                authorized: false,
+                verificationVerdict: "CANCELLED"
+            )
+            return res
+        }
+
+        var events: [AgentRunEvent] = []
+
+        func emit(_ phase: AgentEventPhase, _ status: AgentEventStatus, _ summary: String, payload: [String: String]? = nil) {
+            let ev = AgentRunEvent(
+                runId: runId,
+                phase: phase,
+                status: status,
+                summary: summary,
+                payload: payload
+            )
+            events.append(ev)
+            onEvent(ev)
+        }
+
+        emit(.taskStarted, .running, "Task execution started for goal: \(trimmedGoal)")
 
         if trimmedGoal.isEmpty {
             let res = AgentRunResult(
@@ -62,6 +119,8 @@ public final class AgentRuntime: @unchecked Sendable {
                 authorized: true,
                 verificationVerdict: "FAIL"
             )
+            emit(.taskFailed, .error, "Task failed due to invalid input")
+            runEventsMap[runId] = events
             checkpointStore.save(result: res)
             _ = experienceStore.record(runId: runId, goal: goal, outcome: "failed")
             return res
@@ -72,6 +131,15 @@ public final class AgentRuntime: @unchecked Sendable {
         let isMutatingGoal = writeKeywords.contains(where: { goalWords.contains($0) })
 
         if isMutatingGoal && !userApproved {
+            let permReq = PermissionRequest(
+                runId: runId,
+                capabilityId: "core.policy",
+                action: "execute_mutating_goal",
+                input: ["goal": trimmedGoal],
+                reason: "Policy Denial: Execution of mutating goal '\(trimmedGoal)' requires explicit user approval."
+            )
+            pendingApprovals[runId] = permReq
+
             let res = AgentRunResult(
                 runId: runId,
                 status: .denied,
@@ -81,15 +149,53 @@ public final class AgentRuntime: @unchecked Sendable {
                 authorized: false,
                 verificationVerdict: "DENIED"
             )
+            emit(.taskFailed, .error, "Policy denial: user approval required")
+            runEventsMap[runId] = events
             checkpointStore.save(result: res)
             _ = experienceStore.record(runId: runId, goal: trimmedGoal, outcome: "denied")
             return res
         }
 
+        if let dispatch = capabilityDispatch {
+            let capRes = await executeCapability(
+                capabilityId: dispatch.capabilityId,
+                input: dispatch.input,
+                userApproved: userApproved
+            )
+            if capRes.status == .denied {
+                let permReq = PermissionRequest(
+                    runId: runId,
+                    capabilityId: dispatch.capabilityId,
+                    action: dispatch.input["action"] ?? "",
+                    input: dispatch.input,
+                    reason: capRes.errorMessage ?? "Action requires explicit user approval"
+                )
+                pendingApprovals[runId] = permReq
+
+                let res = AgentRunResult(
+                    runId: runId,
+                    status: .denied,
+                    goal: trimmedGoal,
+                    errorCode: "POLICY_DENIAL",
+                    errorMessage: capRes.errorMessage,
+                    authorized: false,
+                    verificationVerdict: "DENIED"
+                )
+                emit(.taskFailed, .error, "Capability execution denied by policy")
+                runEventsMap[runId] = events
+                checkpointStore.save(result: res)
+                _ = experienceStore.record(runId: runId, goal: trimmedGoal, outcome: "denied")
+                return res
+            }
+        }
+
         let planSteps = await planner.generatePlan(goal: trimmedGoal)
+        emit(.planCreated, .ok, "Generated plan with \(planSteps.count) steps")
 
         // Store run summary in vault
         _ = vaultStore.storeContext(key: "run_summary_\(runId)", value: trimmedGoal, category: "run_history")
+
+        emit(.verify, .pass, "Verification verdict PASS")
 
         let result = AgentRunResult(
             runId: runId,
@@ -101,10 +207,23 @@ public final class AgentRuntime: @unchecked Sendable {
             verificationVerdict: "PASS"
         )
 
+        emit(.taskCompleted, .ok, "Task completed successfully")
+        runEventsMap[runId] = events
         checkpointStore.save(result: result)
         _ = experienceStore.record(runId: runId, goal: trimmedGoal, outcome: "success")
 
         return result
+    }
+
+    public func cancel(runId: String) async -> Bool {
+        if let existing = checkpointStore.get(runId: runId) {
+            if existing.status == .success || existing.status == .failed || existing.status == .denied {
+                return false
+            }
+        }
+        cancelledRuns.insert(runId)
+        _ = await cancelRun(runId: runId)
+        return true
     }
 
     public func cancelRun(runId: String) async -> AgentRunResult {
@@ -124,7 +243,89 @@ public final class AgentRuntime: @unchecked Sendable {
         return cancelled
     }
 
+    public func pendingApproval(runId: String) async -> PermissionRequest? {
+        return pendingApprovals[runId]
+    }
+
+    public func listActivity(filter: ActivityFilter = .all) async -> [ActivityRecord] {
+        let exps = experienceStore.listAll()
+        var records: [ActivityRecord] = []
+        for exp in exps {
+            let status: Status
+            switch exp.outcome.lowercased() {
+            case "success":
+                status = .success
+            case "denied":
+                status = .denied
+            default:
+                status = .failed
+            }
+
+            if filter == .success && status != .success {
+                continue
+            }
+            if filter == .failed && status != .failed {
+                continue
+            }
+
+            let record = ActivityRecord(
+                recordId: exp.runId,
+                runId: exp.runId,
+                goal: exp.goal,
+                status: status,
+                durationSeconds: 0.0,
+                createdAt: exp.timestamp
+            )
+            records.append(record)
+        }
+        return records
+    }
+
+    public func vaultSummary() async -> VaultSummary {
+        return vaultStore.summarize()
+    }
+
+    public func listConnections() async -> [ConnectionStatus] {
+        var connections: [ConnectionStatus] = []
+        for cap in capabilities.values {
+            let kind: ConnectionKind = cap.isRemote ? .remote : .local
+            let state: ConnectionState
+            if cap.isRemote {
+                let token = ProcessInfo.processInfo.environment["GITHUB_TOKEN"]
+                state = (token != nil && !token!.isEmpty) ? .remoteConfigured : .remoteNotConfigured
+            } else {
+                state = .localActive
+            }
+            connections.append(
+                ConnectionStatus(
+                    capabilityId: cap.capabilityId,
+                    name: cap.name,
+                    kind: kind,
+                    state: state,
+                    description: cap.description,
+                    requiresApproval: cap.requiresUserApproval
+                )
+            )
+        }
+        return connections.sorted(by: { $0.capabilityId < $1.capabilityId })
+    }
+
     public func resume(runId: String) async -> AgentRunResult {
+        if cancelledRuns.contains(runId) {
+            let existingGoal = checkpointStore.get(runId: runId)?.goal ?? "Cancelled run"
+            let cancelled = AgentRunResult(
+                runId: runId,
+                status: .failed,
+                goal: existingGoal,
+                output: "Task execution cancelled by user request.",
+                errorCode: "CANCELLED",
+                errorMessage: "Task execution was cancelled by user.",
+                authorized: true,
+                verificationVerdict: "CANCELLED"
+            )
+            return cancelled
+        }
+
         if let existing = checkpointStore.get(runId: runId) {
             let resumed = AgentRunResult(
                 runId: existing.runId,
