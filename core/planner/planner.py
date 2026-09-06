@@ -397,17 +397,17 @@ def create_provider(
             model=cfg.model,
             base_url=cfg.base_url or "https://openrouter.ai/api/v1",
         )
+    elif cfg.provider == "xai":
+        return OpenAIPlannerProvider(
+            api_key=cfg.api_key,
+            model=cfg.model or "grok-3-mini",
+            base_url=cfg.base_url or "https://api.x.ai/v1",
+        )
     elif cfg.provider == "local":
         return LocalPlannerProvider(
             base_url=cfg.base_url or "http://localhost:11434",
             api_key=cfg.api_key,
             model=cfg.model,
-        )
-    elif cfg.provider == "openai":
-        return OpenAIPlannerProvider(
-            api_key=cfg.api_key,
-            model=cfg.model,
-            base_url=cfg.base_url,
         )
     else:
         return MockPlannerProvider()
