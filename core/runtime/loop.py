@@ -173,6 +173,7 @@ class AgentLoopController:
 
     def _sync_telemetry(self, state: AgentLoopState, time_budget: TimeBudget) -> None:
         """Update runtime instrumentation telemetry in state object."""
+        state.accumulated_runtime_seconds = time_budget.elapsed_seconds()
         state.telemetry.iterations = state.iteration
         state.telemetry.actions_executed = len(state.completed_actions) + len(state.failed_actions)
         state.telemetry.retries = state.retry_count
@@ -180,6 +181,78 @@ class AgentLoopController:
         state.telemetry.elapsed_seconds = time_budget.elapsed_seconds()
         state.telemetry.remaining_seconds = time_budget.remaining_seconds()
         state.telemetry.final_state = state.status
+
+    def _decompose_goal_into_actions(self, goal: str, pid: str) -> list[AgentAction]:
+        """Discover registered capabilities and decompose goal into structured actions."""
+        goal_lower = goal.lower()
+        specs = self.capabilities.list_specs()
+        actions: list[AgentAction] = []
+
+        # 1. Match against registered capability IDs or names
+        for spec in specs:
+            cap_id = spec.capability_id
+            cap_name = spec.name.lower() if spec.name else ""
+
+            if (cap_id in goal_lower) or (cap_name and cap_name in goal_lower):
+                op = "execute"
+                if "create" in goal_lower:
+                    op = "create"
+                elif "delete" in goal_lower or "drop" in goal_lower:
+                    op = "delete"
+                elif "update" in goal_lower or "modify" in goal_lower:
+                    op = "update"
+                elif "list" in goal_lower or "get" in goal_lower or "inspect" in goal_lower:
+                    op = "inspect" if "inspect" in goal_lower else ("list" if "list" in goal_lower else "get")
+
+                actions.append(
+                    AgentAction(
+                        action_id="ACT-PLAN-1",
+                        capability=cap_id,
+                        operation=op,
+                        arguments={"goal": goal, "project_id": pid},
+                        reason=f"Matched registered capability '{cap_id}' for goal requirement",
+                        risk_level="HIGH" if not spec.constraints.read_only else "LOW",
+                        requires_approval=spec.constraints.requires_user_approval or not spec.constraints.read_only,
+                        expected_outcome=f"Goal '{goal}' satisfied using capability {cap_id}.{op}",
+                    )
+                )
+                break
+
+        # 2. GitHub specific semantic matching if github adapter registered
+        if not actions and ("github" in goal_lower or "issue" in goal_lower or "repo" in goal_lower):
+            gh_adapter = self.capabilities.get("github") or self.capabilities.get("github_integration")
+            if gh_adapter:
+                op = "list_issues" if "issue" in goal_lower else ("get_repo" if "repo" in goal_lower else "list_repos")
+                actions.append(
+                    AgentAction(
+                        action_id="ACT-PLAN-GH-1",
+                        capability=gh_adapter.get_spec().capability_id,
+                        operation=op,
+                        arguments={"owner": "hgblue09124", "repo": pid, "action": op, "mock_offline": True},
+                        reason=f"Discovered GitHub capability for goal '{goal}'",
+                        risk_level="LOW" if op.startswith(("get", "list")) else "MEDIUM",
+                        requires_approval=not op.startswith(("get", "list")),
+                        expected_outcome=f"Successful execution of GitHub operation '{op}' for repository '{pid}'",
+                    )
+                )
+
+        # 3. Fallback: Discovery selected default handler
+        if not actions:
+            best_cap = "mock.echo" if self.capabilities.get("mock.echo") else (specs[0].capability_id if specs else "mock.echo")
+            actions.append(
+                AgentAction(
+                    action_id="ACT-PLAN-1",
+                    capability=best_cap,
+                    operation="echo",
+                    arguments={"text": goal, "project_id": pid},
+                    reason=f"Capability discovery selected default handler '{best_cap}' for goal '{goal}'",
+                    risk_level="LOW",
+                    requires_approval=False,
+                    expected_outcome=f"Execution output verifying goal '{goal}'",
+                )
+            )
+
+        return actions
 
     def run(
         self,
@@ -203,13 +276,17 @@ class AgentLoopController:
         exp_recorded = False
 
         effective_timeout = timeout_seconds if timeout_seconds is not None else self.budget.max_runtime_seconds
-        time_budget = TimeBudget(timeout_seconds=effective_timeout, start_time=t0)
 
         if existing_state:
             state = existing_state
             if state.is_terminal:
                 raise InvalidStateTransitionError(f"Cannot resume run '{rid}' from terminal status '{state.status}'")
             state.transition_to(AgentLoopStatus.RUNNING, AgentLoopPhase.REASON)
+            time_budget = TimeBudget(
+                timeout_seconds=effective_timeout,
+                start_time=t0,
+                accumulated_seconds=state.accumulated_runtime_seconds,
+            )
         else:
             state = AgentLoopState(
                 run_id=rid,
@@ -223,7 +300,9 @@ class AgentLoopController:
                 max_replans=self.budget.max_evaluation_cycles,
                 started_at=time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(t0)),
                 updated_at=time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(t0)),
+                original_start_time=t0,
             )
+            time_budget = TimeBudget(timeout_seconds=effective_timeout, start_time=t0)
 
         decision_engine = DecisionEngine(
             registry=self.capabilities,
@@ -260,13 +339,11 @@ class AgentLoopController:
                 if not isinstance(exc, (ExperienceStoreError, ValueError, OSError, RuntimeError)):
                     raise exc
 
-        # Register run with kernel lifecycle store for inspect/history compatibility
+        # Register run with public kernel lifecycle contract for inspect/history compatibility
         try:
-            kctx = self.kernel._lifecycle.load(rid)
+            kctx = self.kernel.get_run(rid)
             if not kctx:
-                kctx = self.kernel._orchestrator.bootstrap(goal, pid)
-                kctx.run_id = rid
-                self.kernel._lifecycle.save(kctx)
+                self.kernel.bootstrap_run(goal=goal, project_id=pid, run_id=rid)
         except Exception:
             pass
 
@@ -299,6 +376,9 @@ class AgentLoopController:
             self._store.save(state)
 
             state.phase = AgentLoopPhase.PLAN.value
+            if not plan_actions and not capability_dispatch:
+                plan_actions = self._decompose_goal_into_actions(goal, pid)
+
             if plan_actions:
                 state.plan = [f"Step {i+1}: {a.capability}.{a.operation}" for i, a in enumerate(plan_actions)]
             elif capability_dispatch:

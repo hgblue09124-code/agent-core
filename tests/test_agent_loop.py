@@ -274,6 +274,94 @@ class TestAgentLoopArchitecture(unittest.TestCase):
         res = dec_engine.evaluate_action(action, user_approved=False)
         self.assertFalse(res.is_allowed)
 
+    def test_15_fsm_transition_validation(self):
+        """Test 15: Invalid phase transitions raise InvalidStateTransitionError according to FSM graph rules."""
+        state = AgentLoopState(
+            run_id="FSM-TEST",
+            task_id="FSM-TEST",
+            goal="FSM test",
+            project_id="default",
+            phase=AgentLoopPhase.OBSERVE.value,
+            status=AgentLoopStatus.RUNNING.value,
+        )
+        # OBSERVE -> RETRIEVE is valid
+        state.transition_to(AgentLoopStatus.RUNNING, AgentLoopPhase.RETRIEVE)
+        self.assertEqual(state.phase, AgentLoopPhase.RETRIEVE.value)
+
+        # RETRIEVE -> COMPLETE is INVALID according to FSM graph rules
+        with self.assertRaises(InvalidStateTransitionError):
+            state.transition_to(AgentLoopStatus.COMPLETED, AgentLoopPhase.COMPLETE)
+
+    def test_16_phase_by_phase_checkpoint_and_resumption(self):
+        """Test 16: Checkpoints are saved across phases and allow process-restart resumption."""
+        store = LoopStateStore()
+        run_id = "CRASH-TEST-RUN-1"
+        initial_state = AgentLoopState(
+            run_id=run_id,
+            task_id=run_id,
+            goal="Simulate crash and resume",
+            project_id="default",
+            phase=AgentLoopPhase.AUTHORIZE.value,
+            status=AgentLoopStatus.WAITING_FOR_USER.value,
+            pending_action=AgentAction(
+                action_id="ACT-PENDING-1",
+                capability="mock.mutation",
+                operation="delete_records",
+                arguments={"target": "temp"},
+                requires_approval=True,
+            ),
+        )
+        store.save(initial_state)
+
+        # Simulate fresh Agent process loading checkpoint from disk
+        fresh_agent = Agent(project_id="default")
+        res = fresh_agent.resume(run_id, user_approved=True)
+
+        self.assertTrue(res.success)
+        self.assertEqual(res.status, "COMPLETED")
+
+    def test_17_cumulative_time_budget_across_resumes(self):
+        """Test 17: Time budget accumulates elapsed runtime across resumes rather than resetting."""
+        store = LoopStateStore()
+        run_id = "BUDGET-RESUME-TEST"
+        state = AgentLoopState(
+            run_id=run_id,
+            task_id=run_id,
+            goal="Budget accumulation test",
+            project_id="default",
+            phase=AgentLoopPhase.AUTHORIZE.value,
+            status=AgentLoopStatus.WAITING_FOR_USER.value,
+            accumulated_runtime_seconds=599.95,  # Almost expired
+            pending_action=AgentAction(
+                action_id="ACT-EXP",
+                capability="mock.success",
+                operation="op",
+            ),
+        )
+        store.save(state)
+
+        # Resume with 10s budget, but accumulated runtime (599.95s) exceeds 10s timeout
+        res = self.agent.resume(run_id, user_approved=True, timeout_seconds=10.0)
+        self.assertEqual(res.status, "TIMEOUT")
+        self.assertIn("expired", res.errors[0].lower())
+
+    def test_18_checkpoint_recovery_at_execute_phase(self):
+        """Test 18: State checkpoint created before execute allows resuming directly into execution."""
+        act = AgentAction(
+            action_id="ACT-EXEC-RECOVER",
+            capability="mock.success",
+            operation="test_op",
+            arguments={"param": "val"},
+        )
+        res_initial = self.agent.run("Checkpoint recover", plan_actions=[act])
+        self.assertTrue(res_initial.success)
+
+        # Inspect checkpoint on disk
+        saved_state = self.agent._loop_controller._store.load(res_initial.run_id)
+        self.assertIsNotNone(saved_state)
+        self.assertGreater(saved_state.accumulated_runtime_seconds, 0.0)
+        self.assertEqual(saved_state.status, "COMPLETED")
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -13,11 +13,11 @@ import time
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from enum import Enum
-from typing import Any, Optional
+from typing import Any, Optional, Union
 
 
 class InvalidStateTransitionError(Exception):
-    """Raised when an illegal state transition is attempted from a terminal state."""
+    """Raised when an illegal state transition is attempted from a terminal state or against FSM graph rules."""
     pass
 
 
@@ -61,25 +61,44 @@ TERMINAL_STATUSES = {
     AgentLoopStatus.BUDGET_EXCEEDED.value,
 }
 
+VALID_PHASE_TRANSITIONS: dict[str, set[str]] = {
+    AgentLoopPhase.BOOTSTRAP.value: {AgentLoopPhase.OBSERVE.value, AgentLoopPhase.FAILED.value, AgentLoopPhase.BOOTSTRAP.value},
+    AgentLoopPhase.OBSERVE.value: {AgentLoopPhase.RETRIEVE.value, AgentLoopPhase.FAILED.value},
+    AgentLoopPhase.RETRIEVE.value: {AgentLoopPhase.REASON.value, AgentLoopPhase.FAILED.value},
+    AgentLoopPhase.REASON.value: {AgentLoopPhase.PLAN.value, AgentLoopPhase.FAILED.value},
+    AgentLoopPhase.PLAN.value: {AgentLoopPhase.DECIDE.value, AgentLoopPhase.FAILED.value},
+    AgentLoopPhase.DECIDE.value: {AgentLoopPhase.AUTHORIZE.value, AgentLoopPhase.FAILED.value},
+    AgentLoopPhase.AUTHORIZE.value: {AgentLoopPhase.EXECUTE.value, AgentLoopPhase.REPLAN.value, AgentLoopPhase.WAITING_FOR_USER.value, AgentLoopPhase.REASON.value, AgentLoopPhase.DECIDE.value, AgentLoopPhase.FAILED.value},
+    AgentLoopPhase.EXECUTE.value: {AgentLoopPhase.OBSERVE_RESULT.value, AgentLoopPhase.FAILED.value},
+    AgentLoopPhase.OBSERVE_RESULT.value: {AgentLoopPhase.VERIFY.value, AgentLoopPhase.FAILED.value},
+    AgentLoopPhase.VERIFY.value: {AgentLoopPhase.LEARN.value, AgentLoopPhase.REPLAN.value, AgentLoopPhase.FAILED.value},
+    AgentLoopPhase.LEARN.value: {AgentLoopPhase.COMPLETE.value, AgentLoopPhase.DECIDE.value, AgentLoopPhase.REPLAN.value, AgentLoopPhase.FAILED.value},
+    AgentLoopPhase.REPLAN.value: {AgentLoopPhase.DECIDE.value, AgentLoopPhase.FAILED.value},
+    AgentLoopPhase.WAITING_FOR_USER.value: {AgentLoopPhase.REASON.value, AgentLoopPhase.DECIDE.value, AgentLoopPhase.AUTHORIZE.value, AgentLoopPhase.EXECUTE.value, AgentLoopPhase.FAILED.value},
+    AgentLoopPhase.COMPLETE.value: set(),
+    AgentLoopPhase.FAILED.value: set(),
+}
+
 
 @dataclass
 class TimeBudget:
-    """Explicit runtime time budget with deadline and expiration tracking."""
+    """Explicit runtime time budget with deadline and cumulative runtime tracking across resumes."""
     timeout_seconds: float = 600.0
     start_time: float = field(default_factory=time.time)
+    accumulated_seconds: float = 0.0
 
     @property
     def deadline(self) -> float:
-        return self.start_time + self.timeout_seconds
+        return self.start_time + (self.timeout_seconds - self.accumulated_seconds)
 
     def remaining_seconds(self) -> float:
-        return max(0.0, self.deadline - time.time())
+        return max(0.0, self.timeout_seconds - self.elapsed_seconds())
 
     def elapsed_seconds(self) -> float:
-        return max(0.0, time.time() - self.start_time)
+        return max(0.0, (time.time() - self.start_time) + self.accumulated_seconds)
 
     def is_expired(self) -> bool:
-        return time.time() >= self.deadline
+        return self.elapsed_seconds() >= self.timeout_seconds
 
 
 @dataclass
@@ -232,6 +251,8 @@ class AgentLoopState:
     started_at: str = ""
     updated_at: str = ""
     finished_at: str = ""
+    accumulated_runtime_seconds: float = 0.0
+    original_start_time: Optional[float] = None
     telemetry: AgentLoopTelemetry = field(default_factory=AgentLoopTelemetry)
 
     def now_str(self) -> str:
@@ -242,13 +263,20 @@ class AgentLoopState:
         return self.status in TERMINAL_STATUSES
 
     def transition_to(self, new_status: Union[AgentLoopStatus, str], new_phase: Union[AgentLoopPhase, str], error: str = "") -> None:
-        """Safely transition state machine, preventing illegal transitions out of terminal states."""
+        """Safely transition state machine, preventing illegal transitions out of terminal states or invalid FSM edges."""
         target_status = new_status.value if isinstance(new_status, AgentLoopStatus) else new_status
         target_phase = new_phase.value if isinstance(new_phase, AgentLoopPhase) else new_phase
 
         if self.is_terminal:
             raise InvalidStateTransitionError(
                 f"Cannot transition state '{self.run_id}' out of terminal status '{self.status}' to '{target_status}'"
+            )
+
+        # FSM Graph Validation (allow self-loop phase or transitions to FAILED/CANCELLED)
+        allowed_phases = VALID_PHASE_TRANSITIONS.get(self.phase, set())
+        if target_phase != self.phase and target_phase not in allowed_phases and target_phase != AgentLoopPhase.FAILED.value:
+            raise InvalidStateTransitionError(
+                f"Invalid phase transition from '{self.phase}' to '{target_phase}'"
             )
 
         self.status = target_status
@@ -285,6 +313,8 @@ class AgentLoopState:
             "started_at": self.started_at,
             "updated_at": self.updated_at,
             "finished_at": self.finished_at,
+            "accumulated_runtime_seconds": round(self.accumulated_runtime_seconds, 3),
+            "original_start_time": self.original_start_time,
             "telemetry": self.telemetry.to_dict(),
         }
 
@@ -342,5 +372,7 @@ class AgentLoopState:
             started_at=d.get("started_at", ""),
             updated_at=d.get("updated_at", ""),
             finished_at=d.get("finished_at", ""),
+            accumulated_runtime_seconds=d.get("accumulated_runtime_seconds", 0.0),
+            original_start_time=d.get("original_start_time"),
             telemetry=telem,
         )

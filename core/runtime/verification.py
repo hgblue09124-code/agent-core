@@ -64,7 +64,7 @@ class VerificationEngine:
         output = observation.output if observation.output is not None else result.output
         evidence = observation.evidence or result.metadata or {}
 
-        # If execution status is SUCCESS, verify output / evidence
+        # Check for evidence presence when requested
         if action.expected_outcome and "evidence_missing" in str(output).lower():
             return VerificationResult(
                 verdict="FAIL",
@@ -81,6 +81,26 @@ class VerificationEngine:
                 evidence_valid=False,
                 goal_satisfied=False,
             )
+
+        # Strict outcome matching: If expected_outcome specifies key target terms, verify they match actual output/evidence
+        if action.expected_outcome and output:
+            output_str = str(output).lower()
+            expected_lower = action.expected_outcome.lower()
+
+            # Extract key expected tokens (excluding generic stop words)
+            stop_words = {"a", "an", "the", "in", "on", "at", "for", "to", "of", "and", "or", "is", "be", "with", "that", "this", "by", "successful", "execution"}
+            expected_tokens = [w for w in expected_lower.replace(":", " ").replace(",", " ").replace(".", " ").split() if w not in stop_words and len(w) > 2]
+
+            # Check if explicit file / entity / identifier target mentioned in expected_outcome is contradicted in output
+            if expected_tokens:
+                matches = [tok for tok in expected_tokens if tok in output_str or any(tok in str(v).lower() for v in evidence.values())]
+                if not matches and len(expected_tokens) >= 2:
+                    return VerificationResult(
+                        verdict="FAIL",
+                        reason=f"Execution output does not match expected outcome targets: '{action.expected_outcome}'",
+                        evidence_valid=False,
+                        goal_satisfied=False,
+                    )
 
         evidence_valid = bool(output is not None or evidence)
 
