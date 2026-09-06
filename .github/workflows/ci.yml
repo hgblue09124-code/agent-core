@@ -2,7 +2,7 @@ name: Agent-Core CI
 
 on:
   push:
-    branches: [ main, master, "jules-*", "feat/*", "fix/*", "release/*" ]
+    branches: [ main, master, "jules-*", "feat/*", "fix/*", "release/*", "step1-*" ]
     tags: [ "v*" ]
   pull_request:
     branches: [ main, master ]
@@ -53,6 +53,12 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Restore & patch project.pbxproj for LanguageModelProvider
+        run: |
+          python3 scripts/fix_ios_pbxproj.py
 
       - name: Select Xcode Version
         run: |
@@ -75,11 +81,17 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.12'
+
+      - name: Restore & patch project.pbxproj for LanguageModelProvider
+        run: |
+          python3 scripts/fix_ios_pbxproj.py
 
       - name: Select Xcode Version
         run: |
