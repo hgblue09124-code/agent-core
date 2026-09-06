@@ -121,3 +121,20 @@ class RecoveryPolicy:
             failure_class=failure.value,
             bounded=True,
         )
+
+    def deny(self, reason: str) -> RecoveryDecision:
+        """Policy DENY is fail-closed. Distinct from ASK_USER missing approval."""
+        return RecoveryDecision(
+            kind=RecoveryKind.FAIL.value,
+            reason=reason,
+            failure_class=FailureClass.MISSING_AUTHORIZATION.value,
+            bounded=True,
+        )
+
+    def cycle_budget_exhausted(self, max_cycle_iterations: int) -> RecoveryDecision:
+        return RecoveryDecision(
+            kind=RecoveryKind.FAIL.value,
+            reason=f"Cycle iteration budget ({max_cycle_iterations}) exhausted",
+            failure_class=FailureClass.PERMANENT.value,
+            bounded=True,
+        )

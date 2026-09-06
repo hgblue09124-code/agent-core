@@ -5,11 +5,32 @@ from __future__ import annotations
 
 import json
 import os
+import re
 from pathlib import Path
 from typing import Any, Optional
 
 from core.config.storage import get_storage_dir
-from core.runtime.models import OPEN_OBJECTIVE_STATES, Objective, ObjectiveState
+from core.runtime.classify import GoalIntent, classify_goal
+from core.runtime.models import (
+    OPEN_OBJECTIVE_STATES,
+    Objective,
+    ObjectiveKind,
+    ObjectiveState,
+    RuntimeEvent,
+    RuntimeEventKind,
+    new_id,
+)
+
+
+_PERSISTENT_RE = re.compile(
+    r"\b(monitor|watch|track|keep an eye|alert me|notify me|whenever)\b",
+    re.IGNORECASE,
+)
+_TOKEN_RE = re.compile(r"[a-z0-9]+")
+_STOP = {
+    "the", "a", "an", "to", "and", "or", "for", "of", "my", "please",
+    "that", "this", "with", "on", "in", "at", "is", "be", "it",
+}
 
 
 def atomic_write_json(path: Path, data: Any) -> None:
@@ -79,3 +100,70 @@ class ObjectiveStore:
     def list_by_status(self, status: ObjectiveState | str) -> list[Objective]:
         value = status.value if isinstance(status, ObjectiveState) else status
         return [o for o in self.list_all() if o.status == value]
+
+    def match(self, text: str) -> Optional[Objective]:
+        tokens = set(_TOKEN_RE.findall((text or "").lower())) - _STOP
+        if not tokens:
+            return None
+        best: Optional[Objective] = None
+        best_score = 0
+        for obj in self.list_open():
+            ot = set(_TOKEN_RE.findall(obj.intent.lower())) - _STOP
+            score = len(tokens & ot)
+            if score >= 2 and score > best_score:
+                best = obj
+                best_score = score
+        return best
+
+    def resolve(
+        self,
+        event: RuntimeEvent,
+        *,
+        active_objective_id: str = "",
+    ) -> tuple[Objective, GoalIntent]:
+        """Bind an event to an existing Objective or create one. UNDERSTAND stage."""
+        if event.kind == RuntimeEventKind.APPROVAL.value and event.objective_id:
+            existing = self.get(event.objective_id)
+            if existing:
+                return existing, classify_goal(existing.intent)
+
+        if event.objective_id:
+            existing = self.get(event.objective_id)
+            if existing and existing.is_open:
+                return existing, classify_goal(existing.intent)
+
+        if active_objective_id and event.kind in {
+            RuntimeEventKind.EXTERNAL_RESULT.value,
+            RuntimeEventKind.SCHEDULED.value,
+            RuntimeEventKind.TASK_COMPLETED.value,
+            RuntimeEventKind.INTEGRATION.value,
+        }:
+            existing = self.get(active_objective_id)
+            if existing and existing.is_open:
+                return existing, classify_goal(existing.intent)
+
+        text = event.text().strip()
+        intent = classify_goal(text)
+        matched = self.match(text)
+        if matched is not None:
+            return matched, intent
+
+        kind = ObjectiveKind.PERSISTENT.value if _PERSISTENT_RE.search(text) else ObjectiveKind.ONE_SHOT.value
+        if intent.kind == "remember":
+            criteria = ["memory item exists"]
+        elif intent.kind == "forget":
+            criteria = ["matching memory removed"]
+        elif kind == ObjectiveKind.PERSISTENT.value:
+            criteria = ["continue observing relevant events"]
+        else:
+            criteria = ["verified action result"]
+
+        objective = Objective(
+            objective_id=new_id("OBJ"),
+            intent=text,
+            desired_outcome=text,
+            status=ObjectiveState.PENDING.value,
+            kind=kind,
+            success_criteria=criteria,
+        )
+        return objective, intent
