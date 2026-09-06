@@ -2,6 +2,10 @@
 """Restore ios/AgentCoreIOS.xcodeproj/project.pbxproj if truncated, then register LanguageModelProvider sources.
 
 Idempotent. Intended to run in CI before xcodebuild, and locally after pulling the PR.
+
+IMPORTANT: This Xcode project compiles app sources into BOTH the app target and the
+test target (shared PBXBuildFile IDs). LanguageModelProvider.swift and
+MockLanguageModelProvider.swift must appear in BOTH Sources build phases.
 """
 from __future__ import annotations
 
@@ -18,33 +22,21 @@ REF_TEST, BUILD_TEST = "004004", "004005"
 
 
 def restore_from_master() -> None:
-    """If pbxproj is truncated/corrupt, checkout the master copy via git."""
     text = PBX.read_text(encoding="utf-8") if PBX.exists() else ""
     if len(text) >= 10000 and "PBXBuildFile" in text and "rootObject" in text:
         return
     print("project.pbxproj looks truncated/corrupt; restoring from origin/master…")
-    # Prefer git show so we don't need network if master is available locally.
-    try:
-        content = subprocess.check_output(
-            ["git", "show", "origin/master:ios/AgentCoreIOS.xcodeproj/project.pbxproj"],
-            cwd=ROOT,
-        )
-        PBX.write_bytes(content)
-        print(f"Restored via git show origin/master ({len(content)} bytes)")
-        return
-    except (subprocess.CalledProcessError, FileNotFoundError):
-        pass
-    try:
-        content = subprocess.check_output(
-            ["git", "show", "master:ios/AgentCoreIOS.xcodeproj/project.pbxproj"],
-            cwd=ROOT,
-        )
-        PBX.write_bytes(content)
-        print(f"Restored via git show master ({len(content)} bytes)")
-        return
-    except (subprocess.CalledProcessError, FileNotFoundError):
-        pass
-    # Fallback: fetch raw from GitHub
+    for ref in ("origin/master", "master"):
+        try:
+            content = subprocess.check_output(
+                ["git", "show", f"{ref}:ios/AgentCoreIOS.xcodeproj/project.pbxproj"],
+                cwd=ROOT,
+            )
+            PBX.write_bytes(content)
+            print(f"Restored via git show {ref} ({len(content)} bytes)")
+            return
+        except (subprocess.CalledProcessError, FileNotFoundError):
+            continue
     import urllib.request
 
     url = (
@@ -58,9 +50,22 @@ def restore_from_master() -> None:
 
 
 def patch(text: str) -> str:
-    if "LanguageModelProvider.swift" in text and REF_LMP in text:
-        print("LanguageModelProvider entries already present; skipping patch")
+    # Fully patched when LMP appears in BOTH Sources phases.
+    if text.count(f"{BUILD_LMP} /* LanguageModelProvider.swift in Sources */") >= 2:
+        print("LanguageModelProvider already in both Sources phases; skipping patch")
         return text
+
+    # If partially patched, restore clean master then re-apply full patch.
+    if REF_LMP in text or "LanguageModelProvider.swift" in text:
+        print("Partial patch detected; re-restoring master pbxproj before full patch")
+        import urllib.request
+
+        url = (
+            "https://raw.githubusercontent.com/hgblue09124-code/agent-core/"
+            "master/ios/AgentCoreIOS.xcodeproj/project.pbxproj"
+        )
+        with urllib.request.urlopen(url, timeout=30) as resp:
+            text = resp.read().decode("utf-8")
 
     if "/* End PBXBuildFile section */" not in text:
         raise SystemExit("PBXBuildFile section marker not found")
@@ -131,15 +136,17 @@ def patch(text: str) -> str:
         1,
     )
 
-    text = text.replace(
-        "\t\t\t\t001013 /* AgentRuntime.swift in Sources */,",
-        (
-            "\t\t\t\t001013 /* AgentRuntime.swift in Sources */,\n"
-            f"\t\t\t\t{BUILD_LMP} /* LanguageModelProvider.swift in Sources */,\n"
-            f"\t\t\t\t{BUILD_MOCK} /* MockLanguageModelProvider.swift in Sources */,"
-        ),
-        1,
+    # BOTH Sources phases share the same build-file IDs — inject after every AgentRuntime line.
+    marker = "\t\t\t\t001013 /* AgentRuntime.swift in Sources */,"
+    injection = (
+        "\t\t\t\t001013 /* AgentRuntime.swift in Sources */,\n"
+        f"\t\t\t\t{BUILD_LMP} /* LanguageModelProvider.swift in Sources */,\n"
+        f"\t\t\t\t{BUILD_MOCK} /* MockLanguageModelProvider.swift in Sources */,"
     )
+    occurrences = text.count(marker)
+    if occurrences < 2:
+        raise SystemExit(f"Expected >=2 AgentRuntime Sources markers, found {occurrences}")
+    text = text.replace(marker, injection)  # replace ALL occurrences
 
     text = text.replace(
         "\t\t\t\t001031 /* LocalAgentServiceTests.swift in Sources */,",
@@ -150,7 +157,7 @@ def patch(text: str) -> str:
         1,
     )
 
-    print("Patched LanguageModelProvider sources into project.pbxproj")
+    print("Patched LanguageModelProvider sources into project.pbxproj (both targets)")
     return text
 
 
@@ -162,7 +169,20 @@ def main() -> int:
     text = PBX.read_text(encoding="utf-8")
     text = patch(text)
     PBX.write_text(text, encoding="utf-8")
+    final = PBX.read_text(encoding="utf-8")
+    lmp = final.count(f"{BUILD_LMP} /* LanguageModelProvider.swift in Sources */")
+    mock = final.count(f"{BUILD_MOCK} /* MockLanguageModelProvider.swift in Sources */")
+    tests = final.count(f"{BUILD_TEST} /* LanguageModelProviderTests.swift in Sources */")
     print(f"Final project.pbxproj size: {PBX.stat().st_size} bytes")
+    print(f"LanguageModelProvider in Sources phases: {lmp}")
+    print(f"MockLanguageModelProvider in Sources phases: {mock}")
+    print(f"LanguageModelProviderTests in Sources phases: {tests}")
+    if lmp < 2 or mock < 2:
+        print("ERROR: expected LMP/Mock in BOTH app and test Sources phases", file=sys.stderr)
+        return 1
+    if tests < 1:
+        print("ERROR: expected LanguageModelProviderTests in test Sources phase", file=sys.stderr)
+        return 1
     return 0
 
 
