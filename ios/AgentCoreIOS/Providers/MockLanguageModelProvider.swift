@@ -6,6 +6,9 @@ import Foundation
 
 /// Deterministic mock provider for unit / integration tests.
 /// Supports load / generate / stream / unload and cooperative cancellation.
+///
+/// Cancellation instrumentation (test-only counters) lets unit tests prove that
+/// producer work actually stops when the consumer/runtime cancels the stream.
 public final class MockLanguageModelProvider: LanguageModelProvider, @unchecked Sendable {
     public let providerId: String = "MockLanguageModelProvider"
 
@@ -15,6 +18,14 @@ public final class MockLanguageModelProvider: LanguageModelProvider, @unchecked 
     private var _fixedResponseText: String
     private var _streamChunks: [String]
     private var _streamDelayNanoseconds: UInt64
+    private var _generateDelayNanoseconds: UInt64
+
+    // MARK: - Cancellation / activity instrumentation (visible to tests)
+
+    private var _emittedChunkCount: Int = 0
+    private var _didObserveCancellation: Bool = false
+    private var _activeStreamTasks: Int = 0
+    private var _completedStreamTasks: Int = 0
 
     public var isLoaded: Bool {
         lock.lock()
@@ -22,31 +33,76 @@ public final class MockLanguageModelProvider: LanguageModelProvider, @unchecked 
         return _isLoaded
     }
 
+    /// Number of stream chunks successfully yielded since last reset / init.
+    public var emittedChunkCount: Int {
+        lock.lock()
+        defer { lock.unlock() }
+        return _emittedChunkCount
+    }
+
+    /// True if any stream or generate path observed Task cancellation.
+    public var didObserveCancellation: Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        return _didObserveCancellation
+    }
+
+    /// Number of in-flight stream producer tasks.
+    public var activeStreamTasks: Int {
+        lock.lock()
+        defer { lock.unlock() }
+        return _activeStreamTasks
+    }
+
+    public var completedStreamTasks: Int {
+        lock.lock()
+        defer { lock.unlock() }
+        return _completedStreamTasks
+    }
+
     /// Creates a mock with deterministic output.
     /// - Parameters:
     ///   - fixedResponseText: Text returned by `generate`.
     ///   - streamChunks: Chunks yielded by `stream` (defaults to splitting fixedResponseText by spaces).
     ///   - streamDelayNanoseconds: Artificial delay between chunks to allow cancellation tests.
+    ///   - generateDelayNanoseconds: Artificial delay inside `generate` (for cancellation tests).
     public init(
         fixedResponseText: String = "Mock response for testing.",
         streamChunks: [String]? = nil,
-        streamDelayNanoseconds: UInt64 = 5_000_000 // 5 ms
+        streamDelayNanoseconds: UInt64 = 5_000_000, // 5 ms
+        generateDelayNanoseconds: UInt64 = 0
     ) {
         self._fixedResponseText = fixedResponseText
         if let chunks = streamChunks, !chunks.isEmpty {
             self._streamChunks = chunks
         } else {
-            // Split into word-like chunks for realistic streaming tests.
             let parts = fixedResponseText.split(separator: " ", omittingEmptySubsequences: false).map(String.init)
             self._streamChunks = parts.isEmpty ? [fixedResponseText] : parts
         }
         self._streamDelayNanoseconds = streamDelayNanoseconds
+        self._generateDelayNanoseconds = generateDelayNanoseconds
     }
 
     /// Test helper: force `load()` to fail.
     public func setShouldFailLoad(_ value: Bool) {
         lock.lock()
         _shouldFailLoad = value
+        lock.unlock()
+    }
+
+    /// Reset cancellation/activity counters (does not change load state).
+    public func resetInstrumentation() {
+        lock.lock()
+        _emittedChunkCount = 0
+        _didObserveCancellation = false
+        _activeStreamTasks = 0
+        _completedStreamTasks = 0
+        lock.unlock()
+    }
+
+    private func markCancellationObserved() {
+        lock.lock()
+        _didObserveCancellation = true
         lock.unlock()
     }
 
@@ -61,11 +117,9 @@ public final class MockLanguageModelProvider: LanguageModelProvider, @unchecked 
             throw LanguageModelError.providerUnavailable("Mock load forced to fail")
         }
         if already {
-            // Idempotent: already loaded is fine for mock.
             return
         }
 
-        // Simulate a tiny amount of work.
         try await Task.sleep(nanoseconds: 1_000_000)
         try Task.checkCancellation()
 
@@ -89,7 +143,23 @@ public final class MockLanguageModelProvider: LanguageModelProvider, @unchecked 
             throw LanguageModelError.invalidRequest("Request must contain at least one message or a system prompt")
         }
 
-        // Deterministic: incorporate last user message for traceability in tests.
+        let delay = _generateDelayNanoseconds
+        if delay > 0 {
+            do {
+                try await Task.sleep(nanoseconds: delay)
+            } catch is CancellationError {
+                markCancellationObserved()
+                throw LanguageModelError.cancelled
+            }
+        }
+
+        do {
+            try Task.checkCancellation()
+        } catch is CancellationError {
+            markCancellationObserved()
+            throw LanguageModelError.cancelled
+        }
+
         let lastUser = request.messages.last(where: { $0.role == .user })?.content ?? ""
         let text: String
         if lastUser.isEmpty {
@@ -97,8 +167,6 @@ public final class MockLanguageModelProvider: LanguageModelProvider, @unchecked 
         } else {
             text = "\(_fixedResponseText) [echo: \(lastUser)]"
         }
-
-        try Task.checkCancellation()
 
         return LanguageModelResponse(
             text: text,
@@ -113,6 +181,16 @@ public final class MockLanguageModelProvider: LanguageModelProvider, @unchecked 
     public func stream(_ request: LanguageModelRequest) -> AsyncThrowingStream<LanguageModelStreamChunk, Error> {
         AsyncThrowingStream { continuation in
             let task = Task {
+                self.lock.lock()
+                self._activeStreamTasks += 1
+                self.lock.unlock()
+                defer {
+                    self.lock.lock()
+                    self._activeStreamTasks = max(0, self._activeStreamTasks - 1)
+                    self._completedStreamTasks += 1
+                    self.lock.unlock()
+                }
+
                 do {
                     try Task.checkCancellation()
                     guard self.isLoaded else {
@@ -143,9 +221,13 @@ public final class MockLanguageModelProvider: LanguageModelProvider, @unchecked 
                                 metadata: ["provider": self.providerId, "index": "\(index)"]
                             )
                         )
+                        self.lock.lock()
+                        self._emittedChunkCount += 1
+                        self.lock.unlock()
                     }
                     continuation.finish()
                 } catch is CancellationError {
+                    self.markCancellationObserved()
                     continuation.finish(throwing: LanguageModelError.cancelled)
                 } catch {
                     continuation.finish(throwing: error)
