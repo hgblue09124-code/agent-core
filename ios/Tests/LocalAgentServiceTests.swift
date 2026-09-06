@@ -25,6 +25,7 @@ final class LocalAgentServiceTests: XCTestCase {
     private var tempDir: URL!
     private var service: LocalAgentService!
     private var updateManager: GitHubDataUpdateManager!
+    private var chkStore: LocalCheckpointStore!
 
     override func setUp() async throws {
         try await super.setUp()
@@ -33,7 +34,7 @@ final class LocalAgentServiceTests: XCTestCase {
 
         let memStore = LocalMemoryStore(storageDir: tempDir.appendingPathComponent("memories"))
         let expStore = LocalExperienceStore(storageDir: tempDir.appendingPathComponent("experiences"))
-        let chkStore = LocalCheckpointStore(storageDir: tempDir.appendingPathComponent("runs"))
+        chkStore = LocalCheckpointStore(storageDir: tempDir.appendingPathComponent("runs"))
         let vltStore = LocalVaultStore(storageDir: tempDir.appendingPathComponent("vault"))
 
         let runtime = AgentRuntime(
@@ -342,7 +343,6 @@ final class LocalAgentServiceTests: XCTestCase {
         XCTAssertFalse(finishedCancelRes)
 
         // 3. Cancelling a non-terminal / checkpointed run returns true
-        let chkStore = LocalCheckpointStore(storageDir: tempDir.appendingPathComponent("runs"))
         let pendingRun = AgentRunResult(runId: "RUN-PENDING-001", status: .notExecuted, goal: "Pending goal")
         chkStore.save(result: pendingRun)
 
