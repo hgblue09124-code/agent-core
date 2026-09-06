@@ -111,6 +111,7 @@ class RuntimeEngine:
         # LLM planner (lazy — only created when first LLM call needed)
         self._planner: Optional[Planner] = None
         self._current_state: Optional[RunState] = None
+        self._extra_context: str = ""
 
     # ── Planner access ───────────────────────────────────────────────
 
@@ -179,7 +180,9 @@ class RuntimeEngine:
         else:
             planner = self._get_planner()
 
-        result: PlanResult = planner.plan(state.project_id, state.goal)
+        result: PlanResult = planner.plan(
+            state.project_id, state.goal, extra_context=self._extra_context
+        )
         state = self._record_llm_metrics(state, result)
 
         if result.error or not result.plan:
@@ -556,8 +559,10 @@ class RuntimeEngine:
     # ── Public API ───────────────────────────────────────────────────
 
     def run(self, project_id: str, goal: str,
-            run_id: Optional[str] = None) -> RunState:
+            run_id: Optional[str] = None,
+            extra_context: str = "") -> RunState:
         """Execute a goal end-to-end with durable checkpoints."""
+        self._extra_context = extra_context or ""
         def _make_now_str() -> str:
             from datetime import datetime, timezone
             return datetime.now(timezone.utc).isoformat()

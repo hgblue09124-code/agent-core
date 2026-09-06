@@ -176,14 +176,16 @@ class TestContextBuilder(unittest.TestCase):
         self.assertGreater(t2, t1)
 
     def test_context_builder_respects_budget(self):
-        """Documents exceeding budget are skipped."""
+        """Documents exceeding budget are truncated, not dropped."""
         # max_tokens=4000 → max_chars ≈ 16000
         cb = ContextBuilder(max_tokens=4000)
         cb.add_document("small", "role", "/p", "hello")
         cb.add_document("huge", "role2", "/p2", "x" * 100_000)
-        # huge should be skipped
-        self.assertEqual(len(cb.documents), 1)
+        self.assertEqual(len(cb.documents), 2)
         self.assertEqual(cb.documents[0].name, "small")
+        self.assertEqual(cb.documents[1].name, "huge")
+        self.assertLess(len(cb.documents[1].content), 100_000)
+        self.assertIn("TRUNCATED", cb.documents[1].content)
 
     def test_context_builder_build(self):
         """build() returns a PlannerContext."""

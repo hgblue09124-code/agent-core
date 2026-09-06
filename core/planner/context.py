@@ -15,6 +15,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional
 
+from core.context.pack import select_relevant_slice
+
 
 # ── Token estimator ─────────────────────────────────────────────────────
 
@@ -113,6 +115,8 @@ class ContextBuilder:
     """
     max_tokens: int = DEFAULT_MAX_TOKENS
     documents: list[ContextDocument] = field(default_factory=list)
+    excluded: list[str] = field(default_factory=list)
+    query: str = ""
     _total_chars: int = field(default=0, repr=False)
 
     def add_document(
@@ -122,17 +126,27 @@ class ContextBuilder:
         path: str,
         content: str,
     ) -> bool:
-        """Add a document if it fits the budget.
+        """Add a document if any budget remains.
 
-        Returns True if added, False if skipped (over budget).
+        Oversized docs are truncated (relevance-sliced when `query` is set)
+        instead of being dropped whole.
         """
-        chars = len(content)
-        tokens = estimate_tokens_combined(content)
-
-        # If adding this doc would exceed budget, skip it
-        if self._total_chars + chars > self.max_tokens * CHARS_PER_TOKEN:
+        remaining = self.max_tokens * CHARS_PER_TOKEN - self._total_chars
+        if remaining <= 0:
+            self.excluded.append(name)
             return False
 
+        if len(content) > remaining:
+            if self.query:
+                content = select_relevant_slice(content, self.query, remaining)
+            else:
+                content = content[:remaining]
+            marker = f"\n\n[... TRUNCATED — original longer than budget ...]"
+            if not content.endswith("...]") and remaining > len(marker) + 16:
+                content = content[: remaining - len(marker)].rstrip() + marker
+
+        chars = len(content)
+        tokens = estimate_tokens_combined(content)
         self.documents.append(ContextDocument(
             name=name,
             role=role,
@@ -162,7 +176,7 @@ class ContextBuilder:
             total_chars=len(full_text),
             approx_tokens=approx_tokens,
             documents_included=all_included,
-            documents_excluded=[],
+            documents_excluded=list(self.excluded),
             total_files=len(self.documents),
         )
 
@@ -194,6 +208,7 @@ def build_context(
     source_of_truth: Optional[str],
     project_metadata: Optional[dict] = None,
     max_tokens: int = DEFAULT_MAX_TOKENS,
+    query: str = "",
 ) -> PlannerContext:
     """Build a planner context from project document content.
 
@@ -203,8 +218,9 @@ def build_context(
         source_of_truth: content of source-of-truth.md (or None)
         project_metadata: dict with project_id, name, root_path, status
         max_tokens: token budget (approximate)
+        query: current objective — used to slice oversized docs by relevance
     """
-    cb = ContextBuilder(max_tokens=max_tokens)
+    cb = ContextBuilder(max_tokens=max_tokens, query=query)
 
     if project_metadata:
         meta = [
