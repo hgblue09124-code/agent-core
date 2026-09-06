@@ -18,8 +18,9 @@ from unittest.mock import Mock, MagicMock
 from core.capabilities.adapter import CapabilityRegistry
 from core.capabilities.github import GitHubCapabilityAdapter
 from core.capabilities.mock_adapter import MockEchoCapabilityAdapter
+from core.capabilities.schema import CapabilityResult
 from core.config.storage import get_storage_dir
-from core.context.pack import build_loop_pack, compact_tool_output
+from core.context.pack import build_loop_pack, compact_tool_output, needed_layers
 from core.events.bus import EventBus
 from core.events.schema import EventPhase, EventStatus, new_event
 from core.experience.engine import ExperienceEngine
@@ -35,6 +36,7 @@ from core.learning.store import StrategyStore
 from core.memory.manager import MemoryManager
 from core.memory.schema import MemoryQuery, MemoryType
 from core.projects.manager import ProjectManager
+from core.runtime.classify import GoalIntent, classify_goal
 from core.runtime.decision import DecisionEngine
 from core.runtime.state import (
     AgentAction,
@@ -224,12 +226,18 @@ class AgentLoopController:
             gh_adapter = self.capabilities.get("github") or self.capabilities.get("github_integration")
             if gh_adapter:
                 op = "list_issues" if "issue" in goal_lower else ("get_repo" if "repo" in goal_lower else "list_repos")
+                mock_offline = not bool(os.getenv("GITHUB_TOKEN"))
                 actions.append(
                     AgentAction(
                         action_id="ACT-PLAN-GH-1",
                         capability=gh_adapter.get_spec().capability_id,
                         operation=op,
-                        arguments={"owner": "hgblue09124", "repo": pid, "action": op, "mock_offline": True},
+                        arguments={
+                            "owner": os.getenv("GITHUB_OWNER", "hgblue09124-code"),
+                            "repo": pid,
+                            "action": op,
+                            "mock_offline": mock_offline,
+                        },
                         reason=f"Discovered GitHub capability for goal '{goal}'",
                         risk_level="LOW" if op.startswith(("get", "list")) else "MEDIUM",
                         requires_approval=not op.startswith(("get", "list")),
@@ -249,7 +257,7 @@ class AgentLoopController:
                     reason=f"Capability discovery selected default handler '{best_cap}' for goal '{goal}'",
                     risk_level="LOW",
                     requires_approval=False,
-                    expected_outcome=f"Execution output verifying goal '{goal}'",
+                    expected_outcome="",
                 )
             )
 
@@ -360,16 +368,30 @@ class AgentLoopController:
         )
 
         # 2. OBSERVE & RETRIEVE CONTEXT
+        intent = classify_goal(goal)
+        applicable_strategies: list[Any] = []
         if not existing_state:
             state.transition_to(AgentLoopStatus.RUNNING, AgentLoopPhase.OBSERVE)
             self._sync_telemetry(state, time_budget)
             self._store.save(state)
 
             state.transition_to(AgentLoopStatus.RUNNING, AgentLoopPhase.RETRIEVE)
-            identity_mem = self.memory.get_identity()
-            relevant_mems = self.memory.retrieve(MemoryQuery(query=goal, limit=3))
-            vault_contexts = self.vault.retrieve_context(query=goal, limit=3)
-            applicable_strategies = self.strategy_ranker.select_applicable_strategies(goal=goal, limit=2)
+            layers = needed_layers(goal)
+            if intent.kind in ("remember", "forget"):
+                layers = {"current_task"}
+            identity_mem = self.memory.get_identity() if "persistent" in layers else None
+            relevant_mems = (
+                self.memory.retrieve(MemoryQuery(query=goal, limit=3))
+                if "retrieved" in layers or "persistent" in layers
+                else []
+            )
+            vault_contexts = (
+                self.vault.retrieve_context(query=goal, limit=3)
+                if "retrieved" in layers
+                else []
+            )
+            if "retrieved" in layers:
+                applicable_strategies = self.strategy_ranker.select_applicable_strategies(goal=goal, limit=2)
             pack = build_loop_pack(
                 goal,
                 identity=identity_mem,
@@ -389,8 +411,7 @@ class AgentLoopController:
 
             state.transition_to(AgentLoopStatus.RUNNING, AgentLoopPhase.PLAN)
             if not plan_actions and not capability_dispatch:
-                plan_actions = self._decompose_goal_into_actions(goal, pid)
-
+                plan_actions = self._plan_actions_for_intent(intent, goal, pid, state)
             if plan_actions:
                 state.planned_actions = list(plan_actions)
                 state.plan = [f"Step {i+1}: {a.capability}.{a.operation}" for i, a in enumerate(plan_actions)]
@@ -523,6 +544,13 @@ class AgentLoopController:
                             action=f"Replanning due to policy denial: {dec_res.reason}",
                         )
                     )
+                    replanned = self._replan_excluding(goal, pid, state, action)
+                    if not replanned:
+                        state.transition_to(AgentLoopStatus.FAILED, AgentLoopPhase.FAILED, error=err_msg)
+                        self._sync_telemetry(state, time_budget)
+                        self._store.save(state)
+                        return state, exp_recorded
+                    plan_actions = replanned
                     continue
                 else:
                     state.transition_to(AgentLoopStatus.FAILED, AgentLoopPhase.FAILED, error=err_msg)
@@ -553,7 +581,7 @@ class AgentLoopController:
                 )
             )
 
-            cap_result = self.capabilities.invoke(action.capability, action.arguments)
+            cap_result = self._invoke_action(action)
             state.telemetry.tool_calls += 1
 
             # Deadline check after execution
@@ -607,6 +635,8 @@ class AgentLoopController:
             state.telemetry.verification_calls += 1
             # Compact tool output AFTER verify so evidence matching still sees the full result.
             obs.output = compact_tool_output(obs.output)
+            if isinstance(obs.evidence, dict) and len(str(obs.evidence)) > 800:
+                obs.evidence = {"compact": compact_tool_output(obs.evidence, max_chars=400)}
             if state.context_pack is not None:
                 state.context_pack["tool_output"] = compact_tool_output(obs.output)
             self._sync_telemetry(state, time_budget)
@@ -629,16 +659,10 @@ class AgentLoopController:
                 # Record Experience & Extract Lesson Strategy
                 exp_recorded = self._record_experience(state, action, obs, verif, "success", applicable_strategies)
 
-                # Memory & Vault Updates
-                self.memory.remember(
-                    content=f"Successfully executed goal '{goal}' on project '{pid}'",
-                    memory_type=MemoryType.SHORT_TERM.value,
-                    source_run_id=rid,
-                    importance=0.6,
-                )
+                # Compact run summary only — do not dump every success into prompt memory.
                 self.vault.store_context(
                     key=f"run_summary_{rid}",
-                    data={"goal": goal, "run_id": rid, "project_id": pid},
+                    data={"goal": goal, "run_id": rid, "project_id": pid, "status": verif.verdict},
                     category="run_history",
                 )
 
@@ -691,6 +715,14 @@ class AgentLoopController:
                             action=f"Replanning due to verification failure: {verif.reason}",
                         )
                     )
+                    replanned = self._replan_excluding(goal, pid, state, action)
+                    if not replanned:
+                        err_msg = f"Capability '{action.capability}' failed: {cap_result.error}" if capability_dispatch and not cap_result.success else f"Verification failure: {verif.reason}"
+                        state.transition_to(AgentLoopStatus.FAILED, AgentLoopPhase.FAILED, error=err_msg)
+                        self._sync_telemetry(state, time_budget)
+                        self._store.save(state)
+                        return state, exp_recorded
+                    plan_actions = replanned
                     continue
                 else:
                     err_msg = f"Capability '{action.capability}' failed: {cap_result.error}" if capability_dispatch and not cap_result.success else f"Verification failure: {verif.reason}"
@@ -776,6 +808,204 @@ class AgentLoopController:
             timeout_seconds=timeout_seconds,
             existing_state=saved_state,
         )
+
+    def _plan_actions_for_intent(
+        self,
+        intent: GoalIntent,
+        goal: str,
+        pid: str,
+        state: AgentLoopState,
+    ) -> list[AgentAction]:
+        """Cheap path first. Planner only when classification is complex AND provider is not mock."""
+        if intent.kind == "remember":
+            return [
+                AgentAction(
+                    action_id="ACT-MEM-REMEMBER",
+                    capability="core.memory",
+                    operation="remember",
+                    arguments=dict(intent.arguments),
+                    reason=intent.reason,
+                    risk_level="LOW",
+                    requires_approval=False,
+                    expected_outcome="",
+                )
+            ]
+        if intent.kind == "forget":
+            return [
+                AgentAction(
+                    action_id="ACT-MEM-FORGET",
+                    capability="core.memory",
+                    operation="forget",
+                    arguments=dict(intent.arguments),
+                    reason=intent.reason,
+                    risk_level="LOW",
+                    requires_approval=False,
+                    expected_outcome="",
+                )
+            ]
+        if intent.kind == "status":
+            return [
+                AgentAction(
+                    action_id="ACT-STATUS",
+                    capability="mock.echo",
+                    operation="echo",
+                    arguments={"text": goal},
+                    reason=intent.reason,
+                    risk_level="LOW",
+                    requires_approval=False,
+                    expected_outcome="",
+                )
+            ]
+
+        keyword_plan = self._decompose_goal_into_actions(goal, pid)
+        # Keyword hit a real capability (not the echo fallback) → cheap.
+        if keyword_plan and not (
+            len(keyword_plan) == 1
+            and keyword_plan[0].capability == "mock.echo"
+            and keyword_plan[0].operation == "echo"
+        ):
+            return keyword_plan
+
+        planned = self._try_planner(goal, pid, state)
+        if planned:
+            return planned
+        return keyword_plan
+
+    def _try_planner(self, goal: str, pid: str, state: AgentLoopState) -> Optional[list[AgentAction]]:
+        """Call Planner only for a real provider. Mock stays on the cheap echo path."""
+        provider = os.environ.get("AGENTCORE_PLANNER_PROVIDER", "mock")
+        if provider in ("", "mock"):
+            return None
+        if state.telemetry.llm_calls >= self.budget.max_llm_calls:
+            return None
+        try:
+            from core.context.pack import ContextPack
+            from core.planner.planner import Planner
+
+            pack = ContextPack.from_dict(state.context_pack)
+            extra = pack.select_and_render(goal)
+            result = Planner().plan(pid, goal, extra_context=extra)
+            state.telemetry.llm_calls += 1
+            if result.error or not result.plan or not result.plan.steps:
+                return None
+            actions: list[AgentAction] = []
+            for i, step in enumerate(result.plan.steps[: self.budget.max_retries + 3]):
+                title = getattr(step, "title", "") or getattr(step, "description", "") or f"step-{i+1}"
+                actions.append(
+                    AgentAction(
+                        action_id=f"ACT-PLAN-{i+1}",
+                        capability="mock.echo",
+                        operation="echo",
+                        arguments={"text": title},
+                        reason="planner",
+                        risk_level="LOW",
+                        expected_outcome=getattr(step, "expected_result", "") or title,
+                    )
+                )
+            return actions or None
+        except Exception:
+            return None
+
+    def _replan_excluding(
+        self,
+        goal: str,
+        pid: str,
+        state: AgentLoopState,
+        failed: AgentAction,
+    ) -> Optional[list[AgentAction]]:
+        """Produce a different plan. Empty / identical plans fail closed."""
+        excluded = {failed.capability}
+        excluded.update(a.capability for a in state.failed_actions)
+        remaining = [a for a in (state.planned_actions or []) if a.capability not in excluded]
+        if remaining:
+            state.planned_actions = remaining
+            state.plan = [f"Step {i+1}: {a.capability}.{a.operation}" for i, a in enumerate(remaining)]
+            return remaining
+        if state.planned_actions:
+            return None
+        # Resume/pending with no remaining plan: complete via cheap echo rather than spinning.
+        echo = AgentAction(
+            action_id="ACT-REPLAN-ECHO",
+            capability="mock.echo",
+            operation="echo",
+            arguments={"text": goal},
+            reason="replan fallback",
+            risk_level="LOW",
+            expected_outcome="",
+        )
+        state.planned_actions = [echo]
+        state.plan = ["Step 1: mock.echo.echo"]
+        return [echo]
+
+    def _invoke_action(self, action: AgentAction) -> CapabilityResult:
+        if action.capability == "core.memory":
+            return self._execute_memory(action)
+        try:
+            return self.capabilities.invoke(action.capability, action.arguments)
+        except Exception as exc:
+            return CapabilityResult(
+                capability_id=action.capability,
+                status="FAILED",
+                error=f"ToolError: {exc}",
+            )
+
+    def _execute_memory(self, action: AgentAction) -> CapabilityResult:
+        args = action.arguments or {}
+        try:
+            if action.operation == "remember":
+                content = args.get("content") or f"{args.get('key', '')}: {args.get('value', '')}"
+                item = self.memory.remember(
+                    content=str(content),
+                    memory_type=MemoryType.USER_CONTEXT.value,
+                    tags=["preference", args.get("key", "")],
+                    importance=0.8,
+                    metadata={"key": args.get("key", ""), "value": args.get("value", "")},
+                )
+                self.vault.store_context(
+                    key=str(args.get("key") or item.memory_id),
+                    data={"key": args.get("key"), "value": args.get("value"), "content": str(content)},
+                    category="user_preference",
+                )
+                return CapabilityResult(
+                    capability_id="core.memory",
+                    status="SUCCESS",
+                    output={"remembered": item.memory_id, "key": args.get("key"), "value": args.get("value")},
+                    metadata={"memory_id": item.memory_id},
+                )
+            if action.operation == "forget":
+                ok = self.memory.forget(
+                    memory_id=str(args.get("memory_id") or ""),
+                    query=str(args.get("query") or args.get("key") or ""),
+                )
+                if ok:
+                    return CapabilityResult(
+                        capability_id="core.memory",
+                        status="SUCCESS",
+                        output={"forgotten": args.get("query") or args.get("key")},
+                    )
+                return CapabilityResult(
+                    capability_id="core.memory",
+                    status="FAILED",
+                    error=f"Memory '{args.get('query') or args.get('key')}' not found",
+                )
+            if action.operation == "retrieve":
+                hits = self.memory.retrieve(MemoryQuery(query=str(args.get("query") or ""), limit=5))
+                return CapabilityResult(
+                    capability_id="core.memory",
+                    status="SUCCESS",
+                    output={"items": [h.content for h in hits]},
+                )
+            return CapabilityResult(
+                capability_id="core.memory",
+                status="FAILED",
+                error=f"Unknown memory operation '{action.operation}'",
+            )
+        except Exception as exc:
+            return CapabilityResult(
+                capability_id="core.memory",
+                status="FAILED",
+                error=f"MemoryError: {exc}",
+            )
 
     def _record_experience(
         self,

@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import os
 import tempfile
 import time
 import unittest
@@ -396,5 +397,55 @@ class TestAgentLoopArchitecture(unittest.TestCase):
         self.assertEqual(len(saved.completed_actions), 2)
 
 
+class TestCheapPathAndMemory(unittest.TestCase):
+    """Cheap classification, relevance-gated retrieve, forget."""
+
+    def setUp(self):
+        os.environ["AGENTCORE_PLANNER_PROVIDER"] = "mock"
+        self.agent = Agent(project_id="default")
+
+    def test_remember_goal_is_cheap_and_persists(self):
+        res = self.agent.run("Remember that my favorite color is blue")
+        self.assertTrue(res.success, res.errors)
+        self.assertEqual(res.status, "COMPLETED")
+        hits = self.agent.retrieve_memory("favorite color")
+        self.assertTrue(any("blue" in h.content.lower() for h in hits))
+        loop_state = self.agent._loop_controller._store.load(res.run_id)
+        self.assertEqual(loop_state.planned_actions[0].capability, "core.memory")
+        self.assertEqual(loop_state.telemetry.llm_calls, 0)
+
+    def test_forget_goal_removes_memory(self):
+        self.agent.run("Remember that my favorite snack is banh mi")
+        res = self.agent.run("Forget favorite snack")
+        self.assertTrue(res.success, res.errors)
+        hits = self.agent.retrieve_memory("banh mi")
+        self.assertFalse(any("banh mi" in h.content.lower() for h in hits))
+
+    def test_github_goal_does_not_pack_identity(self):
+        res = self.agent.run("list github issues")
+        loop_state = self.agent._loop_controller._store.load(res.run_id)
+        pack = loop_state.context_pack or {}
+        self.assertFalse((pack.get("persistent") or "").strip())
+        self.assertEqual(loop_state.telemetry.llm_calls, 0)
+
+    def test_success_does_not_pollute_memory_with_run_dump(self):
+        marker = f"pollute-check-{int(time.time() * 1000)}"
+        res = self.agent.run(marker)
+        self.assertTrue(res.success)
+        dumps = [
+            h for h in self.agent._memory.store.list_all()
+            if marker in (h.content or "") and "Successfully executed" in (h.content or "")
+        ]
+        self.assertEqual(dumps, [])
+
+    def test_preference_goal_retrieves_memory(self):
+        self.agent.remember("preference: I prefer a dark UI theme", tags=["preference"])
+        res = self.agent.run("Thiết kế UI theo preference của tôi")
+        loop_state = self.agent._loop_controller._store.load(res.run_id)
+        pack = loop_state.context_pack or {}
+        self.assertIn("dark", (pack.get("retrieved") or "").lower() + (pack.get("persistent") or "").lower())
+
+
 if __name__ == "__main__":
     unittest.main()
+

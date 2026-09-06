@@ -29,6 +29,11 @@ class TestNeededLayers(unittest.TestCase):
         layers = needed_layers("inspect the architecture of the kernel")
         self.assertIn("retrieved", layers)
 
+    def test_preference_goal_adds_persistent_and_retrieved(self):
+        layers = needed_layers("Thiết kế UI theo preference của tôi")
+        self.assertIn("persistent", layers)
+        self.assertIn("retrieved", layers)
+
     def test_tool_output_opt_in(self):
         layers = needed_layers("list github issues", has_tool_output=True)
         self.assertIn("tool_output", layers)
