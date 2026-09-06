@@ -65,8 +65,8 @@ VALID_PHASE_TRANSITIONS: dict[str, set[str]] = {
     AgentLoopPhase.BOOTSTRAP.value: {AgentLoopPhase.OBSERVE.value, AgentLoopPhase.FAILED.value, AgentLoopPhase.BOOTSTRAP.value},
     AgentLoopPhase.OBSERVE.value: {AgentLoopPhase.RETRIEVE.value, AgentLoopPhase.FAILED.value},
     AgentLoopPhase.RETRIEVE.value: {AgentLoopPhase.REASON.value, AgentLoopPhase.FAILED.value},
-    AgentLoopPhase.REASON.value: {AgentLoopPhase.PLAN.value, AgentLoopPhase.FAILED.value},
-    AgentLoopPhase.PLAN.value: {AgentLoopPhase.DECIDE.value, AgentLoopPhase.FAILED.value},
+    AgentLoopPhase.REASON.value: {AgentLoopPhase.PLAN.value, AgentLoopPhase.DECIDE.value, AgentLoopPhase.AUTHORIZE.value, AgentLoopPhase.FAILED.value},
+    AgentLoopPhase.PLAN.value: {AgentLoopPhase.DECIDE.value, AgentLoopPhase.AUTHORIZE.value, AgentLoopPhase.FAILED.value},
     AgentLoopPhase.DECIDE.value: {AgentLoopPhase.AUTHORIZE.value, AgentLoopPhase.FAILED.value},
     AgentLoopPhase.AUTHORIZE.value: {AgentLoopPhase.EXECUTE.value, AgentLoopPhase.REPLAN.value, AgentLoopPhase.WAITING_FOR_USER.value, AgentLoopPhase.REASON.value, AgentLoopPhase.DECIDE.value, AgentLoopPhase.FAILED.value},
     AgentLoopPhase.EXECUTE.value: {AgentLoopPhase.OBSERVE_RESULT.value, AgentLoopPhase.FAILED.value},
@@ -235,6 +235,7 @@ class AgentLoopState:
     phase: str = AgentLoopPhase.BOOTSTRAP.value
     status: str = AgentLoopStatus.PENDING.value
     plan: list[str] = field(default_factory=list)
+    planned_actions: list[AgentAction] = field(default_factory=list)
     current_action: Optional[AgentAction] = None
     pending_action: Optional[AgentAction] = None
     observations: list[Observation] = field(default_factory=list)
@@ -297,6 +298,7 @@ class AgentLoopState:
             "phase": self.phase,
             "status": self.status,
             "plan": list(self.plan),
+            "planned_actions": [a.to_dict() for a in self.planned_actions],
             "current_action": self.current_action.to_dict() if self.current_action else None,
             "pending_action": self.pending_action.to_dict() if self.pending_action else None,
             "observations": [o.to_dict() for o in self.observations],
@@ -323,6 +325,7 @@ class AgentLoopState:
         d = copy.deepcopy(d)
         curr_act = AgentAction.from_dict(d["current_action"]) if d.get("current_action") else None
         pend_act = AgentAction.from_dict(d["pending_action"]) if d.get("pending_action") else None
+        planned_acts = [AgentAction.from_dict(a) for a in d.get("planned_actions", [])]
         obs_list = [
             Observation(
                 action_id=o["action_id"],
@@ -356,6 +359,7 @@ class AgentLoopState:
             phase=d.get("phase", AgentLoopPhase.BOOTSTRAP.value),
             status=d.get("status", AgentLoopStatus.PENDING.value),
             plan=d.get("plan", []),
+            planned_actions=planned_acts,
             current_action=curr_act,
             pending_action=pend_act,
             observations=obs_list,

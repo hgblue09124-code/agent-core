@@ -362,6 +362,39 @@ class TestAgentLoopArchitecture(unittest.TestCase):
         self.assertGreater(saved_state.accumulated_runtime_seconds, 0.0)
         self.assertEqual(saved_state.status, "COMPLETED")
 
+    def test_19_process_restart_multi_step_planned_actions_resumption(self):
+        """Test 19: Multi-step planned_actions survive process crash and resume all remaining steps."""
+        act_1 = AgentAction(
+            action_id="ACT-MULTI-1",
+            capability="mock.mutation",
+            operation="update_schema",
+            arguments={"table": "users"},
+            risk_level="HIGH",
+            requires_approval=True,
+        )
+        act_2 = AgentAction(
+            action_id="ACT-MULTI-2",
+            capability="mock.success",
+            operation="verify_schema",
+            arguments={"table": "users"},
+        )
+        res_initial = self.agent.run("Multi-step schema migration", plan_actions=[act_1, act_2], user_approved=False)
+        self.assertEqual(res_initial.status, "WAITING_FOR_USER")
+
+        # Simulate process crash & restart: instantiate fresh Agent instance
+        fresh_agent = Agent(project_id="default")
+        fresh_agent._capabilities.register(MutationCapability())
+        fresh_agent._capabilities.register(SuccessCapability())
+
+        res_resumed = fresh_agent.resume(res_initial.run_id, user_approved=True)
+        self.assertTrue(res_resumed.success)
+        self.assertEqual(res_resumed.status, "COMPLETED")
+
+        saved = fresh_agent._loop_controller._store.load(res_initial.run_id)
+        self.assertIsNotNone(saved)
+        self.assertEqual(len(saved.planned_actions), 2)
+        self.assertEqual(len(saved.completed_actions), 2)
+
 
 if __name__ == "__main__":
     unittest.main()

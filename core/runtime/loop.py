@@ -287,6 +287,9 @@ class AgentLoopController:
                 start_time=t0,
                 accumulated_seconds=state.accumulated_runtime_seconds,
             )
+            # Rehydrate planned_actions if not supplied explicitly on resume
+            if not plan_actions and state.planned_actions:
+                plan_actions = state.planned_actions
         else:
             state = AgentLoopState(
                 run_id=rid,
@@ -357,11 +360,11 @@ class AgentLoopController:
 
         # 2. OBSERVE & RETRIEVE CONTEXT
         if not existing_state:
-            state.phase = AgentLoopPhase.OBSERVE.value
+            state.transition_to(AgentLoopStatus.RUNNING, AgentLoopPhase.OBSERVE)
             self._sync_telemetry(state, time_budget)
             self._store.save(state)
 
-            state.phase = AgentLoopPhase.RETRIEVE.value
+            state.transition_to(AgentLoopStatus.RUNNING, AgentLoopPhase.RETRIEVE)
             identity_mem = self.memory.get_identity()
             relevant_mems = self.memory.retrieve(MemoryQuery(query=goal, limit=3))
             vault_contexts = self.vault.retrieve_context(query=goal, limit=3)
@@ -371,15 +374,16 @@ class AgentLoopController:
             self._store.save(state)
 
             # 3. REASON & PLAN
-            state.phase = AgentLoopPhase.REASON.value
+            state.transition_to(AgentLoopStatus.RUNNING, AgentLoopPhase.REASON)
             self._sync_telemetry(state, time_budget)
             self._store.save(state)
 
-            state.phase = AgentLoopPhase.PLAN.value
+            state.transition_to(AgentLoopStatus.RUNNING, AgentLoopPhase.PLAN)
             if not plan_actions and not capability_dispatch:
                 plan_actions = self._decompose_goal_into_actions(goal, pid)
 
             if plan_actions:
+                state.planned_actions = list(plan_actions)
                 state.plan = [f"Step {i+1}: {a.capability}.{a.operation}" for i, a in enumerate(plan_actions)]
             elif capability_dispatch:
                 cap_id, cap_inputs = capability_dispatch
@@ -412,13 +416,14 @@ class AgentLoopController:
             self._store.save(state)  # Checkpoint at boundary: iteration start
 
             # DECIDE PHASE
-            state.phase = AgentLoopPhase.DECIDE.value
+            state.transition_to(AgentLoopStatus.RUNNING, AgentLoopPhase.DECIDE)
             if state.pending_action:
                 action = state.pending_action
                 state.pending_action = None
             elif plan_actions:
-                if state.iteration <= len(plan_actions):
-                    action = plan_actions[state.iteration - 1]
+                completed_count = len(state.completed_actions)
+                if completed_count < len(plan_actions):
+                    action = plan_actions[completed_count]
                 else:
                     err_replan = f"Plan exhausted after {len(plan_actions)} action(s) without satisfying goal"
                     state.transition_to(AgentLoopStatus.FAILED, AgentLoopPhase.FAILED, error=err_replan)
@@ -460,7 +465,7 @@ class AgentLoopController:
             )
 
             # AUTHORIZE PHASE
-            state.phase = AgentLoopPhase.AUTHORIZE.value
+            state.transition_to(AgentLoopStatus.RUNNING, AgentLoopPhase.AUTHORIZE)
             dec_res = decision_engine.evaluate_action(
                 proposed_action=action,
                 user_approved=user_approved,
@@ -501,7 +506,7 @@ class AgentLoopController:
                 )
                 if state.replan_count < state.max_replans and not capability_dispatch:
                     state.replan_count += 1
-                    state.phase = AgentLoopPhase.REPLAN.value
+                    state.transition_to(AgentLoopStatus.RUNNING, AgentLoopPhase.REPLAN)
                     self.event_bus.publish(
                         new_event(
                             run_id=rid,
@@ -527,7 +532,7 @@ class AgentLoopController:
                 self._store.save(state)
                 return state, exp_recorded
 
-            state.phase = AgentLoopPhase.EXECUTE.value
+            state.transition_to(AgentLoopStatus.RUNNING, AgentLoopPhase.EXECUTE)
             self._sync_telemetry(state, time_budget)
             self._store.save(state)  # Checkpoint at boundary: before execution
 
@@ -554,7 +559,7 @@ class AgentLoopController:
                 return state, exp_recorded
 
             # OBSERVE_RESULT PHASE
-            state.phase = AgentLoopPhase.OBSERVE_RESULT.value
+            state.transition_to(AgentLoopStatus.RUNNING, AgentLoopPhase.OBSERVE_RESULT)
             if capability_dispatch:
                 obs_out = f"Capability '{action.capability}' executed successfully: {cap_result.output}" if cap_result.success else f"Capability '{action.capability}' failed: {cap_result.error}"
             else:
@@ -582,7 +587,7 @@ class AgentLoopController:
             )
 
             # VERIFY PHASE
-            state.phase = AgentLoopPhase.VERIFY.value
+            state.transition_to(AgentLoopStatus.RUNNING, AgentLoopPhase.VERIFY)
             verif = self._verification_engine.verify_execution(
                 goal=goal,
                 action=action,
@@ -604,7 +609,7 @@ class AgentLoopController:
             )
 
             # LEARN PHASE & STATE TRANSITION
-            state.phase = AgentLoopPhase.LEARN.value
+            state.transition_to(AgentLoopStatus.RUNNING, AgentLoopPhase.LEARN)
             if verif.verdict == "PASS":
                 state.completed_actions.append(action)
 
@@ -665,7 +670,7 @@ class AgentLoopController:
                     continue
                 elif state.replan_count < state.max_replans and not capability_dispatch:
                     state.replan_count += 1
-                    state.phase = AgentLoopPhase.REPLAN.value
+                    state.transition_to(AgentLoopStatus.RUNNING, AgentLoopPhase.REPLAN)
                     self.event_bus.publish(
                         new_event(
                             run_id=rid,

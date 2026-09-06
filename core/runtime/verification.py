@@ -82,19 +82,28 @@ class VerificationEngine:
                 goal_satisfied=False,
             )
 
-        # Strict outcome matching: If expected_outcome specifies key target terms, verify they match actual output/evidence
+        # Refined outcome matching: verify key domain targets against structured output & metadata
         if action.expected_outcome and output:
             output_str = str(output).lower()
             expected_lower = action.expected_outcome.lower()
 
-            # Extract key expected tokens (excluding generic stop words)
-            stop_words = {"a", "an", "the", "in", "on", "at", "for", "to", "of", "and", "or", "is", "be", "with", "that", "this", "by", "successful", "execution"}
-            expected_tokens = [w for w in expected_lower.replace(":", " ").replace(",", " ").replace(".", " ").split() if w not in stop_words and len(w) > 2]
+            # Split dot-separated and space-separated identifiers
+            raw_words = expected_lower.replace(":", " ").replace(",", " ").replace(".", " ").split()
+            stop_words = {"a", "an", "the", "in", "on", "at", "for", "to", "of", "and", "or", "is", "be", "with", "that", "this", "by", "successful", "execution", "mock"}
+            expected_tokens = [w for w in raw_words if w not in stop_words and len(w) >= 2]
 
-            # Check if explicit file / entity / identifier target mentioned in expected_outcome is contradicted in output
             if expected_tokens:
-                matches = [tok for tok in expected_tokens if tok in output_str or any(tok in str(v).lower() for v in evidence.values())]
-                if not matches and len(expected_tokens) >= 2:
+                # Search across output string, dictionary output values, and metadata evidence
+                search_targets = [output_str]
+                if isinstance(output, dict):
+                    search_targets.extend(str(v).lower() for v in output.values())
+                if isinstance(evidence, dict):
+                    search_targets.extend(str(v).lower() for v in evidence.values())
+
+                matches = [tok for tok in expected_tokens if any(tok in target for target in search_targets)]
+
+                # Require matching at least one non-generic domain term
+                if not matches and len(expected_tokens) >= 1:
                     return VerificationResult(
                         verdict="FAIL",
                         reason=f"Execution output does not match expected outcome targets: '{action.expected_outcome}'",
