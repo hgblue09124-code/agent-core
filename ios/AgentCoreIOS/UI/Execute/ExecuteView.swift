@@ -19,6 +19,25 @@ public struct ExecuteView: View {
         }
     }
 
+    private var totalSteps: Int { 4 }
+
+    private var completedStepCount: Int {
+        switch viewModel.executionState {
+        case .idle: return 0
+        case .preparing: return 0
+        case .waitingForPermission: return 1
+        case .running: return 2
+        case .completed: return 4
+        case .failed, .cancelled: return 2
+        }
+    }
+
+    private var currentProgress: Double {
+        if viewModel.executionState == .idle { return 0.0 }
+        if viewModel.executionState == .completed { return 1.0 }
+        return Double(completedStepCount) / Double(totalSteps)
+    }
+
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: AgentSpacing.lg) {
@@ -246,28 +265,14 @@ public struct ExecuteView: View {
         case .waitingForPermission:
             return stepIndex <= 1 ? .completed : (stepIndex == 2 ? .active : .pending)
         case .running:
-            if stepIndex == 0 || stepIndex == 1 { return .completed }
+            if stepIndex < 2 { return .completed }
             if stepIndex == 2 { return .active }
             return .pending
         case .completed:
             return .completed
-        case .failed:
+        case .failed, .cancelled:
             if stepIndex < 2 { return .completed }
             return .failed
-        case .cancelled:
-            if stepIndex < 2 { return .completed }
-            return .failed
-        }
-    }
-
-    private var currentProgress: Double {
-        switch viewModel.executionState {
-        case .idle: return 0.0
-        case .preparing: return 0.25
-        case .waitingForPermission: return 0.40
-        case .running: return 0.70
-        case .completed: return 1.0
-        case .failed, .cancelled: return 0.60
         }
     }
 
