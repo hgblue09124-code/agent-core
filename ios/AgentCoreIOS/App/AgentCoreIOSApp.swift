@@ -192,6 +192,7 @@ public final class AgentAppViewModel: ObservableObject {
         memories = await service.retrieve(query: "")
         experiences = await service.getExperience()
         capabilities = await service.listCapabilities()
+        activities = await service.listActivity(filter: .all)
         updateReport = updateManager.getStateReport()
     }
 
@@ -489,9 +490,9 @@ public final class AgentAppViewModel: ObservableObject {
     }
 
     private func recordActivity(task: String, state: String, duration: String, resultOrError: String) {
-        let status: Status = state == "COMPLETED" ? .success : (state == "DENIED" ? .denied : .failed)
-        let rec = ActivityRecord(goal: task, status: status)
-        activities.insert(rec, at: 0)
+        Task {
+            activities = await service.listActivity(filter: .all)
+        }
     }
 
     private func formatDuration(_ start: Date) -> String {
