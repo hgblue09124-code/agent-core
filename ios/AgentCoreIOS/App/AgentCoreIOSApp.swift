@@ -1,5 +1,5 @@
 // ios/AgentCoreIOS/App/AgentCoreIOSApp.swift
-// Native iOS Local Agent SwiftUI App — Interactive Review Console & 7-Tab Navigation
+// Native iOS Local Agent SwiftUI App — Personal Agent Entrypoint & ViewModel
 
 import SwiftUI
 
@@ -9,17 +9,38 @@ import SwiftUI
 struct AgentCoreIOSApp: App {
     @StateObject private var viewModel = AgentAppViewModel()
 
+    init() {
+        configureTabBarAppearance()
+    }
+
     var body: some Scene {
         WindowGroup {
             MainTabView()
                 .environmentObject(viewModel)
+                .preferredColorScheme(.dark)
         }
+    }
+
+    private func configureTabBarAppearance() {
+        let appearance = UITabBarAppearance()
+        appearance.configureWithOpaqueBackground()
+        appearance.backgroundColor = UIColor(AgentColor.background2)
+        appearance.shadowColor = UIColor(AgentColor.hairline)
+
+        // Item Colors
+        appearance.stackedLayoutAppearance.selected.iconColor = UIColor(AgentColor.accent)
+        appearance.stackedLayoutAppearance.selected.titleTextAttributes = [.foregroundColor: UIColor(AgentColor.textPrimary)]
+        appearance.stackedLayoutAppearance.normal.iconColor = UIColor(AgentColor.textMuted)
+        appearance.stackedLayoutAppearance.normal.titleTextAttributes = [.foregroundColor: UIColor(AgentColor.textMuted)]
+
+        UITabBar.appearance().standardAppearance = appearance
+        UITabBar.appearance().scrollEdgeAppearance = appearance
     }
 }
 
 // MARK: - Navigation Enums & Models
 
-public enum AppTab: String, CaseIterable, Identifiable {
+enum AppTab: String, CaseIterable, Identifiable {
     case home = "Home"
     case agent = "Agent"
     case activity = "Activity"
@@ -28,12 +49,12 @@ public enum AppTab: String, CaseIterable, Identifiable {
     case settings = "Settings"
     case review = "Review"
 
-    public var id: String { rawValue }
+    var id: String { rawValue }
 
-    public var iconName: String {
+    var iconName: String {
         switch self {
         case .home: return "house.fill"
-        case .agent: return "cpu.fill"
+        case .agent: return "bolt.fill"
         case .activity: return "list.bullet.rectangle.fill"
         case .vault: return "lock.shield.fill"
         case .connections: return "network"
@@ -43,7 +64,7 @@ public enum AppTab: String, CaseIterable, Identifiable {
     }
 }
 
-public enum ExecutionLifecycleState: String {
+enum ExecutionLifecycleState: String {
     case idle = "Idle"
     case preparing = "Preparing"
     case running = "Running"
@@ -52,44 +73,44 @@ public enum ExecutionLifecycleState: String {
     case failed = "Failed"
     case cancelled = "Cancelled"
 
-    public var color: Color {
+    var color: Color {
         switch self {
-        case .idle: return .gray
-        case .preparing: return .blue
-        case .running: return .orange
-        case .waitingForPermission: return .purple
-        case .completed: return .green
-        case .failed: return .red
-        case .cancelled: return .secondary
+        case .idle: return AgentColor.offline
+        case .preparing: return AgentColor.accent
+        case .running: return AgentColor.warning
+        case .waitingForPermission: return AgentColor.violet
+        case .completed: return AgentColor.success
+        case .failed: return AgentColor.danger
+        case .cancelled: return AgentColor.offline
         }
     }
 }
 
-public enum ReviewCheckStatus: String, Codable, Equatable, Sendable {
+enum ReviewCheckStatus: String, Codable, Equatable, Sendable {
     case pass = "PASS"
     case fail = "FAIL"
     case warning = "WARNING"
     case notTested = "NOT TESTED"
 
-    public var color: Color {
+    var color: Color {
         switch self {
-        case .pass: return .green
-        case .fail: return .red
-        case .warning: return .orange
-        case .notTested: return .gray
+        case .pass: return AgentColor.success
+        case .fail: return AgentColor.danger
+        case .warning: return AgentColor.warning
+        case .notTested: return AgentColor.offline
         }
     }
 }
 
-public struct ReviewCheckItem: Identifiable {
-    public let id: Int
-    public let name: String
-    public var status: ReviewCheckStatus
-    public var component: String
-    public var message: String
-    public var isBlocker: Bool
+struct ReviewCheckItem: Identifiable {
+    let id: Int
+    let name: String
+    var status: ReviewCheckStatus
+    var component: String
+    var message: String
+    var isBlocker: Bool
 
-    public init(id: Int, name: String, status: ReviewCheckStatus = .notTested, component: String = "AgentRuntime", message: String = "Not executed yet", isBlocker: Bool = true) {
+    init(id: Int, name: String, status: ReviewCheckStatus = .notTested, component: String = "AgentRuntime", message: String = "Not executed yet", isBlocker: Bool = true) {
         self.id = id
         self.name = name
         self.status = status
@@ -99,39 +120,39 @@ public struct ReviewCheckItem: Identifiable {
     }
 }
 
-public struct MemoryStepResult: Identifiable {
-    public let id: Int
-    public let stepName: String
-    public var status: ReviewCheckStatus
-    public var detail: String
+struct MemoryStepResult: Identifiable {
+    let id: Int
+    let stepName: String
+    var status: ReviewCheckStatus
+    var detail: String
 }
 
 // MARK: - Central ViewModel
 
 @MainActor
-public final class AgentAppViewModel: ObservableObject {
-    @Published public var selectedTab: AppTab = .home
+final class AgentAppViewModel: ObservableObject {
+    @Published var selectedTab: AppTab = .home
 
     // Agent Execution State
-    @Published public var currentGoal: String = "Remember that my favorite color is blue."
-    @Published public var executionState: ExecutionLifecycleState = .idle
-    @Published public var showingPermissionAlert: Bool = false
-    @Published public var permissionActionTitle: String = "Execute Agent Task"
-    @Published public var lastRunResult: AgentRunResult?
-    @Published public var lastErrorPayload: String?
+    @Published var currentGoal: String = "Remember that my favorite color is blue."
+    @Published var executionState: ExecutionLifecycleState = .idle
+    @Published var showingPermissionAlert: Bool = false
+    @Published var permissionActionTitle: String = "Execute Agent Task"
+    @Published var lastRunResult: AgentRunResult?
+    @Published var lastErrorPayload: String?
 
     // Dashboard Statuses
-    @Published public var agentCoreStatus: ReviewCheckStatus = .notTested
-    @Published public var agentRuntimeStatus: ReviewCheckStatus = .notTested
-    @Published public var localStorageStatus: ReviewCheckStatus = .notTested
-    @Published public var memoryVaultStatus: ReviewCheckStatus = .notTested
-    @Published public var connectionStatus: ReviewCheckStatus = .notTested
-    @Published public var currentExecutionStatus: ReviewCheckStatus = .notTested
+    @Published var agentCoreStatus: ReviewCheckStatus = .notTested
+    @Published var agentRuntimeStatus: ReviewCheckStatus = .notTested
+    @Published var localStorageStatus: ReviewCheckStatus = .notTested
+    @Published var memoryVaultStatus: ReviewCheckStatus = .notTested
+    @Published var connectionStatus: ReviewCheckStatus = .notTested
+    @Published var currentExecutionStatus: ReviewCheckStatus = .notTested
 
     // Memory / Vault Test State
-    @Published public var testMemoryKey: String = "review.test"
-    @Published public var testMemoryValue: String = "Agent-Core interactive test"
-    @Published public var memoryStepResults: [MemoryStepResult] = [
+    @Published var testMemoryKey: String = "review.test"
+    @Published var testMemoryValue: String = "Agent-Core interactive test"
+    @Published var memoryStepResults: [MemoryStepResult] = [
         MemoryStepResult(id: 1, stepName: "1. Save Memory", status: .notTested, detail: "-"),
         MemoryStepResult(id: 2, stepName: "2. Read Memory", status: .notTested, detail: "-"),
         MemoryStepResult(id: 3, stepName: "3. Verify Value", status: .notTested, detail: "-"),
@@ -140,20 +161,22 @@ public final class AgentAppViewModel: ObservableObject {
     ]
 
     // Error Test State
-    @Published public var errorTestResult: String = "No error test executed yet."
+    @Published var errorTestResult: String = "No error test executed yet."
 
     // Activity Records
-    @Published public var activities: [ActivityRecord] = []
+    @Published var activities: [ActivityRecord] = []
 
     // Collections & Health
-    @Published public var memories: [MemoryItem] = []
-    @Published public var experiences: [Experience] = []
-    @Published public var capabilities: [Capability] = []
-    @Published public var health: AgentHealth?
-    @Published public var updateReport: DataUpdateStateReport = DataUpdateStateReport()
+    @Published var memories: [MemoryItem] = []
+    @Published var experiences: [Experience] = []
+    @Published var capabilities: [Capability] = []
+    @Published var connections: [ConnectionStatus] = []
+    @Published var vaultSummary: VaultSummary?
+    @Published var health: AgentHealth?
+    @Published var updateReport: DataUpdateStateReport = DataUpdateStateReport()
 
-    // 10 Automated Review Checks
-    @Published public var reviewChecks: [ReviewCheckItem] = [
+    // Automated Review Checks
+    @Published var reviewChecks: [ReviewCheckItem] = [
         ReviewCheckItem(id: 1, name: "AgentRuntime Initialization", component: "AgentRuntime"),
         ReviewCheckItem(id: 2, name: "Agent-Core Availability", component: "AgentCore Kernel"),
         ReviewCheckItem(id: 3, name: "Memory Write / Read / Delete", component: "LocalMemoryStore"),
@@ -167,18 +190,18 @@ public final class AgentAppViewModel: ObservableObject {
     ]
 
     // Review Summary Counters
-    @Published public var passCount: Int = 0
-    @Published public var failCount: Int = 0
-    @Published public var warningCount: Int = 0
-    @Published public var notTestedCount: Int = 10
-    @Published public var blockerDetails: [String] = []
+    @Published var passCount: Int = 0
+    @Published var failCount: Int = 0
+    @Published var warningCount: Int = 0
+    @Published var notTestedCount: Int = 10
+    @Published var blockerDetails: [String] = []
 
     private let service: LocalAgentServiceProtocol
     private let updateManager: GitHubDataUpdateManager
     private var pendingPermissionContinuation: ((Bool) -> Void)?
     private var activeRunTask: Task<Void, Never>?
 
-    public init(service: LocalAgentServiceProtocol? = nil, updateManager: GitHubDataUpdateManager? = nil) {
+    init(service: LocalAgentServiceProtocol? = nil, updateManager: GitHubDataUpdateManager? = nil) {
         let s = service ?? LocalAgentService()
         self.service = s
         self.updateManager = updateManager ?? GitHubDataUpdateManager()
@@ -187,18 +210,33 @@ public final class AgentAppViewModel: ObservableObject {
         }
     }
 
-    public func refreshState() async {
+    func refreshState() async {
         health = await service.health()
         memories = await service.retrieve(query: "")
         experiences = await service.getExperience()
         capabilities = await service.listCapabilities()
         activities = await service.listActivity(filter: .all)
+        connections = await service.listConnections()
+        vaultSummary = await service.vaultSummary()
         updateReport = updateManager.getStateReport()
+    }
+
+    func loadActivity(filter: ActivityFilter) async {
+        activities = await service.listActivity(filter: filter)
+    }
+
+    func loadVaultSummary() async {
+        vaultSummary = await service.vaultSummary()
+        memories = await service.retrieve(query: "")
+    }
+
+    func loadConnections() async {
+        connections = await service.listConnections()
     }
 
     // MARK: - Interactive Agent Execution Flow
 
-    public func runTask(requestPermissionPrompt: Bool = false) async {
+    func runTask(requestPermissionPrompt: Bool = false) async {
         activeRunTask = Task {
             executionState = .preparing
             lastErrorPayload = nil
@@ -252,13 +290,13 @@ public final class AgentAppViewModel: ObservableObject {
         await activeRunTask?.value
     }
 
-    public func handlePermissionResponse(allowed: Bool) {
+    func handlePermissionResponse(allowed: Bool) {
         showingPermissionAlert = false
         pendingPermissionContinuation?(allowed)
         pendingPermissionContinuation = nil
     }
 
-    public func cancelTask() {
+    func cancelTask() {
         activeRunTask?.cancel()
         executionState = .cancelled
         currentExecutionStatus = .warning
@@ -274,7 +312,7 @@ public final class AgentAppViewModel: ObservableObject {
         recordActivity(task: currentGoal, state: "CANCELLED", duration: "0.01s", resultOrError: "User initiated cancellation via runtime.")
     }
 
-    public func clearTask() {
+    func clearTask() {
         currentGoal = ""
         executionState = .idle
         lastRunResult = nil
@@ -283,46 +321,41 @@ public final class AgentAppViewModel: ObservableObject {
 
     // MARK: - Memory / Vault Interactive Testing
 
-    public func executeSaveMemory() async -> Bool {
+    func executeSaveMemory() async -> Bool {
         let res = await service.remember(key: testMemoryKey, value: testMemoryValue)
         await refreshState()
         return res.status == .success
     }
 
-    public func executeReadMemory() async -> String? {
+    func executeReadMemory() async -> String? {
         let items = await service.retrieve(query: testMemoryKey)
         return items.first(where: { $0.key == testMemoryKey })?.value
     }
 
-    public func executeForgetMemory() async -> Bool {
+    func executeForgetMemory() async -> Bool {
         let res = await service.forget(key: testMemoryKey)
         await refreshState()
         return res.status == .success
     }
 
-    public func runMemoryTestFlow() async {
-        // Step 1: Save
+    func runMemoryTestFlow() async {
         let saveOk = await executeSaveMemory()
         memoryStepResults[0].status = saveOk ? .pass : .fail
         memoryStepResults[0].detail = saveOk ? "Saved '\(testMemoryKey)'" : "Save failed"
 
-        // Step 2: Read
         let readVal = await executeReadMemory()
         let readOk = readVal != nil
         memoryStepResults[1].status = readOk ? .pass : .fail
         memoryStepResults[1].detail = readVal ?? "Key not found"
 
-        // Step 3: Verify Value
         let verifyOk = (readVal == testMemoryValue)
         memoryStepResults[2].status = verifyOk ? .pass : .fail
         memoryStepResults[2].detail = verifyOk ? "Value matches expected" : "Value mismatch"
 
-        // Step 4: Forget
         let forgetOk = await executeForgetMemory()
         memoryStepResults[3].status = forgetOk ? .pass : .fail
         memoryStepResults[3].detail = forgetOk ? "Key removed" : "Forget failed"
 
-        // Step 5: Verify Missing
         let verifyMissingVal = await executeReadMemory()
         let missingOk = (verifyMissingVal == nil)
         memoryStepResults[4].status = missingOk ? .pass : .fail
@@ -333,42 +366,41 @@ public final class AgentAppViewModel: ObservableObject {
 
     // MARK: - Error Test Scenarios
 
-    public func triggerInvalidInput() async {
+    func triggerInvalidInput() async {
         let result = await service.run(goal: "", userApproved: false)
         errorTestResult = "Invalid Input Result -> Status: \(result.status.rawValue), ErrorMessage: \(result.errorMessage ?? "None")"
     }
 
-    public func triggerRuntimeFailure() async {
+    func triggerRuntimeFailure() async {
         let result = await service.resume(runId: "RUN-NONEXISTENT-9999")
         errorTestResult = "Runtime Failure Result -> Status: \(result.status.rawValue), Code: \(result.errorCode ?? "None"), ErrorMessage: \(result.errorMessage ?? "None")"
     }
 
-    public func triggerPermissionDenied() async {
+    func triggerPermissionDenied() async {
         let result = await service.executeCapability(capabilityId: "github_integration", input: ["action": "create_issue_comment"], userApproved: false)
         errorTestResult = "Permission Denied Result -> Status: \(result.status.rawValue), ErrorMessage: \(result.errorMessage ?? "None")"
     }
 
-    public func triggerCancellation() {
+    func triggerCancellation() {
         cancelTask()
         errorTestResult = "Cancellation Triggered -> State: CANCELLED, ErrorMessage: \(lastErrorPayload ?? "None")"
     }
 
-    public func triggerMissingMemory() async {
+    func triggerMissingMemory() async {
         let res = await service.forget(key: "non_existent_key_xyz_999")
         errorTestResult = "Missing Memory Forget Result -> Status: \(res.status.rawValue), ErrorMessage: \(res.errorMessage ?? "None")"
     }
 
-    public func triggerConnectionUnavailable() async {
+    func triggerConnectionUnavailable() async {
         let result = await service.executeCapability(capabilityId: "github_integration", input: ["action": "get_repo"], userApproved: true)
         errorTestResult = "Connection Unavailable Result -> Status: \(result.status.rawValue), ErrorMessage: \(result.errorMessage ?? "None")"
     }
 
     // MARK: - Automated Review Checks (Run All Checks)
 
-    public func runAllReviewChecks() async {
+    func runAllReviewChecks() async {
         blockerDetails.removeAll()
 
-        // 1. AgentRuntime Initialization
         let h = await service.health()
         if h.status == "HEALTHY" {
             setCheck(id: 1, status: .pass, msg: "AgentRuntime initialized cleanly and healthy")
@@ -379,7 +411,6 @@ public final class AgentAppViewModel: ObservableObject {
             blockerDetails.append("AgentRuntime Initialization failed")
         }
 
-        // 2. Agent-Core Availability
         if h.isLocalOnly && !h.providerName.isEmpty {
             setCheck(id: 2, status: .pass, msg: "Agent-Core kernel available via \(h.providerName)")
             agentCoreStatus = .pass
@@ -389,7 +420,6 @@ public final class AgentAppViewModel: ObservableObject {
             blockerDetails.append("Agent-Core Availability check failed")
         }
 
-        // 3. Memory Write / Read / Delete
         await runMemoryTestFlow()
         let memAllPass = memoryStepResults.allSatisfy { $0.status == .pass }
         if memAllPass {
@@ -401,7 +431,6 @@ public final class AgentAppViewModel: ObservableObject {
             blockerDetails.append("Memory Write/Read/Delete chain failed")
         }
 
-        // 4. Agent Execution
         let runRes = await service.run(goal: "Automated review execution check", userApproved: true)
         if runRes.status == .success && !runRes.runId.isEmpty {
             setCheck(id: 4, status: .pass, msg: "Agent run executed successfully (runId: \(runRes.runId))")
@@ -413,7 +442,6 @@ public final class AgentAppViewModel: ObservableObject {
             blockerDetails.append("Agent Execution check failed")
         }
 
-        // 5. Permission Flow
         let unapprovedRes = await service.executeCapability(capabilityId: "github_integration", input: ["action": "create_issue_comment"], userApproved: false)
         let approvedRes = await service.executeCapability(capabilityId: "github_integration", input: ["action": "create_issue_comment", "mock_offline": "true"], userApproved: true)
         if unapprovedRes.status == .denied && approvedRes.status == .success {
@@ -425,7 +453,6 @@ public final class AgentAppViewModel: ObservableObject {
             blockerDetails.append("Permission flow check failed")
         }
 
-        // 6. Cancellation
         cancelTask()
         if executionState == .cancelled {
             setCheck(id: 6, status: .pass, msg: "Task cancellation propagated correctly")
@@ -434,7 +461,6 @@ public final class AgentAppViewModel: ObservableObject {
             blockerDetails.append("Task Cancellation failed to propagate")
         }
 
-        // 7. Error Propagation
         let failRes = await service.resume(runId: "RUN-INVALID-CHECK")
         if failRes.status == .failed && failRes.errorCode == "RUN_NOT_FOUND" {
             setCheck(id: 7, status: .pass, msg: "Error propagation verified (code: RUN_NOT_FOUND)")
@@ -443,7 +469,6 @@ public final class AgentAppViewModel: ObservableObject {
             blockerDetails.append("Error Propagation check failed")
         }
 
-        // 8. Activity Recording
         let exps = await service.getExperience()
         if exps.contains(where: { $0.runId == runRes.runId }) {
             setCheck(id: 8, status: .pass, msg: "Activity recorded in LocalExperienceStore")
@@ -454,7 +479,6 @@ public final class AgentAppViewModel: ObservableObject {
             blockerDetails.append("Activity Recording check failed")
         }
 
-        // 9. Navigation Accessibility
         let allTabs = AppTab.allCases
         if allTabs.count == 7 {
             setCheck(id: 9, status: .pass, msg: "All 7 navigation tabs accessible")
@@ -463,7 +487,6 @@ public final class AgentAppViewModel: ObservableObject {
             blockerDetails.append("Navigation Accessibility check failed")
         }
 
-        // 10. App State Recovery
         if let restoredRun = await service.getRun(runId: runRes.runId), restoredRun.runId == runRes.runId {
             setCheck(id: 10, status: .pass, msg: "App state recovered checkpoint from disk")
         } else {
@@ -514,7 +537,7 @@ struct MainTabView: View {
                 }
                 .tag(AppTab.home)
 
-            AgentView()
+            ExecuteView()
                 .tabItem {
                     Label(AppTab.agent.rawValue, systemImage: AppTab.agent.iconName)
                 }
@@ -550,6 +573,7 @@ struct MainTabView: View {
                 }
                 .tag(AppTab.review)
         }
+        .accentColor(AgentColor.accent)
         .alert(viewModel.permissionActionTitle, isPresented: $viewModel.showingPermissionAlert) {
             Button("Allow", role: .none) {
                 viewModel.handlePermissionResponse(allowed: true)
@@ -563,640 +587,7 @@ struct MainTabView: View {
     }
 }
 
-// MARK: - Tab 1: HomeView
-
-struct HomeView: View {
-    @EnvironmentObject private var viewModel: AgentAppViewModel
-
-    var body: some View {
-        NavigationView {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 16) {
-                    HeaderBanner(title: "Personal Agent Local", subtitle: "Agent-Core Native iOS Kernel")
-
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text("Kernel Overview")
-                            .font(.headline)
-                        StatusRow(label: "Status", value: viewModel.health?.status ?? "HEALTHY", color: .green)
-                        StatusRow(label: "Mode", value: (viewModel.health?.isLocalOnly ?? true) ? "Offline Local-First" : "Hybrid", color: .blue)
-                        StatusRow(label: "Provider", value: viewModel.health?.providerName ?? "LocalDeterministicPlanner", color: .purple)
-                        StatusRow(label: "Active Capabilities", value: "\(viewModel.capabilities.count) registered", color: .orange)
-                        StatusRow(label: "Storage Path", value: viewModel.health?.storagePath ?? "Application Support/AgentCore/", color: .secondary)
-                    }
-                    .padding()
-                    .background(Color(UIColor.secondarySystemBackground))
-                    .cornerRadius(12)
-                }
-                .padding()
-            }
-            .navigationTitle("Home")
-        }
-    }
-}
-
-// MARK: - Tab 2: AgentView
-
-struct AgentView: View {
-    @EnvironmentObject private var viewModel: AgentAppViewModel
-
-    var body: some View {
-        NavigationView {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 16) {
-                    Text("Interactive Execution")
-                        .font(.headline)
-
-                    TextField("Task Goal", text: $viewModel.currentGoal)
-                        .textFieldStyle(.roundedBorder)
-
-                    HStack(spacing: 12) {
-                        Button("Run Task") {
-                            Task { await viewModel.runTask(requestPermissionPrompt: false) }
-                        }
-                        .buttonStyle(.borderedProminent)
-
-                        Button("Run With Permission Prompt") {
-                            Task { await viewModel.runTask(requestPermissionPrompt: true) }
-                        }
-                        .buttonStyle(.bordered)
-
-                        Button("Cancel") {
-                            viewModel.cancelTask()
-                        }
-                        .buttonStyle(.bordered)
-                        .tint(.red)
-
-                        Button("Clear") {
-                            viewModel.clearTask()
-                        }
-                        .buttonStyle(.bordered)
-                    }
-
-                    HStack {
-                        Text("Lifecycle:")
-                            .font(.subheadline.bold())
-                        StatusBadge(title: viewModel.executionState.rawValue, color: viewModel.executionState.color)
-                    }
-
-                    if let res = viewModel.lastRunResult {
-                        VStack(alignment: .leading, spacing: 6) {
-                            Text("Run Result")
-                                .font(.headline)
-                            DetailRow(label: "Run ID", value: res.runId)
-                            DetailRow(label: "Status", value: res.status.rawValue)
-                            DetailRow(label: "Output", value: res.output ?? "-")
-                            DetailRow(label: "Verification Verdict", value: res.verificationVerdict)
-                        }
-                        .padding()
-                        .background(Color(UIColor.secondarySystemBackground))
-                        .cornerRadius(12)
-                    }
-
-                    if let err = viewModel.lastErrorPayload {
-                        VStack(alignment: .leading, spacing: 6) {
-                            Text("Error Payload")
-                                .font(.headline)
-                                .foregroundColor(.red)
-                            Text(err)
-                                .font(.caption)
-                                .foregroundColor(.red)
-                        }
-                        .padding()
-                        .background(Color.red.opacity(0.1))
-                        .cornerRadius(12)
-                    }
-                }
-                .padding()
-            }
-            .navigationTitle("Agent")
-        }
-    }
-}
-
-// MARK: - Tab 3: ActivityView
-
-struct ActivityView: View {
-    @EnvironmentObject private var viewModel: AgentAppViewModel
-
-    var body: some View {
-        NavigationView {
-            List {
-                Section(header: Text("Execution & Event Logs (\(viewModel.activities.count))")) {
-                    if viewModel.activities.isEmpty {
-                        Text("No activity recorded yet.")
-                            .foregroundColor(.secondary)
-                    } else {
-                        ForEach(viewModel.activities) { act in
-                            VStack(alignment: .leading, spacing: 4) {
-                                HStack {
-                                    Text(act.task)
-                                        .font(.subheadline.bold())
-                                    Spacer()
-                                    StatusBadge(title: act.state, color: stateColor(act.state))
-                                }
-                                Text("Duration: \(act.duration) | \(act.timestamp)")
-                                    .font(.caption2)
-                                    .foregroundColor(.secondary)
-                                Text("Result: \(act.resultOrError)")
-                                    .font(.caption)
-                                    .foregroundColor(.primary)
-                            }
-                            .padding(.vertical, 4)
-                        }
-                    }
-                }
-            }
-            .navigationTitle("Activity")
-        }
-    }
-
-    private func stateColor(_ state: String) -> Color {
-        switch state {
-        case "COMPLETED": return .green
-        case "FAILED": return .red
-        case "DENIED": return .purple
-        case "CANCELLED": return .orange
-        default: return .gray
-        }
-    }
-}
-
-// MARK: - Tab 4: VaultView
-
-struct VaultView: View {
-    @EnvironmentObject private var viewModel: AgentAppViewModel
-
-    var body: some View {
-        NavigationView {
-            List {
-                Section(header: Text("Stored Personal Memories (\(viewModel.memories.count))")) {
-                    ForEach(viewModel.memories) { mem in
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text("[\(mem.key)]")
-                                .font(.caption.bold())
-                                .foregroundColor(.blue)
-                            Text(mem.value)
-                                .font(.body)
-                        }
-                    }
-                }
-
-                Section(header: Text("Stored Experiences (\(viewModel.experiences.count))")) {
-                    ForEach(viewModel.experiences) { exp in
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text("[\(exp.runId)]: \(exp.goal)")
-                                .font(.caption.bold())
-                            Text("Outcome: \(exp.outcome)")
-                                .font(.caption)
-                                .foregroundColor(.secondary)
-                        }
-                    }
-                }
-            }
-            .navigationTitle("Vault")
-        }
-    }
-}
-
-// MARK: - Tab 5: ConnectionsView
-
-struct ConnectionsView: View {
-    @EnvironmentObject private var viewModel: AgentAppViewModel
-
-    var body: some View {
-        NavigationView {
-            List {
-                Section(header: Text("Capability Modules (\(viewModel.capabilities.count))")) {
-                    ForEach(viewModel.capabilities) { cap in
-                        VStack(alignment: .leading, spacing: 4) {
-                            HStack {
-                                Text(cap.name)
-                                    .font(.headline)
-                                Spacer()
-                                Text("v\(cap.version)")
-                                    .font(.caption)
-                                    .foregroundColor(.secondary)
-                            }
-                            Text(cap.description)
-                                .font(.caption)
-                                .foregroundColor(.secondary)
-                            HStack(spacing: 8) {
-                                StatusBadge(title: cap.readOnly ? "READ ONLY" : "MUTATING", color: cap.readOnly ? .blue : .orange)
-                                StatusBadge(title: cap.requiresUserApproval ? "APPROVAL REQ" : "AUTO", color: cap.requiresUserApproval ? .purple : .green)
-                            }
-                        }
-                        .padding(.vertical, 4)
-                    }
-                }
-            }
-            .navigationTitle("Connections")
-        }
-    }
-}
-
-// MARK: - Tab 6: SettingsView
-
-struct SettingsView: View {
-    @EnvironmentObject private var viewModel: AgentAppViewModel
-
-    var body: some View {
-        NavigationView {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 16) {
-                    Text("GitHub Data Update v0.1")
-                        .font(.headline)
-
-                    Group {
-                        DetailRow(label: "Installed Version", value: viewModel.updateReport.installedDataVersion)
-                        DetailRow(label: "Status", value: viewModel.updateReport.status.rawValue)
-                        DetailRow(label: "Last Error", value: viewModel.updateReport.lastError ?? "None")
-                    }
-
-                    Divider()
-
-                    Text("Local Environment")
-                        .font(.headline)
-                    DetailRow(label: "Storage Directory", value: viewModel.health?.storagePath ?? "Application Support/AgentCore/")
-                    DetailRow(label: "Planner Provider", value: viewModel.health?.providerName ?? "LocalDeterministicPlanner")
-                }
-                .padding()
-            }
-            .navigationTitle("Settings")
-        }
-    }
-}
-
-// MARK: - Tab 7: ReviewView (Interactive Review Console for PR #20)
-
-struct ReviewView: View {
-    @EnvironmentObject private var viewModel: AgentAppViewModel
-
-    var body: some View {
-        NavigationView {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 20) {
-
-                    // Title Header
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text("Interactive Review Console")
-                            .font(.title2.bold())
-                        Text("Agent-Core PR #20 Validation Environment")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                    }
-
-                    // Section 2: Review Dashboard
-                    VStack(alignment: .leading, spacing: 12) {
-                        HStack {
-                            Text("Review Dashboard")
-                                .font(.headline)
-                            Spacer()
-                            Button("Run All Checks") {
-                                Task { await viewModel.runAllReviewChecks() }
-                            }
-                            .buttonStyle(.borderedProminent)
-                        }
-
-                        Grid(alignment: .leading, horizontalSpacing: 12, verticalSpacing: 8) {
-                            GridRow {
-                                StatusCell(title: "Agent-Core", status: viewModel.agentCoreStatus)
-                                StatusCell(title: "AgentRuntime", status: viewModel.agentRuntimeStatus)
-                            }
-                            GridRow {
-                                StatusCell(title: "Local Storage", status: viewModel.localStorageStatus)
-                                StatusCell(title: "Memory / Vault", status: viewModel.memoryVaultStatus)
-                            }
-                            GridRow {
-                                StatusCell(title: "Connection", status: viewModel.connectionStatus)
-                                StatusCell(title: "Execution", status: viewModel.currentExecutionStatus)
-                            }
-                        }
-                    }
-                    .padding()
-                    .background(Color(UIColor.secondarySystemBackground))
-                    .cornerRadius(12)
-
-                    // Section 3: Interactive Agent Test
-                    VStack(alignment: .leading, spacing: 12) {
-                        Text("Agent Execution Test")
-                            .font(.headline)
-
-                        TextField("Enter task (e.g. Remember that my favorite color is blue.)", text: $viewModel.currentGoal)
-                            .textFieldStyle(.roundedBorder)
-
-                        HStack(spacing: 8) {
-                            Button("Run") {
-                                Task { await viewModel.runTask(requestPermissionPrompt: false) }
-                            }
-                            .buttonStyle(.borderedProminent)
-
-                            Button("Run (Prompt Permission)") {
-                                Task { await viewModel.runTask(requestPermissionPrompt: true) }
-                            }
-                            .buttonStyle(.bordered)
-
-                            Button("Cancel") {
-                                viewModel.cancelTask()
-                            }
-                            .buttonStyle(.bordered)
-                            .tint(.red)
-
-                            Button("Clear") {
-                                viewModel.clearTask()
-                            }
-                            .buttonStyle(.bordered)
-                        }
-
-                        HStack {
-                            Text("Lifecycle State:")
-                                .font(.caption.bold())
-                            StatusBadge(title: viewModel.executionState.rawValue, color: viewModel.executionState.color)
-                        }
-                    }
-                    .padding()
-                    .background(Color(UIColor.secondarySystemBackground))
-                    .cornerRadius(12)
-
-                    // Section 4: Memory / Vault Test
-                    VStack(alignment: .leading, spacing: 12) {
-                        HStack {
-                            Text("Memory / Vault Test")
-                                .font(.headline)
-                            Spacer()
-                            Button("Run Memory Flow") {
-                                Task { await viewModel.runMemoryTestFlow() }
-                            }
-                            .buttonStyle(.bordered)
-                        }
-
-                        HStack(spacing: 8) {
-                            TextField("Key", text: $viewModel.testMemoryKey)
-                                .textFieldStyle(.roundedBorder)
-                            TextField("Value", text: $viewModel.testMemoryValue)
-                                .textFieldStyle(.roundedBorder)
-                        }
-
-                        HStack(spacing: 8) {
-                            Button("Save") {
-                                Task { _ = await viewModel.executeSaveMemory() }
-                            }
-                            .buttonStyle(.bordered)
-
-                            Button("Read") {
-                                Task { _ = await viewModel.executeReadMemory() }
-                            }
-                            .buttonStyle(.bordered)
-
-                            Button("Forget") {
-                                Task { _ = await viewModel.executeForgetMemory() }
-                            }
-                            .buttonStyle(.bordered)
-                            .tint(.red)
-                        }
-
-                        VStack(alignment: .leading, spacing: 4) {
-                            ForEach(viewModel.memoryStepResults) { step in
-                                HStack {
-                                    Text(step.stepName)
-                                        .font(.caption)
-                                    Spacer()
-                                    Text(step.detail)
-                                        .font(.caption2)
-                                        .foregroundColor(.secondary)
-                                    StatusBadge(title: step.status.rawValue, color: step.status.color)
-                                }
-                            }
-                        }
-                    }
-                    .padding()
-                    .background(Color(UIColor.secondarySystemBackground))
-                    .cornerRadius(12)
-
-                    // Section 5: Error Test
-                    VStack(alignment: .leading, spacing: 12) {
-                        Text("Error Handling Scenarios")
-                            .font(.headline)
-
-                        ScrollView(.horizontal, showsIndicators: false) {
-                            HStack(spacing: 8) {
-                                Button("Invalid Input") {
-                                    Task { await viewModel.triggerInvalidInput() }
-                                }
-                                .buttonStyle(.bordered)
-
-                                Button("Runtime Failure") {
-                                    Task { await viewModel.triggerRuntimeFailure() }
-                                }
-                                .buttonStyle(.bordered)
-
-                                Button("Permission Denied") {
-                                    Task { await viewModel.triggerPermissionDenied() }
-                                }
-                                .buttonStyle(.bordered)
-
-                                Button("Cancellation") {
-                                    viewModel.triggerCancellation()
-                                }
-                                .buttonStyle(.bordered)
-
-                                Button("Missing Memory") {
-                                    Task { await viewModel.triggerMissingMemory() }
-                                }
-                                .buttonStyle(.bordered)
-
-                                Button("Connection Unavailable") {
-                                    Task { await viewModel.triggerConnectionUnavailable() }
-                                }
-                                .buttonStyle(.bordered)
-                            }
-                        }
-
-                        Text("Runtime Output:")
-                            .font(.caption.bold())
-                        Text(viewModel.errorTestResult)
-                            .font(.caption)
-                            .padding(8)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .background(Color(UIColor.tertiarySystemBackground))
-                            .cornerRadius(8)
-                    }
-                    .padding()
-                    .background(Color(UIColor.secondarySystemBackground))
-                    .cornerRadius(12)
-
-                    // Section 6: Activity Test
-                    VStack(alignment: .leading, spacing: 12) {
-                        Text("Activity Sync Check")
-                            .font(.headline)
-
-                        if let latest = viewModel.activities.first {
-                            VStack(alignment: .leading, spacing: 4) {
-                                DetailRow(label: "Task", value: latest.task)
-                                DetailRow(label: "State", value: latest.state)
-                                DetailRow(label: "Duration", value: latest.duration)
-                                DetailRow(label: "Timestamp", value: latest.timestamp)
-                                DetailRow(label: "Result/Error", value: latest.resultOrError)
-                            }
-                        } else {
-                            Text("No activities recorded. Execute a task to test sync.")
-                                .font(.caption)
-                                .foregroundColor(.secondary)
-                        }
-                    }
-                    .padding()
-                    .background(Color(UIColor.secondarySystemBackground))
-                    .cornerRadius(12)
-
-                    // Section 7: Navigation Accessibility Test
-                    VStack(alignment: .leading, spacing: 12) {
-                        Text("Navigation Accessibility Check")
-                            .font(.headline)
-
-                        Grid(alignment: .leading, horizontalSpacing: 8, verticalSpacing: 4) {
-                            ForEach(AppTab.allCases) { tab in
-                                GridRow {
-                                    Text("Tab: \(tab.rawValue)")
-                                        .font(.caption.bold())
-                                    Spacer()
-                                    StatusBadge(title: "ACCESSIBLE", color: .green)
-                                }
-                            }
-                        }
-                    }
-                    .padding()
-                    .background(Color(UIColor.secondarySystemBackground))
-                    .cornerRadius(12)
-
-                    // Section 8 & 9: Automated Review Checks & Review Summary
-                    VStack(alignment: .leading, spacing: 12) {
-                        Text("Automated Review Checks")
-                            .font(.headline)
-
-                        ForEach(viewModel.reviewChecks) { item in
-                            HStack {
-                                Text("\(item.id). \(item.name)")
-                                    .font(.caption.bold())
-                                Spacer()
-                                StatusBadge(title: item.status.rawValue, color: item.status.color)
-                            }
-                            Text("   Component: \(item.component) | Result: \(item.message)")
-                                .font(.caption2)
-                                .foregroundColor(.secondary)
-                            Divider()
-                        }
-
-                        Text("Interactive Review Result")
-                            .font(.headline.bold())
-
-                        Text("\(viewModel.passCount) / 10 PASS")
-                            .font(.title3.bold())
-                            .foregroundColor(viewModel.passCount == 10 ? .green : .orange)
-
-                        HStack(spacing: 16) {
-                            Text("Blockers: \(viewModel.blockerDetails.count)")
-                                .font(.caption.bold())
-                                .foregroundColor(viewModel.blockerDetails.isEmpty ? .green : .red)
-                            Text("Warnings: \(viewModel.warningCount)")
-                                .font(.caption.bold())
-                                .foregroundColor(.orange)
-                            Text("Not Tested: \(viewModel.notTestedCount)")
-                                .font(.caption.bold())
-                                .foregroundColor(.gray)
-                        }
-
-                        if !viewModel.blockerDetails.isEmpty {
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text("Blockers Details:")
-                                    .font(.caption.bold())
-                                    .foregroundColor(.red)
-                                ForEach(viewModel.blockerDetails, id: \.self) { blk in
-                                    Text("• \(blk)")
-                                        .font(.caption2)
-                                        .foregroundColor(.red)
-                                }
-                            }
-                        }
-                    }
-                    .padding()
-                    .background(Color(UIColor.secondarySystemBackground))
-                    .cornerRadius(12)
-
-                    // Section 10: Architecture Validation Banner
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text("Architecture Validation Flow")
-                            .font(.headline)
-                        Text("UI → AgentAppViewModel → AgentRuntime → Agent-Core → Result/Error → ViewModel → UI")
-                            .font(.caption.bold())
-                            .foregroundColor(.blue)
-                        Text("✓ Zero direct UI → Agent-Core imports")
-                            .font(.caption2)
-                            .foregroundColor(.green)
-                        Text("✓ Agent-Core has zero SwiftUI dependencies")
-                            .font(.caption2)
-                            .foregroundColor(.green)
-                    }
-                    .padding()
-                    .background(Color.blue.opacity(0.1))
-                    .cornerRadius(12)
-                }
-                .padding()
-            }
-            .navigationTitle("Review Console")
-        }
-    }
-}
-
-// MARK: - Reusable UI Subviews
-
-struct HeaderBanner: View {
-    let title: String
-    let subtitle: String
-
-    var body: some View {
-        HStack {
-            VStack(alignment: .leading) {
-                Text(title)
-                    .font(.title.bold())
-                Text(subtitle)
-                    .font(.subheadline)
-                    .foregroundColor(.secondary)
-            }
-            Spacer()
-            Text("LOCAL ONLY")
-                .font(.caption.bold())
-                .padding(.horizontal, 10)
-                .padding(.vertical, 6)
-                .background(Color.green.opacity(0.2))
-                .foregroundColor(.green)
-                .cornerRadius(8)
-        }
-        .padding()
-        .background(Color(UIColor.secondarySystemBackground))
-        .cornerRadius(12)
-    }
-}
-
-struct StatusRow: View {
-    let label: String
-    let value: String
-    let color: Color
-
-    var body: some View {
-        HStack {
-            Text(label)
-                .font(.caption.bold())
-                .foregroundColor(.secondary)
-            Spacer()
-            Text(value)
-                .font(.caption.bold())
-                .padding(.horizontal, 8)
-                .padding(.vertical, 4)
-                .background(color.opacity(0.15))
-                .foregroundColor(color)
-                .cornerRadius(6)
-        }
-    }
-}
+// MARK: - Reusable UI Subviews for Review
 
 struct StatusCell: View {
     let title: String
@@ -1205,40 +596,17 @@ struct StatusCell: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
             Text(title)
-                .font(.caption)
-                .foregroundColor(.secondary)
-            StatusBadge(title: status.rawValue, color: status.color)
+                .font(AgentFont.caption)
+                .foregroundColor(AgentColor.textMuted)
+            Text(status.rawValue)
+                .font(AgentFont.captionSmall)
+                .fontWeight(.bold)
+                .padding(.horizontal, 8)
+                .padding(.vertical, 4)
+                .background(status.color.opacity(0.15))
+                .foregroundColor(status.color)
+                .cornerRadius(6)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-    }
-}
-
-struct StatusBadge: View {
-    let title: String
-    let color: Color
-
-    var body: some View {
-        Text(title)
-            .font(.caption2.bold())
-            .padding(.horizontal, 8)
-            .padding(.vertical, 4)
-            .background(color.opacity(0.2))
-            .foregroundColor(color)
-            .cornerRadius(6)
-    }
-}
-
-struct DetailRow: View {
-    let label: String
-    let value: String
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 2) {
-            Text(label)
-                .font(.caption.bold())
-                .foregroundColor(.secondary)
-            Text(value.isEmpty ? "-" : value)
-                .font(.body)
-        }
     }
 }

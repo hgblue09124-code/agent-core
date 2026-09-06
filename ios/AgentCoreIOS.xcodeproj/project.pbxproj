@@ -23,6 +23,27 @@
 		001027 /* GitHubDataUpdateConfiguration.swift in Sources */ = {isa = PBXBuildFile; fileRef = 001026 /* GitHubDataUpdateConfiguration.swift */; };
 		001029 /* GitHubDataUpdateManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 001028 /* GitHubDataUpdateManager.swift */; };
 		001031 /* LocalAgentServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 001030 /* LocalAgentServiceTests.swift */; };
+		002101 /* AgentDesignTokens.swift in Sources */ = {isa = PBXBuildFile; fileRef = 002001 /* AgentDesignTokens.swift */; };
+		002102 /* AgentOrbView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 002002 /* AgentOrbView.swift */; };
+		002103 /* StatusPillView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 002003 /* StatusPillView.swift */; };
+		002104 /* PrivacyChipView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 002004 /* PrivacyChipView.swift */; };
+		002105 /* InputPillView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 002005 /* InputPillView.swift */; };
+		002106 /* QuickActionCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 002006 /* QuickActionCard.swift */; };
+		002107 /* CurrentTaskCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 002007 /* CurrentTaskCard.swift */; };
+		002108 /* ActivityRowView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 002008 /* ActivityRowView.swift */; };
+		002109 /* StepProgressRow.swift in Sources */ = {isa = PBXBuildFile; fileRef = 002009 /* StepProgressRow.swift */; };
+		002110 /* ProgressBarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 002010 /* ProgressBarView.swift */; };
+		002111 /* CategoryCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 002011 /* CategoryCard.swift */; };
+		002112 /* RememberedContextCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 002012 /* RememberedContextCard.swift */; };
+		002113 /* ConnectionRowView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 002013 /* ConnectionRowView.swift */; };
+		002114 /* SettingsCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 002014 /* SettingsCard.swift */; };
+		002115 /* HomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 002015 /* HomeView.swift */; };
+		002116 /* ExecuteView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 002016 /* ExecuteView.swift */; };
+		002117 /* ActivityView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 002017 /* ActivityView.swift */; };
+		002118 /* VaultView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 002018 /* VaultView.swift */; };
+		002119 /* ConnectionsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 002019 /* ConnectionsView.swift */; };
+		002120 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 002020 /* SettingsView.swift */; };
+		002121 /* ReviewView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 002021 /* ReviewView.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -55,6 +76,27 @@
 		001032 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		001051 /* AgentCoreIOS.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = AgentCoreIOS.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		001052 /* AgentCoreIOSTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = AgentCoreIOSTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		002001 /* AgentDesignTokens.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentDesignTokens.swift; sourceTree = "<group>"; };
+		002002 /* AgentOrbView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentOrbView.swift; sourceTree = "<group>"; };
+		002003 /* StatusPillView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StatusPillView.swift; sourceTree = "<group>"; };
+		002004 /* PrivacyChipView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PrivacyChipView.swift; sourceTree = "<group>"; };
+		002005 /* InputPillView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InputPillView.swift; sourceTree = "<group>"; };
+		002006 /* QuickActionCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QuickActionCard.swift; sourceTree = "<group>"; };
+		002007 /* CurrentTaskCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CurrentTaskCard.swift; sourceTree = "<group>"; };
+		002008 /* ActivityRowView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActivityRowView.swift; sourceTree = "<group>"; };
+		002009 /* StepProgressRow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StepProgressRow.swift; sourceTree = "<group>"; };
+		002010 /* ProgressBarView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProgressBarView.swift; sourceTree = "<group>"; };
+		002011 /* CategoryCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CategoryCard.swift; sourceTree = "<group>"; };
+		002012 /* RememberedContextCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RememberedContextCard.swift; sourceTree = "<group>"; };
+		002013 /* ConnectionRowView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConnectionRowView.swift; sourceTree = "<group>"; };
+		002014 /* SettingsCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsCard.swift; sourceTree = "<group>"; };
+		002015 /* HomeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeView.swift; sourceTree = "<group>"; };
+		002016 /* ExecuteView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExecuteView.swift; sourceTree = "<group>"; };
+		002017 /* ActivityView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActivityView.swift; sourceTree = "<group>"; };
+		002018 /* VaultView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VaultView.swift; sourceTree = "<group>"; };
+		002019 /* ConnectionsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConnectionsView.swift; sourceTree = "<group>"; };
+		002020 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
+		002021 /* ReviewView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReviewView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -93,6 +135,7 @@
 				001075 /* Runtime */,
 				001076 /* Storage */,
 				001077 /* Update */,
+				002050 /* UI */,
 			);
 			path = AgentCoreIOS;
 			sourceTree = "<group>";
@@ -153,6 +196,106 @@
 				001028 /* GitHubDataUpdateManager.swift */,
 			);
 			path = Update;
+			sourceTree = "<group>";
+		};
+		002050 /* UI */ = {
+			isa = PBXGroup;
+			children = (
+				002051 /* Design */,
+				002052 /* Components */,
+				002053 /* Home */,
+				002054 /* Execute */,
+				002055 /* Activity */,
+				002056 /* Vault */,
+				002057 /* Connections */,
+				002058 /* Settings */,
+				002059 /* Review */,
+			);
+			path = UI;
+			sourceTree = "<group>";
+		};
+		002051 /* Design */ = {
+			isa = PBXGroup;
+			children = (
+				002001 /* AgentDesignTokens.swift */,
+			);
+			path = Design;
+			sourceTree = "<group>";
+		};
+		002052 /* Components */ = {
+			isa = PBXGroup;
+			children = (
+				002002 /* AgentOrbView.swift */,
+				002003 /* StatusPillView.swift */,
+				002004 /* PrivacyChipView.swift */,
+				002005 /* InputPillView.swift */,
+				002006 /* QuickActionCard.swift */,
+				002007 /* CurrentTaskCard.swift */,
+				002008 /* ActivityRowView.swift */,
+				002009 /* StepProgressRow.swift */,
+				002010 /* ProgressBarView.swift */,
+				002011 /* CategoryCard.swift */,
+				002012 /* RememberedContextCard.swift */,
+				002013 /* ConnectionRowView.swift */,
+				002014 /* SettingsCard.swift */,
+			);
+			path = Components;
+			sourceTree = "<group>";
+		};
+		002053 /* Home */ = {
+			isa = PBXGroup;
+			children = (
+				002015 /* HomeView.swift */,
+			);
+			path = Home;
+			sourceTree = "<group>";
+		};
+		002054 /* Execute */ = {
+			isa = PBXGroup;
+			children = (
+				002016 /* ExecuteView.swift */,
+			);
+			path = Execute;
+			sourceTree = "<group>";
+		};
+		002055 /* Activity */ = {
+			isa = PBXGroup;
+			children = (
+				002017 /* ActivityView.swift */,
+			);
+			path = Activity;
+			sourceTree = "<group>";
+		};
+		002056 /* Vault */ = {
+			isa = PBXGroup;
+			children = (
+				002018 /* VaultView.swift */,
+			);
+			path = Vault;
+			sourceTree = "<group>";
+		};
+		002057 /* Connections */ = {
+			isa = PBXGroup;
+			children = (
+				002019 /* ConnectionsView.swift */,
+			);
+			path = Connections;
+			sourceTree = "<group>";
+		};
+		002058 /* Settings */ = {
+			isa = PBXGroup;
+			children = (
+				002020 /* SettingsView.swift */,
+			);
+			path = Settings;
+			sourceTree = "<group>";
+		};
+		002059 /* Review */ = {
+			isa = PBXGroup;
+			children = (
+				002021 /* ReviewView.swift */,
+			);
+			path = Review;
 			sourceTree = "<group>";
 		};
 		001078 /* Tests */ = {
@@ -266,6 +409,27 @@
 				001025 /* DataUpdateValidator.swift in Sources */,
 				001027 /* GitHubDataUpdateConfiguration.swift in Sources */,
 				001029 /* GitHubDataUpdateManager.swift in Sources */,
+				002101 /* AgentDesignTokens.swift in Sources */,
+				002102 /* AgentOrbView.swift in Sources */,
+				002103 /* StatusPillView.swift in Sources */,
+				002104 /* PrivacyChipView.swift in Sources */,
+				002105 /* InputPillView.swift in Sources */,
+				002106 /* QuickActionCard.swift in Sources */,
+				002107 /* CurrentTaskCard.swift in Sources */,
+				002108 /* ActivityRowView.swift in Sources */,
+				002109 /* StepProgressRow.swift in Sources */,
+				002110 /* ProgressBarView.swift in Sources */,
+				002111 /* CategoryCard.swift in Sources */,
+				002112 /* RememberedContextCard.swift in Sources */,
+				002113 /* ConnectionRowView.swift in Sources */,
+				002114 /* SettingsCard.swift in Sources */,
+				002115 /* HomeView.swift in Sources */,
+				002116 /* ExecuteView.swift in Sources */,
+				002117 /* ActivityView.swift in Sources */,
+				002118 /* VaultView.swift in Sources */,
+				002119 /* ConnectionsView.swift in Sources */,
+				002120 /* SettingsView.swift in Sources */,
+				002121 /* ReviewView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -289,6 +453,27 @@
 				001025 /* DataUpdateValidator.swift in Sources */,
 				001027 /* GitHubDataUpdateConfiguration.swift in Sources */,
 				001029 /* GitHubDataUpdateManager.swift in Sources */,
+				002101 /* AgentDesignTokens.swift in Sources */,
+				002102 /* AgentOrbView.swift in Sources */,
+				002103 /* StatusPillView.swift in Sources */,
+				002104 /* PrivacyChipView.swift in Sources */,
+				002105 /* InputPillView.swift in Sources */,
+				002106 /* QuickActionCard.swift in Sources */,
+				002107 /* CurrentTaskCard.swift in Sources */,
+				002108 /* ActivityRowView.swift in Sources */,
+				002109 /* StepProgressRow.swift in Sources */,
+				002110 /* ProgressBarView.swift in Sources */,
+				002111 /* CategoryCard.swift in Sources */,
+				002112 /* RememberedContextCard.swift in Sources */,
+				002113 /* ConnectionRowView.swift in Sources */,
+				002114 /* SettingsCard.swift in Sources */,
+				002115 /* HomeView.swift in Sources */,
+				002116 /* ExecuteView.swift in Sources */,
+				002117 /* ActivityView.swift in Sources */,
+				002118 /* VaultView.swift in Sources */,
+				002119 /* ConnectionsView.swift in Sources */,
+				002120 /* SettingsView.swift in Sources */,
+				002121 /* ReviewView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
