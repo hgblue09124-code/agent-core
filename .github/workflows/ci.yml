@@ -6,14 +6,20 @@ on:
     tags: [ "v*" ]
   pull_request:
     branches: [ main, master ]
+  workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   test:
     name: Run Regression Test Suite & CLI Checks
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
@@ -26,17 +32,26 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install pytest pytest-cov
+          pip install pytest
 
       - name: Run Pytest Test Suite
         env:
           AGENTCORE_PLANNER_PROVIDER: mock
         run: |
-          pytest
+          pytest -q
 
-      - name: Verify Release ZIP Package
+      - name: Package & verify iOS source zip from live tree
         run: |
-          python scripts/validate_ios_release_zip.py
+          mkdir -p dist
+          python scripts/package_ios_source_zip.py -o dist/agent-core-ios-source.zip
+          python scripts/validate_ios_release_zip.py dist/agent-core-ios-source.zip
+
+      - name: Upload iOS source zip
+        uses: actions/upload-artifact@v4
+        with:
+          name: agent-core-ios-source
+          path: dist/agent-core-ios-source.zip
+          if-no-files-found: error
 
       - name: Verify CLI Smoke Commands
         env:
@@ -50,127 +65,208 @@ jobs:
   ios-xcode-test:
     name: Xcode iOS Simulator Build & Test
     runs-on: macos-14
+    timeout-minutes: 45
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
 
       - name: Verify project.pbxproj integrity
-        run: |
-          python3 scripts/validate_ios_pbxproj.py
+        run: python3 scripts/validate_ios_pbxproj.py
 
-      - name: Select Xcode Version
+      - name: Select Xcode
         run: |
-          sudo xcode-select -s /Applications/Xcode_15.4.app/Contents/Developer || true
+          set -euo pipefail
+          if [ -d /Applications/Xcode_15.4.app ]; then
+            sudo xcode-select -s /Applications/Xcode_15.4.app/Contents/Developer
+          elif [ -d /Applications/Xcode_16.2.app ]; then
+            sudo xcode-select -s /Applications/Xcode_16.2.app/Contents/Developer
+          elif [ -d /Applications/Xcode_16.1.app ]; then
+            sudo xcode-select -s /Applications/Xcode_16.1.app/Contents/Developer
+          else
+            echo "Using default Xcode (pin not present on this image)"
+          fi
           xcodebuild -version
           xcrun simctl list devices available | head -50
 
       - name: Build & Run iOS Unit Tests via xcodebuild
         id: xcodebuild
         run: |
-          set -o pipefail
+          set -eo pipefail
           DEST='platform=iOS Simulator,name=iPhone 15,OS=latest'
+          if ! xcrun simctl list devices available | grep -q "iPhone 15"; then
+            DEST='platform=iOS Simulator,name=iPhone 16,OS=latest'
+          fi
+          echo "Using destination: $DEST"
           xcodebuild test \
             -project ios/AgentCoreIOS.xcodeproj \
             -scheme AgentCoreIOS \
             -destination "$DEST" \
+            -resultBundlePath "$RUNNER_TEMP/TestResults.xcresult" \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGNING_ALLOWED=NO \
             2>&1 | tee xcodebuild.log
-          exit ${PIPESTATUS[0]}
 
       - name: Upload xcodebuild log
         if: failure()
         uses: actions/upload-artifact@v4
         with:
           name: xcodebuild-log
-          path: xcodebuild.log
+          path: |
+            xcodebuild.log
+            ${{ runner.temp }}/TestResults.xcresult
           if-no-files-found: ignore
 
       - name: Print xcodebuild errors
         if: failure()
         run: |
           echo "===== error/warning lines ====="
-          grep -E "error:|warning:|FAILED|Testing failed|fatal error|Cannot find|Use of undeclared" xcodebuild.log | tail -100 || true
+          grep -E "error:|warning:|FAILED|Testing failed|fatal error|Cannot find|Use of undeclared|scheme" xcodebuild.log | tail -100 || true
           echo "===== tail ====="
           tail -80 xcodebuild.log || true
 
   ios-ipa-build:
     name: Build, Package, Validate & Release Unsigned iOS IPA
     runs-on: macos-14
+    timeout-minutes: 45
     needs: [test, ios-xcode-test]
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'push' && (startsWith(github.ref, 'refs/tags/v') || github.ref == 'refs/heads/master' || github.ref == 'refs/heads/main'))
+    permissions:
+      contents: write
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
 
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.12'
 
-      - name: Verify project.pbxproj integrity
+      - name: Resolve version
+        id: ver
         run: |
-          python3 scripts/validate_ios_pbxproj.py
+          set -euo pipefail
+          if [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
+            VERSION="${GITHUB_REF_NAME#v}"
+          else
+            VERSION="0.1.0"
+          fi
+          BUILD="${GITHUB_RUN_NUMBER}"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "build=$BUILD" >> "$GITHUB_OUTPUT"
+          echo "ipa=AgentCore-iOS-v${VERSION}-b${BUILD}-unsigned.ipa" >> "$GITHUB_OUTPUT"
+          echo "Resolved VERSION=$VERSION BUILD=$BUILD"
 
-      - name: Select Xcode Version
+      - name: Verify project.pbxproj integrity
+        run: python3 scripts/validate_ios_pbxproj.py
+
+      - name: Select Xcode
         run: |
-          sudo xcode-select -s /Applications/Xcode_15.4.app/Contents/Developer || true
+          set -euo pipefail
+          if [ -d /Applications/Xcode_15.4.app ]; then
+            sudo xcode-select -s /Applications/Xcode_15.4.app/Contents/Developer
+          elif [ -d /Applications/Xcode_16.2.app ]; then
+            sudo xcode-select -s /Applications/Xcode_16.2.app/Contents/Developer
+          elif [ -d /Applications/Xcode_16.1.app ]; then
+            sudo xcode-select -s /Applications/Xcode_16.1.app/Contents/Developer
+          fi
           xcodebuild -version
 
-      - name: Build Unsigned iOS Application (.app)
+      - name: Archive unsigned iOS application
         run: |
-          xcodebuild build \
+          set -euo pipefail
+          VERSION="${{ steps.ver.outputs.version }}"
+          BUILD="${{ steps.ver.outputs.build }}"
+          ARCHIVE_PATH="$RUNNER_TEMP/AgentCoreIOS.xcarchive"
+          set +e
+          xcodebuild archive \
             -project ios/AgentCoreIOS.xcodeproj \
             -scheme AgentCoreIOS \
             -configuration Release \
-            -sdk iphoneos \
-            -derivedDataPath $RUNNER_TEMP/DerivedData \
+            -destination 'generic/platform=iOS' \
+            -archivePath "$ARCHIVE_PATH" \
+            MARKETING_VERSION="$VERSION" \
+            CURRENT_PROJECT_VERSION="$BUILD" \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGNING_ALLOWED=NO \
-            CODE_SIGN_IDENTITY=""
-
-          APP_PATH="$RUNNER_TEMP/DerivedData/Build/Products/Release-iphoneos/AgentCoreIOS.app"
-          if [ ! -d "$APP_PATH" ]; then
-            echo "❌ ERROR: Built AgentCoreIOS.app not found at $APP_PATH"
+            CODE_SIGN_IDENTITY="-" \
+            DEVELOPMENT_TEAM="" \
+            2>&1 | tee archive.log
+          ARCHIVE_RC=${PIPESTATUS[0]}
+          set -e
+          if [ "$ARCHIVE_RC" -ne 0 ] || [ ! -d "$ARCHIVE_PATH" ]; then
+            echo "Archive did not produce an xcarchive; falling back to unsigned iphoneos build"
+            xcodebuild build \
+              -project ios/AgentCoreIOS.xcodeproj \
+              -scheme AgentCoreIOS \
+              -configuration Release \
+              -sdk iphoneos \
+              -destination 'generic/platform=iOS' \
+              -derivedDataPath "$RUNNER_TEMP/DerivedData" \
+              MARKETING_VERSION="$VERSION" \
+              CURRENT_PROJECT_VERSION="$BUILD" \
+              CODE_SIGNING_REQUIRED=NO \
+              CODE_SIGNING_ALLOWED=NO \
+              CODE_SIGN_IDENTITY="" \
+              2>&1 | tee build.log
+            APP_PATH="$RUNNER_TEMP/DerivedData/Build/Products/Release-iphoneos/AgentCoreIOS.app"
+            echo "APP_PATH=$APP_PATH" >> "$GITHUB_ENV"
+          else
+            APP_PATH=$(find "$ARCHIVE_PATH/Products" -name 'AgentCoreIOS.app' -type d | head -1)
+            echo "APP_PATH=$APP_PATH" >> "$GITHUB_ENV"
+          fi
+          if [ ! -d "${APP_PATH:-}" ]; then
+            echo "ERROR: AgentCoreIOS.app not found"
+            tail -80 archive.log build.log 2>/dev/null || true
             exit 1
           fi
-          echo "✅ Successfully built real executable AgentCoreIOS.app"
+          echo "Using app at $APP_PATH"
 
-      - name: Package Unsigned IPA Archive
+      - name: Package unsigned IPA
         run: |
-          STAGING_DIR="$RUNNER_TEMP/ipa_staging"
-          mkdir -p "$STAGING_DIR/Payload"
-          cp -R "$RUNNER_TEMP/DerivedData/Build/Products/Release-iphoneos/AgentCoreIOS.app" "$STAGING_DIR/Payload/"
+          set -euo pipefail
+          IPA="${{ steps.ver.outputs.ipa }}"
+          STAGING="$RUNNER_TEMP/ipa_staging"
+          mkdir -p "$STAGING/Payload"
+          cp -R "$APP_PATH" "$STAGING/Payload/"
+          (cd "$STAGING" && ditto -c -k --keepParent Payload "$GITHUB_WORKSPACE/$IPA")
+          ls -la "$IPA"
 
-          cd "$STAGING_DIR"
-          zip -r "$GITHUB_WORKSPACE/AgentCore-iOS-v0.1.0-unsigned.ipa" Payload
-          cd "$GITHUB_WORKSPACE"
-
-          if [ ! -f "AgentCore-iOS-v0.1.0-unsigned.ipa" ]; then
-            echo "❌ ERROR: AgentCore-iOS-v0.1.0-unsigned.ipa packaging failed."
-            exit 1
-          fi
-          ls -la AgentCore-iOS-v0.1.0-unsigned.ipa
-
-      - name: Validate Unsigned IPA Archive
+      - name: Validate unsigned IPA
+        env:
+          AGENTCORE_RELEASE_VERSION: ${{ steps.ver.outputs.version }}
+          AGENTCORE_BUILD_NUMBER: ${{ steps.ver.outputs.build }}
         run: |
-          python scripts/validate_ipa.py AgentCore-iOS-v0.1.0-unsigned.ipa
+          python scripts/validate_ipa.py "${{ steps.ver.outputs.ipa }}" \
+            --version "${{ steps.ver.outputs.version }}" \
+            --build "${{ steps.ver.outputs.build }}"
 
-      - name: Upload Unsigned IPA Artifact
+      - name: Upload unsigned IPA artifact
         uses: actions/upload-artifact@v4
         with:
-          name: AgentCore-iOS-v0.1.0-unsigned.ipa
-          path: AgentCore-iOS-v0.1.0-unsigned.ipa
+          name: ${{ steps.ver.outputs.ipa }}
+          path: ${{ steps.ver.outputs.ipa }}
           if-no-files-found: error
 
-      - name: Attach Unsigned IPA to GitHub Release v0.1.0
+      - name: Attach IPA to GitHub Release (tags only)
+        if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v0.1.0
-          files: AgentCore-iOS-v0.1.0-unsigned.ipa
-          append_body: true
+          tag_name: ${{ github.ref_name }}
+          name: Agent Core ${{ github.ref_name }}
+          files: ${{ steps.ver.outputs.ipa }}
+          generate_release_notes: true
+          fail_on_unmatched_files: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload archive/build logs on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ipa-build-logs
+          path: |
+            archive.log
+            build.log
+          if-no-files-found: ignore
