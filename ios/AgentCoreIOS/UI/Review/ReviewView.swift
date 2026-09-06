@@ -8,6 +8,29 @@ struct ReviewView: View {
 
     init() {}
 
+    private var runtimePhase: AgentExecutionPhase {
+        viewModel.runtimeStore.state.phase
+    }
+
+    private var phaseDisplayText: String {
+        runtimePhase.rawValue.uppercased()
+    }
+
+    private var phaseColor: Color {
+        switch runtimePhase {
+        case .idle:
+            return AgentColor.textMuted
+        case .thinking, .planning:
+            return AgentColor.accent
+        case .executing:
+            return AgentColor.warning
+        case .completed:
+            return AgentColor.success
+        case .failed, .cancelled:
+            return AgentColor.danger
+        }
+    }
+
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: AgentSpacing.lg) {
@@ -119,10 +142,10 @@ struct ReviewView: View {
                             .font(AgentFont.caption)
                             .foregroundColor(AgentColor.textMuted)
 
-                        Text(viewModel.executionState.rawValue)
+                        Text(phaseDisplayText)
                             .font(AgentFont.captionSmall)
                             .fontWeight(.bold)
-                            .foregroundColor(viewModel.executionState.color)
+                            .foregroundColor(phaseColor)
                     }
                 }
                 .padding(AgentSpacing.lg)
