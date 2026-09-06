@@ -115,6 +115,29 @@ class TestLLMCatalog(unittest.TestCase):
             with self.assertRaises(DownloadError):
                 download_model(bad, dest_dir=Path(tmp))
 
+    def test_download_allows_hf_co_cdn(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            src = Path(tmp) / "src.gguf"
+            write_minimal_gguf(src)
+            payload = src.read_bytes()
+            spec = spec_by_id("qwen25-0.5b-q4")
+            tiny = spec.__class__(
+                **{
+                    **spec.__dict__,
+                    "id": "toy-hf",
+                    "download_url": "https://cas-bridge.xethub.hf.co/example/toy.gguf",
+                    "filename": "toy-hf.gguf",
+                    "sha256": None,
+                    "approximate_bytes": len(payload),
+                }
+            )
+
+            def opener(req, timeout=0):
+                return _FakeHTTP(payload)
+
+            dest = download_model(tiny, dest_dir=Path(tmp), opener=opener)
+            self.assertTrue(is_gguf(dest))
+
 
 class TestOpenAIChatProvider(unittest.TestCase):
     def test_generate_parses_choices(self):

@@ -18,6 +18,7 @@ Local LLM catalog (tiny → medium GGUF), on-device + cloud providers on iOS, ne
 - HTTPS download with host allow-list, optional SHA-256, GGUF header inspect. Weights only — no executable code.
 - iOS backends: On-device, OpenAI, OpenRouter, xAI, Ollama/llama.cpp, custom OpenAI-compatible.
 - Privacy mode blocks cloud providers. API keys stored in Keychain.
+- Download allow-list includes Hugging Face (`huggingface.co`, `hf.co`) and GitHub object storage.
 - Python `core.llm` catalog/download/OpenAI chat client; optional `llama-cpp-python` via `provider=gguf`.
 - App wires `RoutingLanguageModelProvider` into `AgentRuntime`. Cheap loop still runs if the LLM sidecar is down.
 

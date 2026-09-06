@@ -117,6 +117,12 @@
 		004000 /* LanguageModelProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LanguageModelProvider.swift; sourceTree = "<group>"; };
 		004002 /* MockLanguageModelProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MockLanguageModelProvider.swift; sourceTree = "<group>"; };
 		004004 /* LanguageModelProviderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LanguageModelProviderTests.swift; sourceTree = "<group>"; };
+		005000 /* ModelCatalog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModelCatalog.swift; sourceTree = "<group>"; };
+		005002 /* ModelDownloadManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModelDownloadManager.swift; sourceTree = "<group>"; };
+		005004 /* OpenAICompatibleProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OpenAICompatibleProvider.swift; sourceTree = "<group>"; };
+		005006 /* RoutingLanguageModelProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoutingLanguageModelProvider.swift; sourceTree = "<group>"; };
+		005010 /* LLMProviderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LLMProviderTests.swift; sourceTree = "<group>"; };
+		005020 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -494,6 +500,7 @@
 			files = (
 				001031 /* LocalAgentServiceTests.swift in Sources */,
 				004005 /* LanguageModelProviderTests.swift in Sources */,
+				005011 /* LLMProviderTests.swift in Sources */,
 				001001 /* AgentAPIModels.swift in Sources */,
 				001003 /* AgentRuntimeContract.swift in Sources */,
 				001005 /* LocalAgentService.swift in Sources */,

@@ -16,6 +16,7 @@ from core.llm.catalog import ModelSpec, models_dir
 _ALLOWED_HOSTS = (
     "huggingface.co",
     "cdn-lfs.huggingface.co",
+    "hf.co",
     "github.com",
     "objects.githubusercontent.com",
 )

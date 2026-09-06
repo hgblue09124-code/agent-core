@@ -1,6 +1,7 @@
 // ios/AgentCoreIOS/Providers/ModelDownloadManager.swift
 // Resume-friendly GGUF downloader. Weights only. HTTPS (or file:// in tests).
 
+import Combine
 import CryptoKit
 import Foundation
 
@@ -100,23 +101,33 @@ public final class ModelDownloadManager: ObservableObject, @unchecked Sendable {
         progress[spec.id] = 0.05
         statusText[spec.id] = "Downloading"
 
-        var request = URLRequest(url: spec.downloadURL)
-        request.setValue("Agent-Core-iOS/0.2.0", forHTTPHeaderField: "User-Agent")
-        request.timeoutInterval = 600
+        let isLocalFile = spec.downloadURL.isFileURL
+        let staged: URL
+        if isLocalFile {
+            staged = spec.downloadURL
+            guard fileManager.fileExists(atPath: staged.path) else {
+                throw LanguageModelError.downloadFailed("Local file not found")
+            }
+        } else {
+            var request = URLRequest(url: spec.downloadURL)
+            request.setValue("Agent-Core-iOS/0.2.0", forHTTPHeaderField: "User-Agent")
+            request.timeoutInterval = 600
 
-        let (fileURL, response) = try await session.download(for: request)
-        if let http = response as? HTTPURLResponse, !(200...299).contains(http.statusCode) {
-            throw LanguageModelError.downloadFailed("HTTP \(http.statusCode)")
+            let (fileURL, response) = try await session.download(for: request)
+            if let http = response as? HTTPURLResponse, !(200...299).contains(http.statusCode) {
+                throw LanguageModelError.downloadFailed("HTTP \(http.statusCode)")
+            }
+            staged = fileURL
         }
 
-        let attrs = try fileManager.attributesOfItem(atPath: fileURL.path)
+        let attrs = try fileManager.attributesOfItem(atPath: staged.path)
         let size = (attrs[.size] as? NSNumber)?.int64Value ?? 0
         if size > maxBytes {
-            try? fileManager.removeItem(at: fileURL)
+            if !isLocalFile { try? fileManager.removeItem(at: staged) }
             throw LanguageModelError.downloadFailed("File exceeds disk budget")
         }
         if spec.approximateBytes > 0, size > 64, size < spec.approximateBytes / 4 {
-            try? fileManager.removeItem(at: fileURL)
+            if !isLocalFile { try? fileManager.removeItem(at: staged) }
             throw LanguageModelError.downloadFailed("Downloaded file is unexpectedly small")
         }
 
@@ -124,24 +135,28 @@ public final class ModelDownloadManager: ObservableObject, @unchecked Sendable {
         statusText[spec.id] = "Verifying"
 
         if let expected = spec.sha256, !expected.isEmpty {
-            let data = try Data(contentsOf: fileURL, options: [.mappedIfSafe])
+            let data = try Data(contentsOf: staged, options: [.mappedIfSafe])
             let digest = SHA256.hash(data: data)
             let hex = digest.map { String(format: "%02x", $0) }.joined()
             if hex != expected.lowercased() {
-                try? fileManager.removeItem(at: fileURL)
+                if !isLocalFile { try? fileManager.removeItem(at: staged) }
                 throw LanguageModelError.downloadFailed("SHA-256 mismatch")
             }
         }
 
-        guard GGUFHeader.isGGUF(fileAt: fileURL) else {
-            try? fileManager.removeItem(at: fileURL)
+        guard GGUFHeader.isGGUF(fileAt: staged) else {
+            if !isLocalFile { try? fileManager.removeItem(at: staged) }
             throw LanguageModelError.invalidModelFile("Not a GGUF weight file")
         }
 
         if fileManager.fileExists(atPath: dest.path) {
             try fileManager.removeItem(at: dest)
         }
-        try fileManager.moveItem(at: fileURL, to: dest)
+        if isLocalFile {
+            try fileManager.copyItem(at: staged, to: dest)
+        } else {
+            try fileManager.moveItem(at: staged, to: dest)
+        }
 
         progress[spec.id] = 1
         statusText[spec.id] = "Ready"
@@ -161,7 +176,13 @@ public final class ModelDownloadManager: ObservableObject, @unchecked Sendable {
             throw LanguageModelError.downloadFailed("Downloads must use HTTPS")
         }
         let host = url.host?.lowercased() ?? ""
-        let allowed = ["huggingface.co", "cdn-lfs.huggingface.co", "github.com", "objects.githubusercontent.com"]
+        let allowed = [
+            "huggingface.co",
+            "cdn-lfs.huggingface.co",
+            "hf.co",
+            "github.com",
+            "objects.githubusercontent.com",
+        ]
         if !allowed.contains(where: { host == $0 || host.hasSuffix("." + $0) }) {
             throw LanguageModelError.downloadFailed("Host not in allow-list: \(host)")
         }
