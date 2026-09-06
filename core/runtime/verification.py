@@ -5,14 +5,35 @@ Pipeline:
     EXECUTE → OBSERVE_RESULT → VERIFY
 
 Prevents LLM self-certification by verifying evidence, status, and expected outcome.
+Distinguishes individual ActionResult from overall GoalVerificationResult.
 """
 
 from __future__ import annotations
 
+from dataclasses import dataclass, field
 from typing import Any, Optional
 
 from core.capabilities.schema import CapabilityResult
 from core.runtime.state import AgentAction, Observation, VerificationResult
+
+
+@dataclass
+class ActionResult:
+    """Independent representation of an individual action execution result."""
+    action_id: str
+    success: bool
+    status: str
+    output: Any = None
+    error: str = ""
+    evidence: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass
+class GoalVerificationResult:
+    """Independent representation of overarching goal satisfaction evaluation."""
+    goal_satisfied: bool
+    reason: str
+    evidence_summary: dict[str, Any] = field(default_factory=dict)
 
 
 class VerificationEngine:
@@ -61,14 +82,61 @@ class VerificationEngine:
                 goal_satisfied=False,
             )
 
-        # Basic evidence validity check
         evidence_valid = bool(output is not None or evidence)
 
         return VerificationResult(
             verdict="PASS",
             reason=f"Action '{action.action_id}' executed successfully and verified against expected outcome.",
             evidence_valid=evidence_valid,
-            goal_satisfied=False,  # Loop controller will evaluate overall goal satisfaction
+            goal_satisfied=False,
+        )
+
+    def evaluate_goal_verification(
+        self,
+        goal: str,
+        completed_actions: list[AgentAction],
+        observations: list[Observation],
+        verifications: list[VerificationResult],
+    ) -> GoalVerificationResult:
+        """Evaluate overarching goal satisfaction based on evidence and action verifications.
+
+        Action success != Goal success. Goal satisfaction requires valid observable evidence.
+        """
+        if not verifications or not completed_actions:
+            return GoalVerificationResult(
+                goal_satisfied=False,
+                reason="No completed actions or verifications recorded for goal",
+            )
+
+        # Fail if any verification in completed actions failed or was inconclusive
+        recent_verifs = verifications[-len(completed_actions):]
+        if any(v.verdict in ("FAIL", "INCONCLUSIVE") for v in recent_verifs):
+            return GoalVerificationResult(
+                goal_satisfied=False,
+                reason="Recent action verifications contain FAIL or INCONCLUSIVE verdicts",
+            )
+
+        # Check for evidence in observations
+        valid_evidences = []
+        for obs in observations:
+            if obs.output and "evidence_missing" in str(obs.output).lower():
+                return GoalVerificationResult(
+                    goal_satisfied=False,
+                    reason="Observable evidence is marked missing or incomplete",
+                )
+            if obs.output or obs.evidence:
+                valid_evidences.append(obs.output or obs.evidence)
+
+        if not valid_evidences:
+            return GoalVerificationResult(
+                goal_satisfied=False,
+                reason="No verifiable evidence returned by completed actions",
+            )
+
+        return GoalVerificationResult(
+            goal_satisfied=True,
+            reason=f"Goal '{goal}' satisfied with {len(valid_evidences)} verified evidence outputs.",
+            evidence_summary={"evidence_count": len(valid_evidences)},
         )
 
     def verify_goal_satisfaction(
@@ -78,19 +146,6 @@ class VerificationEngine:
         observations: list[Observation],
         verifications: list[VerificationResult],
     ) -> bool:
-        """Determine whether the overarching user goal is satisfied based on evidence.
-
-        Distinguishes individual execution success from overarching goal success.
-        """
-        if not verifications:
-            return False
-
-        # All recent verifications must pass
-        if any(v.verdict in ("FAIL", "INCONCLUSIVE") for v in verifications[-len(completed_actions):]):
-            return False
-
-        if not completed_actions:
-            return False
-
-        # Goal is satisfied if at least one completed action produced passing evidence
-        return any(v.verdict == "PASS" for v in verifications)
+        """Determine whether the overarching user goal is satisfied based on evidence."""
+        res = self.evaluate_goal_verification(goal, completed_actions, observations, verifications)
+        return res.goal_satisfied

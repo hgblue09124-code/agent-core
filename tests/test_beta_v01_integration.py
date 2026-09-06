@@ -213,8 +213,8 @@ class TestAgentBetaV01AcceptanceFlow(unittest.TestCase):
         )
 
         self.assertFalse(res.success)
-        self.assertEqual(res.status, "FAILED")
-        self.assertTrue(any("Policy/Permission denial" in err for err in res.errors))
+        self.assertIn(res.status, ("WAITING_FOR_USER", "FAILED"))
+        self.assertTrue(any("Policy/Permission denial" in err or "requires explicit user approval" in err or "denied" in err for err in res.errors))
 
     def test_capability_failure_does_not_compromise_core_integrity(self):
         """Verify capability runtime exception is handled safely without crashing Core."""
@@ -246,12 +246,16 @@ class TestAgentBetaV01AcceptanceFlow(unittest.TestCase):
 
     def test_agent_resume_non_terminal_run(self):
         """Verify an interrupted run can be resumed from authoritative checkpoint."""
-        # Initial run
-        res = self.agent.run("Initial run for resume test")
-        self.assertTrue(res.success)
+        # Initial run requiring user approval -> WAITING_FOR_USER
+        res = self.agent.run(
+            "Initial run for resume test",
+            capability_dispatch=("github_integration", {"action": "create_issue", "owner": "hgblue09124", "repo": "agent-core", "title": "test", "mock_offline": True}),
+            user_approved=False,
+        )
+        self.assertEqual(res.status, "WAITING_FOR_USER")
 
         # Resume the run using run_id
-        resumed_res = self.agent.resume(res.run_id)
+        resumed_res = self.agent.resume(res.run_id, user_approved=True)
         self.assertEqual(resumed_res.run_id, res.run_id)
         self.assertTrue(resumed_res.success)
         self.assertIn(f"Resumed run '{res.run_id}'", resumed_res.observations[0])

@@ -8,10 +8,10 @@ Verifies actual observable behavior across a 16-step realistic Personal Agent wo
 3. Retrieve personal information from Vault
 4. Update personal information in Vault
 5. Perform basic reasoning task
-6. Create multi-step plan task
+6. Create multi-step plan task requiring approval
 7. Discover registered capabilities
 8. Execute safe read-only capability
-9. Attempt restricted write capability without approval -> DENIED
+9. Attempt restricted write capability without approval -> WAITING_FOR_USER
 10. Execute same approved write capability -> SUCCESS
 11. Record experience
 12. Persist state
@@ -88,15 +88,15 @@ class TestPersonalAgentRealUseWorkflow(unittest.TestCase):
         self.assertTrue(res_safe.success)
         self.assertEqual(res_safe.status, "SUCCESS")
 
-        # 9. Attempt restricted/write capability without approval -> DENIED
-        res_unapproved: CapabilityResult = agent.execute_capability(
-            "github_integration",
-            {"action": "create_issue_comment", "owner": "hgblue09124", "repo": "agent-core", "issue_number": 1, "body": "unapproved comment"},
+        # 9. Attempt restricted/write capability without approval -> WAITING_FOR_USER
+        res_unapproved: AgentRunResult = agent.run(
+            "Attempt unapproved write action task",
+            capability_dispatch=("github_integration", {"action": "create_issue_comment", "owner": "hgblue09124", "repo": "agent-core", "issue_number": 1, "body": "unapproved comment", "mock_offline": True}),
             user_approved=False,
         )
         self.assertFalse(res_unapproved.success)
-        self.assertEqual(res_unapproved.status, "DENIED")
-        self.assertIn("requires explicit user approval", res_unapproved.error)
+        self.assertEqual(res_unapproved.status, "WAITING_FOR_USER")
+        run_id_to_resume = res_unapproved.run_id
 
         # 10. Execute same approved write action -> SUCCESS
         res_approved: CapabilityResult = agent.execute_capability(
@@ -113,22 +113,21 @@ class TestPersonalAgentRealUseWorkflow(unittest.TestCase):
         self.assertEqual(exp.run_id, res_plan.run_id)
 
         # 12. Persist state (happens automatically via atomic file persistence)
-        run_id_to_resume = res_plan.run_id
 
         # 13. Create fresh Agent instance (simulating process restart)
         fresh_agent = Agent(project_id="default")
         self.assertIsNotNone(fresh_agent)
 
         # 14. Verify persisted memory/experience on fresh instance
-        persisted_exp = fresh_agent._experience_engine.get_experience(run_id_to_resume)
+        persisted_exp = fresh_agent._experience_engine.get_experience(res_plan.run_id)
         self.assertIsNotNone(persisted_exp)
-        self.assertEqual(persisted_exp.run_id, run_id_to_resume)
+        self.assertEqual(persisted_exp.run_id, res_plan.run_id)
 
         persisted_vault = fresh_agent._vault.retrieve_context("new_email@example.com")
         self.assertEqual(len(persisted_vault), 1)
 
-        # 15. Resume previous run on fresh instance
-        resumed_res = fresh_agent.resume(run_id_to_resume)
+        # 15. Resume previous WAITING_FOR_USER run on fresh instance with user approval
+        resumed_res = fresh_agent.resume(run_id_to_resume, user_approved=True)
         self.assertEqual(resumed_res.run_id, run_id_to_resume)
         self.assertTrue(resumed_res.success)
 

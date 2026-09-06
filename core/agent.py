@@ -44,7 +44,7 @@ from core.learning.retrieval import StrategyRanker
 from core.events.bus import EventBus
 from core.events.schema import new_event, EventPhase, EventStatus
 from core.runtime.loop import AgentLoopController, LoopStateStore
-from core.runtime.state import AgentLoopState, AgentLoopStatus
+from core.runtime.state import AgentLoopState, AgentLoopStatus, AgentAction
 
 
 @dataclass
@@ -211,7 +211,9 @@ class Agent:
         project_id: Optional[str] = None,
         verbose: bool = False,
         capability_dispatch: Optional[tuple[str, dict[str, Any]]] = None,
+        plan_actions: Optional[list[AgentAction]] = None,
         user_approved: bool = False,
+        timeout_seconds: Optional[float] = None,
     ) -> AgentRunResult:
         """Execute a user task through the closed-loop Agent Loop runtime pipeline.
 
@@ -289,6 +291,8 @@ class Agent:
             project_id=pid,
             user_approved=user_approved,
             capability_dispatch=capability_dispatch,
+            plan_actions=plan_actions,
+            timeout_seconds=timeout_seconds,
         )
 
         elapsed = time.time() - t0
@@ -315,7 +319,7 @@ class Agent:
                 obs_text.append(f"Observation ({o.action_id}): status={o.status}, output={o.output}")
 
         errors = [loop_state.error] if loop_state.error else []
-        is_authorized = not (loop_state.status == AgentLoopStatus.FAILED.value and ("Policy DENY" in loop_state.error or "denied" in loop_state.error or "requires explicit user approval" in loop_state.error))
+        is_authorized = not (loop_state.status == AgentLoopStatus.FAILED.value and ("Policy DENY" in loop_state.error or "denied" in loop_state.error))
 
         return AgentRunResult(
             run_id=loop_state.run_id,
@@ -327,7 +331,7 @@ class Agent:
             authorized=is_authorized,
             verification_verdict=verdict,
             duration_seconds=elapsed,
-            llm_calls=0,
+            llm_calls=loop_state.telemetry.llm_calls,
             experience_recorded=exp_recorded,
             errors=errors,
             observations=obs_text,
@@ -335,10 +339,10 @@ class Agent:
 
     # ── Continuation & Resumption ───────────────────────────────────────────
 
-    def resume(self, run_id: str, user_approved: bool = True) -> AgentRunResult:
+    def resume(self, run_id: str, user_approved: bool = True, timeout_seconds: Optional[float] = None) -> AgentRunResult:
         """Resume an interrupted or WAITING_FOR_USER task from checkpoint."""
         t0 = time.time()
-        loop_state, exp_recorded = self._loop_controller.resume(run_id, user_approved=user_approved)
+        loop_state, exp_recorded = self._loop_controller.resume(run_id, user_approved=user_approved, timeout_seconds=timeout_seconds)
         elapsed = time.time() - t0
 
         verdict = "PASS" if loop_state.status == AgentLoopStatus.COMPLETED.value else ("PENDING" if loop_state.status == AgentLoopStatus.WAITING_FOR_USER.value else "FAIL")
@@ -355,10 +359,29 @@ class Agent:
             authorized=True,
             verification_verdict=verdict,
             duration_seconds=elapsed,
-            llm_calls=0,
+            llm_calls=loop_state.telemetry.llm_calls,
             experience_recorded=exp_recorded,
             errors=[loop_state.error] if loop_state.error else [],
             observations=obs_text,
+        )
+
+    def cancel(self, run_id: str, reason: str = "User requested cancellation") -> AgentRunResult:
+        """Cancel a running or paused task."""
+        loop_state, _ = self._loop_controller.cancel(run_id, reason=reason)
+        return AgentRunResult(
+            run_id=loop_state.run_id,
+            project_id=loop_state.project_id,
+            goal=loop_state.goal,
+            status=loop_state.status,
+            phase=loop_state.phase,
+            plan_steps=loop_state.plan,
+            authorized=True,
+            verification_verdict="FAIL",
+            duration_seconds=0.0,
+            llm_calls=0,
+            experience_recorded=False,
+            errors=[loop_state.error],
+            observations=[],
         )
 
     def inspect_run(self, run_id: str) -> Optional[dict]:

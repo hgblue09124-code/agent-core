@@ -3,16 +3,22 @@
 
 Phases:
     BOOTSTRAP → OBSERVE → RETRIEVE → REASON → PLAN → DECIDE → AUTHORIZE →
-    EXECUTE → OBSERVE_RESULT → VERIFY → LEARN → REPLAN / WAITING_FOR_USER / CONTINUE / COMPLETE / FAILED
+    EXECUTE → OBSERVE_RESULT → VERIFY → LEARN → REPLAN / WAITING_FOR_USER / CONTINUE / COMPLETE / FAILED / TIMEOUT / CANCELLED
 """
 
 from __future__ import annotations
 
 import copy
+import time
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from enum import Enum
 from typing import Any, Optional
+
+
+class InvalidStateTransitionError(Exception):
+    """Raised when an illegal state transition is attempted from a terminal state."""
+    pass
 
 
 class AgentLoopPhase(str, Enum):
@@ -41,8 +47,39 @@ class AgentLoopStatus(str, Enum):
     WAITING_FOR_USER = "WAITING_FOR_USER"
     COMPLETED        = "COMPLETED"
     FAILED           = "FAILED"
+    CANCELLED        = "CANCELLED"
+    TIMEOUT          = "TIMEOUT"
     BLOCKED          = "BLOCKED"
     BUDGET_EXCEEDED  = "BUDGET_EXCEEDED"
+
+
+TERMINAL_STATUSES = {
+    AgentLoopStatus.COMPLETED.value,
+    AgentLoopStatus.FAILED.value,
+    AgentLoopStatus.CANCELLED.value,
+    AgentLoopStatus.TIMEOUT.value,
+    AgentLoopStatus.BUDGET_EXCEEDED.value,
+}
+
+
+@dataclass
+class TimeBudget:
+    """Explicit runtime time budget with deadline and expiration tracking."""
+    timeout_seconds: float = 600.0
+    start_time: float = field(default_factory=time.time)
+
+    @property
+    def deadline(self) -> float:
+        return self.start_time + self.timeout_seconds
+
+    def remaining_seconds(self) -> float:
+        return max(0.0, self.deadline - time.time())
+
+    def elapsed_seconds(self) -> float:
+        return max(0.0, time.time() - self.start_time)
+
+    def is_expired(self) -> bool:
+        return time.time() >= self.deadline
 
 
 @dataclass
@@ -122,6 +159,53 @@ class VerificationResult:
 
 
 @dataclass
+class AgentLoopTelemetry:
+    """Runtime instrumentation telemetry for an agent loop run."""
+    iterations: int = 0
+    actions_executed: int = 0
+    llm_calls: int = 0
+    tool_calls: int = 0
+    retrieval_calls: int = 0
+    verification_calls: int = 0
+    replans: int = 0
+    retries: int = 0
+    elapsed_seconds: float = 0.0
+    remaining_seconds: float = 0.0
+    final_state: str = AgentLoopStatus.PENDING.value
+
+    def to_dict(self) -> dict:
+        return {
+            "iterations": self.iterations,
+            "actions_executed": self.actions_executed,
+            "llm_calls": self.llm_calls,
+            "tool_calls": self.tool_calls,
+            "retrieval_calls": self.retrieval_calls,
+            "verification_calls": self.verification_calls,
+            "replans": self.replans,
+            "retries": self.retries,
+            "elapsed_seconds": round(self.elapsed_seconds, 3),
+            "remaining_seconds": round(self.remaining_seconds, 3),
+            "final_state": self.final_state,
+        }
+
+    @classmethod
+    def from_dict(cls, d: dict) -> "AgentLoopTelemetry":
+        return cls(
+            iterations=d.get("iterations", 0),
+            actions_executed=d.get("actions_executed", 0),
+            llm_calls=d.get("llm_calls", 0),
+            tool_calls=d.get("tool_calls", 0),
+            retrieval_calls=d.get("retrieval_calls", 0),
+            verification_calls=d.get("verification_calls", 0),
+            replans=d.get("replans", 0),
+            retries=d.get("retries", 0),
+            elapsed_seconds=d.get("elapsed_seconds", 0.0),
+            remaining_seconds=d.get("remaining_seconds", 0.0),
+            final_state=d.get("final_state", AgentLoopStatus.PENDING.value),
+        )
+
+
+@dataclass
 class AgentLoopState:
     """Serializable, durable state machine model for Agent Loop."""
     run_id: str
@@ -148,9 +232,32 @@ class AgentLoopState:
     started_at: str = ""
     updated_at: str = ""
     finished_at: str = ""
+    telemetry: AgentLoopTelemetry = field(default_factory=AgentLoopTelemetry)
 
     def now_str(self) -> str:
         return datetime.now(timezone.utc).isoformat()
+
+    @property
+    def is_terminal(self) -> bool:
+        return self.status in TERMINAL_STATUSES
+
+    def transition_to(self, new_status: Union[AgentLoopStatus, str], new_phase: Union[AgentLoopPhase, str], error: str = "") -> None:
+        """Safely transition state machine, preventing illegal transitions out of terminal states."""
+        target_status = new_status.value if isinstance(new_status, AgentLoopStatus) else new_status
+        target_phase = new_phase.value if isinstance(new_phase, AgentLoopPhase) else new_phase
+
+        if self.is_terminal:
+            raise InvalidStateTransitionError(
+                f"Cannot transition state '{self.run_id}' out of terminal status '{self.status}' to '{target_status}'"
+            )
+
+        self.status = target_status
+        self.phase = target_phase
+        if error:
+            self.error = error
+        self.updated_at = self.now_str()
+        if self.is_terminal and not self.finished_at:
+            self.finished_at = self.now_str()
 
     def to_dict(self) -> dict:
         return {
@@ -178,6 +285,7 @@ class AgentLoopState:
             "started_at": self.started_at,
             "updated_at": self.updated_at,
             "finished_at": self.finished_at,
+            "telemetry": self.telemetry.to_dict(),
         }
 
     @classmethod
@@ -207,6 +315,7 @@ class AgentLoopState:
         ]
         comp_acts = [AgentAction.from_dict(a) for a in d.get("completed_actions", [])]
         fail_acts = [AgentAction.from_dict(a) for a in d.get("failed_actions", [])]
+        telem = AgentLoopTelemetry.from_dict(d.get("telemetry", {}))
 
         return cls(
             run_id=d["run_id"],
@@ -233,4 +342,5 @@ class AgentLoopState:
             started_at=d.get("started_at", ""),
             updated_at=d.get("updated_at", ""),
             finished_at=d.get("finished_at", ""),
+            telemetry=telem,
         )
