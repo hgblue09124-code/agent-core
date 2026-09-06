@@ -78,6 +78,7 @@ public final class AgentRuntime: @unchecked Sendable {
         capabilityDispatch: (capabilityId: String, input: [String: String])? = nil,
         onEvent: @escaping @Sendable (AgentRunEvent) -> Void
     ) async -> AgentRunResult {
+        let startTime = Date()
         let trimmedGoal = goal.trimmingCharacters(in: .whitespacesAndNewlines)
         let seq = Int(Date().timeIntervalSince1970 * 1000) % 100000
         let runId = String(format: "RUN-%05d", seq)
@@ -88,19 +89,6 @@ public final class AgentRuntime: @unchecked Sendable {
             activeRunIds.remove(runId)
             isRunningTask = false
             isThinking = false
-        }
-
-        if cancelledRuns.contains(runId) {
-            let res = AgentRunResult(
-                runId: runId,
-                status: .failed,
-                goal: trimmedGoal,
-                errorCode: "CANCELLED",
-                errorMessage: "Run was cancelled before execution",
-                authorized: false,
-                verificationVerdict: "CANCELLED"
-            )
-            return res
         }
 
         var events: [AgentRunEvent] = []
@@ -117,9 +105,25 @@ public final class AgentRuntime: @unchecked Sendable {
             onEvent(ev)
         }
 
+        if cancelledRuns.contains(runId) {
+            let duration = Date().timeIntervalSince(startTime)
+            let res = AgentRunResult(
+                runId: runId,
+                status: .failed,
+                goal: trimmedGoal,
+                errorCode: "CANCELLED",
+                errorMessage: "Run was cancelled before execution",
+                authorized: false,
+                verificationVerdict: "CANCELLED"
+            )
+            _ = experienceStore.record(runId: runId, goal: trimmedGoal, outcome: "cancelled", durationSeconds: duration)
+            return res
+        }
+
         emit(.taskStarted, .running, "Task execution started for goal: \(trimmedGoal)")
 
         if trimmedGoal.isEmpty {
+            let duration = Date().timeIntervalSince(startTime)
             let res = AgentRunResult(
                 runId: runId,
                 status: .failed,
@@ -132,7 +136,7 @@ public final class AgentRuntime: @unchecked Sendable {
             emit(.taskFailed, .error, "Task failed due to invalid input")
             runEventsMap[runId] = events
             checkpointStore.save(result: res)
-            _ = experienceStore.record(runId: runId, goal: goal, outcome: "failed")
+            _ = experienceStore.record(runId: runId, goal: goal, outcome: "failed", durationSeconds: duration)
             return res
         }
 
@@ -141,6 +145,7 @@ public final class AgentRuntime: @unchecked Sendable {
         let isMutatingGoal = writeKeywords.contains(where: { goalWords.contains($0) })
 
         if isMutatingGoal && !userApproved {
+            let duration = Date().timeIntervalSince(startTime)
             let permReq = PermissionRequest(
                 runId: runId,
                 capabilityId: "core.policy",
@@ -162,11 +167,29 @@ public final class AgentRuntime: @unchecked Sendable {
             emit(.taskFailed, .error, "Policy denial: user approval required")
             runEventsMap[runId] = events
             checkpointStore.save(result: res)
-            _ = experienceStore.record(runId: runId, goal: trimmedGoal, outcome: "denied")
+            _ = experienceStore.record(runId: runId, goal: trimmedGoal, outcome: "denied", durationSeconds: duration)
             return res
         }
 
         if let dispatch = capabilityDispatch {
+            if cancelledRuns.contains(runId) {
+                let duration = Date().timeIntervalSince(startTime)
+                let res = AgentRunResult(
+                    runId: runId,
+                    status: .failed,
+                    goal: trimmedGoal,
+                    errorCode: "CANCELLED",
+                    errorMessage: "Task execution was cancelled by user.",
+                    authorized: false,
+                    verificationVerdict: "CANCELLED"
+                )
+                emit(.taskFailed, .error, "Task execution cancelled by user")
+                runEventsMap[runId] = events
+                checkpointStore.save(result: res)
+                _ = experienceStore.record(runId: runId, goal: trimmedGoal, outcome: "cancelled", durationSeconds: duration)
+                return res
+            }
+
             emit(.execution, .running, "Executing capability action: \(dispatch.input["action"] ?? dispatch.capabilityId)")
             let capRes = await executeCapability(
                 capabilityId: dispatch.capabilityId,
@@ -174,6 +197,7 @@ public final class AgentRuntime: @unchecked Sendable {
                 userApproved: userApproved
             )
             if capRes.status == .denied {
+                let duration = Date().timeIntervalSince(startTime)
                 let permReq = PermissionRequest(
                     runId: runId,
                     capabilityId: dispatch.capabilityId,
@@ -195,9 +219,27 @@ public final class AgentRuntime: @unchecked Sendable {
                 emit(.taskFailed, .error, "Capability execution denied by policy")
                 runEventsMap[runId] = events
                 checkpointStore.save(result: res)
-                _ = experienceStore.record(runId: runId, goal: trimmedGoal, outcome: "denied")
+                _ = experienceStore.record(runId: runId, goal: trimmedGoal, outcome: "denied", durationSeconds: duration)
                 return res
             }
+        }
+
+        if cancelledRuns.contains(runId) {
+            let duration = Date().timeIntervalSince(startTime)
+            let res = AgentRunResult(
+                runId: runId,
+                status: .failed,
+                goal: trimmedGoal,
+                errorCode: "CANCELLED",
+                errorMessage: "Task execution was cancelled by user.",
+                authorized: false,
+                verificationVerdict: "CANCELLED"
+            )
+            emit(.taskFailed, .error, "Task execution cancelled by user")
+            runEventsMap[runId] = events
+            checkpointStore.save(result: res)
+            _ = experienceStore.record(runId: runId, goal: trimmedGoal, outcome: "cancelled", durationSeconds: duration)
+            return res
         }
 
         isThinking = true
@@ -210,6 +252,7 @@ public final class AgentRuntime: @unchecked Sendable {
 
         emit(.verify, .pass, "Verification verdict PASS")
 
+        let duration = Date().timeIntervalSince(startTime)
         let result = AgentRunResult(
             runId: runId,
             status: .success,
@@ -223,7 +266,7 @@ public final class AgentRuntime: @unchecked Sendable {
         emit(.taskCompleted, .ok, "Task completed successfully")
         runEventsMap[runId] = events
         checkpointStore.save(result: result)
-        _ = experienceStore.record(runId: runId, goal: trimmedGoal, outcome: "success")
+        _ = experienceStore.record(runId: runId, goal: trimmedGoal, outcome: "success", durationSeconds: duration)
 
         return result
     }
@@ -260,7 +303,7 @@ public final class AgentRuntime: @unchecked Sendable {
             verificationVerdict: "CANCELLED"
         )
         checkpointStore.save(result: cancelled)
-        _ = experienceStore.record(runId: runId, goal: existingGoal, outcome: "cancelled")
+        _ = experienceStore.record(runId: runId, goal: existingGoal, outcome: "cancelled", durationSeconds: 0.0)
         return cancelled
     }
 
@@ -294,7 +337,7 @@ public final class AgentRuntime: @unchecked Sendable {
                 runId: exp.runId,
                 goal: exp.goal,
                 status: status,
-                durationSeconds: 0.0,
+                durationSeconds: exp.durationSeconds,
                 createdAt: exp.timestamp
             )
             records.append(record)

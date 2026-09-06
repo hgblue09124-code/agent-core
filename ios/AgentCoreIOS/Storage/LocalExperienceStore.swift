@@ -47,8 +47,8 @@ public final class LocalExperienceStore: @unchecked Sendable {
         }
     }
 
-    public func record(runId: String, goal: String, outcome: String) -> Experience {
-        let exp = Experience(runId: runId, goal: goal, outcome: outcome)
+    public func record(runId: String, goal: String, outcome: String, durationSeconds: Double = 0.0) -> Experience {
+        let exp = Experience(runId: runId, goal: goal, outcome: outcome, durationSeconds: durationSeconds)
         experiences[runId] = exp
         saveToDisk()
         return exp

@@ -147,17 +147,20 @@ public struct Experience: Codable, Sendable, Identifiable {
     public let runId: String
     public let goal: String
     public let outcome: String
+    public let durationSeconds: Double
     public let timestamp: String
 
     public init(
         runId: String,
         goal: String,
         outcome: String,
+        durationSeconds: Double = 0.0,
         timestamp: String = ISO8601DateFormatter().string(from: Date())
     ) {
         self.runId = runId
         self.goal = goal
         self.outcome = outcome
+        self.durationSeconds = durationSeconds
         self.timestamp = timestamp
     }
 }

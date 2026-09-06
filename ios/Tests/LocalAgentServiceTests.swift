@@ -376,6 +376,7 @@ final class LocalAgentServiceTests: XCTestCase {
         XCTAssertTrue(successOnly.allSatisfy { $0.status == .success })
         XCTAssertTrue(failedOnly.allSatisfy { $0.status == .failed || $0.status == .denied })
         XCTAssertTrue(failedOnly.contains(where: { $0.status == .denied }))
+        XCTAssertTrue(all.allSatisfy { $0.durationSeconds >= 0.0 })
     }
 
     func test23_vaultSummary_calculatesMetrics() async {
