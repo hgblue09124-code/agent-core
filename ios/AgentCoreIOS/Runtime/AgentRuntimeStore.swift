@@ -28,8 +28,7 @@ public final class AgentRuntimeStore: ObservableObject {
             return
         }
 
-        let runId = String(format: "RUN-%05d", Int(Date().timeIntervalSince1970 * 1000) % 100000)
-        send(.executionStarted(goal: trimmedGoal, executionId: runId))
+        send(.executionStarted(goal: trimmedGoal, executionId: "PENDING"))
 
         // Capture service (Sendable) immutably so the concurrent Task does not
         // need to touch the MainActor-isolated `self` until after the await.
@@ -42,7 +41,11 @@ public final class AgentRuntimeStore: ObservableObject {
                 capabilityDispatch: nil,
                 onEvent: { [weak self] runEvent in
                     Task { @MainActor [weak self] in
-                        self?.handleRunEvent(runEvent)
+                        guard let self else { return }
+                        if self.state.executionId == nil || self.state.executionId == "PENDING" {
+                            self.send(.executionStarted(goal: trimmedGoal, executionId: runEvent.runId))
+                        }
+                        self.handleRunEvent(runEvent)
                     }
                 }
             )
@@ -64,7 +67,11 @@ public final class AgentRuntimeStore: ObservableObject {
     }
 
     public func cancel() {
-        if let runId = state.executionId {
+        let phase = state.phase
+        guard phase == .thinking || phase == .planning || phase == .executing else {
+            return
+        }
+        if let runId = state.executionId, runId != "PENDING" {
             let currentService = service
             Task {
                 _ = await currentService.cancel(runId: runId)
@@ -108,6 +115,11 @@ public final class AgentRuntimeStore: ObservableObject {
 
         case .taskCompleted:
             send(.executionCompleted(output: event.summary))
+
+        case .verify:
+            if event.status == .fail || event.status == .error {
+                send(.executionFailed(error: event.summary))
+            }
 
         case .taskFailed:
             if event.payload?["errorCode"] == "CANCELLED" {

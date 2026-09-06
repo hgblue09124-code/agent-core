@@ -7,32 +7,35 @@ All notable changes to Agent-Core will be documented in this file.
 ## [Unreleased]
 
 ### Summary
-Source simplification, token/context packing, and a tag-driven unsigned IPA release pipeline. Behavior of the Personal Agent loop is unchanged (keyword plan + capability dispatch).
+AgentLoop is the Personal Agent orchestrator. Cheap classification skips the planner. Retrieve is relevance-gated. Swift runtime executes real steps and remember/forget intents. Dual-stack (Python kernel vs Swift local runtime) is unchanged.
 
-### Removed
-- Empty placeholder packages: `intelligence/`, `library/`, `core/skills`, `core/execution`, `core/tools`.
-- Duplicate / generated artifacts: root and verification iOS zips, `project.pbxproj.ready`, `scripts/pbxproj.b64.*`, deprecated pbxproj repair scripts.
-- Historical build reports: `PLANNER_REPORT.md`, `TASK_ENGINE_REPORT.md`, `PROJECT_INTEGRATION_REPORT.md`.
-- Unused `TaskManager` import on `Agent`; unused `KernelContextBuilder` attribute on `Kernel`.
-
-### Simplified
-- Planner prompt: compact output schema; constraints live in the static system prefix.
-- `ContextBuilder` truncates oversized docs (relevance-sliced when a query is present) instead of dropping them, and records `documents_excluded`.
-- Agent run results no longer re-fetch identity/vault to decorate every observation list.
+### Agent loop
+- Cheap path: remember / forget / short status goals skip planner and capability keyword matching.
+- Retrieve uses `needed_layers` — identity, vault, and strategies are not fetched for unrelated goals.
+- Successful runs no longer dump "Successfully executed goal …" into prompt memory.
+- REPLAN produces a different action set (excludes the failed capability) or fails closed.
+- Planner is called only when classification is complex **and** `AGENTCORE_PLANNER_PROVIDER` is not `mock`.
+- In-process `core.memory` actions for remember/forget; write GitHub still requires approval.
+- GitHub keyword plan mocks only when `GITHUB_TOKEN` is absent.
 
 ### Token / context
-- New `core/context/pack.py`: layered `ContextPack` (current_task / persistent / session / retrieved / tool_output) with per-layer budgets, relevance gating, and hash-based prompt dedup.
-- Agent loop persists the pack on `AgentLoopState` after RETRIEVE and truncates tool output **after** verification.
-- Planner accepts `extra_context`; Kernel retrieve → pack → `RuntimeEngine.run(..., extra_context=)`.
-- Kernel no longer fake-increments `llm_calls` in `reason()`.
+- Preference/UI goals pull persistent + retrieved layers.
+- Observation evidence compacted after verification.
+- `AgentRunResult.observations` no longer prepends retrieved pack text.
 
-### Release
-- CI generates the iOS source zip from live `ios/` (no zip-in-git).
-- IPA job runs on `master`/`main`/tags/`workflow_dispatch`; GitHub Release attach is **tags only**.
-- Version/build from git tag + `GITHUB_RUN_NUMBER`; IPA named `AgentCore-iOS-vVERSION-bBUILD-unsigned.ipa`.
-- Info.plist reads `$(MARKETING_VERSION)` / `$(CURRENT_PROJECT_VERSION)`.
-- Shared Xcode scheme committed. Archive-first unsigned packaging with build fallback. IPA job uploads logs on failure.
-- Default `contents: read`; write permission only on the IPA job.
+### Swift runtime
+- Remember/forget goals write the real memory store (no five fake PASS steps).
+- Other goals execute `mock.echo` per plan step; verify FAIL if a step fails.
+- `LanguageModelProvider` is used for planning when injected; otherwise `LocalDeterministicPlanner`.
+- Store adopts the runtime `runId` (no dual IDs). Idle cancel is a no-op.
+
+### CLI
+- Inspect prints loop `status`/`phase`. Run no longer claims TaskRunner.
+
+### Previously in this cycle
+- Empty placeholder packages and duplicate iOS zips / pbxproj blobs removed.
+- ContextPack layered budgets + hash dedup.
+- Tag-driven unsigned IPA pipeline.
 
 ---
 
