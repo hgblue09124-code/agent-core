@@ -114,21 +114,40 @@ struct HomeView: View {
                     }
                 }
 
-                // 4. Current Task Card
-                if runtimeState.phase == .executing || runtimeState.phase == .thinking || runtimeState.phase == .planning {
-                    CurrentTaskCard(
-                        goal: runtimeState.currentGoal,
-                        subtext: "Executing task on local kernel",
-                        progress: runtimeState.progress,
-                        status: .running
-                    )
-                } else if let last = viewModel.lastRunResult {
-                    CurrentTaskCard(
-                        goal: last.goal,
-                        subtext: last.status == .success ? "Task finished cleanly" : (last.errorMessage ?? "Task failed"),
-                        progress: last.status == .success ? 1.0 : 0.0,
-                        status: last.status == .success ? .ready : .running
-                    )
+                // 4. Current / Active Objective Card ("What is my Agent doing for me?")
+                VStack(alignment: .leading, spacing: AgentSpacing.sm) {
+                    Text("What my agent is doing")
+                        .font(AgentFont.caption)
+                        .foregroundColor(AgentColor.textMuted)
+
+                    if runtimeState.phase == .executing || runtimeState.phase == .thinking || runtimeState.phase == .planning {
+                        CurrentTaskCard(
+                            goal: runtimeState.currentGoal,
+                            subtext: "Agent is processing objective on local runtime",
+                            progress: runtimeState.progress,
+                            status: .running
+                        )
+                    } else if let last = viewModel.lastRunResult {
+                        CurrentTaskCard(
+                            goal: last.goal,
+                            subtext: last.status == .success ? "Objective completed cleanly" : (last.errorMessage ?? "Objective failed"),
+                            progress: last.status == .success ? 1.0 : 0.0,
+                            status: last.status == .success ? .ready : .running
+                        )
+                    } else {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("No active background objective")
+                                .font(AgentFont.body)
+                                .foregroundColor(AgentColor.textPrimary)
+                            Text("Type an objective above or run a task to give your agent work.")
+                                .font(AgentFont.caption)
+                                .foregroundColor(AgentColor.textMuted)
+                        }
+                        .padding(AgentSpacing.md)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .background(AgentColor.background2)
+                        .clipShape(RoundedRectangle(cornerRadius: AgentRadius.card))
+                    }
                 }
 
                 // 5. Recent Activity Card List
