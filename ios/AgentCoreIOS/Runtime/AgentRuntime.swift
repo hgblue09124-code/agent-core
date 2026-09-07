@@ -34,7 +34,7 @@ public final class AgentRuntime: @unchecked Sendable {
         self.checkpointStore = checkpointStore ?? LocalCheckpointStore()
         self.vaultStore = vaultStore ?? LocalVaultStore()
         self.planner = planner ?? LocalDeterministicPlanner()
-        self.languageModelProvider = languageModelProvider ?? RoutingLanguageModelProvider.shared
+        self.languageModelProvider = languageModelProvider
 
         registerDefaultCapabilities()
     }
@@ -274,23 +274,7 @@ public final class AgentRuntime: @unchecked Sendable {
             return res
         }
 
-        guard let provider = languageModelProvider else {
-            let duration = Date().timeIntervalSince(startTime)
-            let res = AgentRunResult(
-                runId: runId,
-                status: .failed,
-                goal: trimmedGoal,
-                errorCode: "PROVIDER_UNAVAILABLE",
-                errorMessage: "No language model provider configured for runtime",
-                authorized: true,
-                verificationVerdict: "FAIL"
-            )
-            emit(.taskFailed, .error, res.errorMessage ?? "failed")
-            runEventsMap[runId] = events
-            checkpointStore.save(result: res)
-            _ = experienceStore.record(runId: runId, goal: trimmedGoal, outcome: "failed", durationSeconds: duration)
-            return res
-        }
+        let provider = languageModelProvider ?? RoutingLanguageModelProvider.shared
 
         isThinking = true
         do {
@@ -607,7 +591,7 @@ public final class AgentRuntime: @unchecked Sendable {
     }
 
     public func executeCapability(capabilityId: String, input: [String: String], userApproved: Bool = false) async -> CapabilityResult {
-        guard let cap = capabilities[capabilityId] else {
+        guard capabilities[capabilityId] != nil else {
             return CapabilityResult(
                 capabilityId: capabilityId,
                 status: .failed,
@@ -647,20 +631,19 @@ public final class AgentRuntime: @unchecked Sendable {
     }
 
     public func health() async -> AgentHealth {
-        let routed = languageModelProvider as? RoutingLanguageModelProvider
+        let effectiveProvider = languageModelProvider ?? RoutingLanguageModelProvider.shared
+        let routed = effectiveProvider as? RoutingLanguageModelProvider
         let display = routed?.displayStatus()
         let localOnly: Bool
         if let display {
             localOnly = display.localOnly
-        } else if let languageModelProvider {
-            localOnly = !languageModelProvider.isRemote
         } else {
-            localOnly = true
+            localOnly = !effectiveProvider.isRemote
         }
         return AgentHealth(
             status: "HEALTHY",
             isLocalOnly: localOnly,
-            providerName: display?.name ?? languageModelProvider?.providerId ?? planner.providerName,
+            providerName: display?.name ?? effectiveProvider.providerId,
             providerStatus: display?.status ?? planner.providerStatus.rawValue,
             isVaultAvailable: vaultStore.isAvailable(),
             storagePath: "Application Support/AgentCore/",
