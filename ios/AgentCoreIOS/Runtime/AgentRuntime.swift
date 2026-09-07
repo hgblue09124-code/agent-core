@@ -403,7 +403,7 @@ public final class AgentRuntime: @unchecked Sendable {
 
         guard let actions = parseActions(from: response.text) else {
             let duration = Date().timeIntervalSince(startTime)
-            let failedReason = "LLM response could not be parsed as a valid action contract."
+            let failedReason = "LLM response could not be mapped to any valid capability action contract."
             emit(.planCreated, .fail, failedReason)
             emit(.verify, .fail, "Verification verdict FAIL (\(failedReason))")
             let result = AgentRunResult(

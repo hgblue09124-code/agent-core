@@ -163,7 +163,7 @@ public final class MockLanguageModelProvider: LanguageModelProvider, @unchecked 
         let lastUser = request.messages.last(where: { $0.role == .user })?.content ?? ""
         let text: String
         if let systemPrompt = request.systemPrompt, systemPrompt.contains("JSON action contract") {
-            if _fixedResponseText == "Mock response for testing." || _fixedResponseText.contains(#""owner": "owner"#) {
+            if _fixedResponseText == "Mock response for testing." || (_fixedResponseText.contains(#""owner": "owner"#) && StubURLProtocol.handler == nil) {
                 text = #"{"actions":[{"capabilityId":"mock.echo","action":"echo","input":{"text":"ok"}}]}"#
             } else {
                 text = _fixedResponseText
