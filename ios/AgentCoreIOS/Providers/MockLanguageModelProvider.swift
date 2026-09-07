@@ -162,7 +162,13 @@ public final class MockLanguageModelProvider: LanguageModelProvider, @unchecked 
 
         let lastUser = request.messages.last(where: { $0.role == .user })?.content ?? ""
         let text: String
-        if lastUser.isEmpty {
+        if let systemPrompt = request.systemPrompt, systemPrompt.contains("JSON action contract") {
+            if _fixedResponseText == "Mock response for testing." {
+                text = #"{"actions":[{"capabilityId":"mock.echo","action":"echo","input":{"text":"ok"}}]}"#
+            } else {
+                text = _fixedResponseText
+            }
+        } else if lastUser.isEmpty {
             text = _fixedResponseText
         } else {
             text = "\(_fixedResponseText) [echo: \(lastUser)]"

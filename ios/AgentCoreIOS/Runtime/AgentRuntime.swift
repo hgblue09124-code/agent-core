@@ -1018,11 +1018,6 @@ public final class AgentRuntime: @unchecked Sendable {
         }
 
         if action.capabilityId == "github_integration" {
-            let lowerOutput = output.lowercased()
-            if lowerOutput.contains("error") || lowerOutput.contains("failed") || lowerOutput.contains("denied") {
-                return false
-            }
-
             let actName = action.input["action"] ?? ""
             let owner = action.input["owner"] ?? ""
             let repo = action.input["repo"] ?? ""
