@@ -37,7 +37,7 @@ final class LocalAgentServiceTests: XCTestCase {
         chkStore = LocalCheckpointStore(storageDir: tempDir.appendingPathComponent("runs"))
         let vltStore = LocalVaultStore(storageDir: tempDir.appendingPathComponent("vault"))
 
-        let mockProvider = MockLanguageModelProvider(fixedResponseText: "github_integration:get_repo|owner=owner,repo=repo")
+        let mockProvider = MockLanguageModelProvider(fixedResponseText: "github_integration:get_repo|owner=owner,repo=repo|mock_offline=true")
         let runtime = AgentRuntime(
             memoryStore: memStore,
             experienceStore: expStore,
@@ -592,7 +592,7 @@ final class LocalAgentServiceTests: XCTestCase {
     // MARK: - Big Update Real Local Execution Behavioral Tests
 
     func test32_genericGoal_invokesRealProviderAndReturnsModelOutput() async {
-        let mockProvider = MockLanguageModelProvider(fixedResponseText: "github_integration:get_repo|owner=owner,repo=repo")
+        let mockProvider = MockLanguageModelProvider(fixedResponseText: "github_integration:get_repo|owner=owner,repo=repo|mock_offline=true")
         let runtime = AgentRuntime(
             memoryStore: LocalMemoryStore(storageDir: tempDir.appendingPathComponent("mem_b1")),
             experienceStore: LocalExperienceStore(storageDir: tempDir.appendingPathComponent("exp_b1")),
@@ -650,7 +650,7 @@ final class LocalAgentServiceTests: XCTestCase {
     }
 
     func test38_independentVerification_failsWhenOutputIsInvalidOrEmpty() async {
-        let mockProvider = MockLanguageModelProvider(fixedResponseText: "github_integration:get_repo|owner=owner,repo=repo")
+        let mockProvider = MockLanguageModelProvider(fixedResponseText: "github_integration:get_repo|owner=owner,repo=repo|mock_offline=true")
         let runtime = AgentRuntime(
             memoryStore: LocalMemoryStore(storageDir: tempDir.appendingPathComponent("mem_b7")),
             experienceStore: LocalExperienceStore(storageDir: tempDir.appendingPathComponent("exp_b7")),
