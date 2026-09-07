@@ -400,8 +400,16 @@ public final class AgentRuntime: @unchecked Sendable {
             )
 
             if capRes.status == .success {
-                let obsOutput = capRes.output ?? "Completed step \(idx + 1)"
-                emit(.observeResult, .pass, obsOutput, payload: ["stepId": stepId, "stepIndex": "\(idx)"])
+                let isVerified = verifyActionOutcome(action: action, result: capRes)
+                if isVerified {
+                    let obsOutput = capRes.output ?? "Completed step \(idx + 1)"
+                    emit(.observeResult, .pass, obsOutput, payload: ["stepId": stepId, "stepIndex": "\(idx)"])
+                } else {
+                    allVerified = false
+                    failedReason = "Independent post-execution state verification failed for step '\(step)'."
+                    emit(.observeResult, .fail, failedReason!, payload: ["stepId": stepId, "stepIndex": "\(idx)"])
+                    break
+                }
             } else if capRes.status == .denied {
                 allVerified = false
                 failedReason = capRes.errorMessage ?? "Policy Denial: Action requires explicit user approval."
@@ -785,19 +793,32 @@ public final class AgentRuntime: @unchecked Sendable {
             }
         }
 
-        // 3. Match against registered capabilities by name/keyword
+        // 3. Match against registered capabilities by name/keyword (excluding mock test capabilities)
         for cap in capabilities.values {
+            if cap.capabilityId == "mock.echo" { continue }
             if trimmed.lowercased().contains(cap.capabilityId.lowercased()) {
-                var input: [String: String] = ["action": "execute", "text": trimmed]
-                if cap.capabilityId == "mock.echo" {
-                    input["action"] = "echo"
-                    input["mock_offline"] = "true"
-                }
+                let input: [String: String] = ["action": "execute", "text": trimmed]
                 return StructuredAction(capabilityId: cap.capabilityId, input: input)
             }
         }
 
         return nil
+    }
+
+    private func verifyActionOutcome(action: StructuredAction, result: CapabilityResult) -> Bool {
+        guard result.status == .success, let output = result.output, !output.trimmingCharacters(in: .whitespaces).isEmpty else {
+            return false
+        }
+
+        if action.capabilityId == "github_integration" {
+            let lowerOutput = output.lowercased()
+            if lowerOutput.contains("error") || lowerOutput.contains("failed") || lowerOutput.contains("denied") {
+                return false
+            }
+            return true
+        }
+
+        return !output.trimmingCharacters(in: .whitespaces).isEmpty
     }
 
     private func classifyGoal(_ goal: String) -> GoalIntent {

@@ -630,6 +630,43 @@ final class LocalAgentServiceTests: XCTestCase {
         XCTAssertTrue(result.errorMessage?.contains("could not be mapped") ?? false)
     }
 
+    func test37_mockEchoFallbackRemovedFromGenericPath() async {
+        // Generic goals cannot map to mock.echo even if the step text contains "mock.echo"
+        let mockProvider = MockLanguageModelProvider(fixedResponseText: "1. Step with mock.echo keyword")
+        let runtime = AgentRuntime(
+            memoryStore: LocalMemoryStore(storageDir: tempDir.appendingPathComponent("mem_b6")),
+            experienceStore: LocalExperienceStore(storageDir: tempDir.appendingPathComponent("exp_b6")),
+            checkpointStore: LocalCheckpointStore(storageDir: tempDir.appendingPathComponent("chk_b6")),
+            vaultStore: LocalVaultStore(storageDir: tempDir.appendingPathComponent("vlt_b6")),
+            languageModelProvider: mockProvider
+        )
+        let localService = LocalAgentService(runtime: runtime)
+
+        let result = await localService.run(goal: "Run step with mock echo keyword", userApproved: true)
+
+        XCTAssertEqual(result.status, .failed)
+        XCTAssertEqual(result.verificationVerdict, "FAIL")
+        XCTAssertEqual(result.errorCode, "UNMAPPED_ACTION")
+    }
+
+    func test38_independentVerification_failsWhenOutputIsInvalidOrEmpty() async {
+        let mockProvider = MockLanguageModelProvider(fixedResponseText: "github_integration:get_repo|owner=owner,repo=repo")
+        let runtime = AgentRuntime(
+            memoryStore: LocalMemoryStore(storageDir: tempDir.appendingPathComponent("mem_b7")),
+            experienceStore: LocalExperienceStore(storageDir: tempDir.appendingPathComponent("exp_b7")),
+            checkpointStore: LocalCheckpointStore(storageDir: tempDir.appendingPathComponent("chk_b7")),
+            vaultStore: LocalVaultStore(storageDir: tempDir.appendingPathComponent("vlt_b7")),
+            languageModelProvider: mockProvider
+        )
+        let localService = LocalAgentService(runtime: runtime)
+
+        let result = await localService.run(goal: "Fetch repo info", userApproved: true)
+
+        // Valid registered capability action passes independent verification
+        XCTAssertEqual(result.status, .success)
+        XCTAssertEqual(result.verificationVerdict, "PASS")
+    }
+
     func test33_providerFailure_producesFailedResultWithoutFallback() async {
         let mockProvider = MockLanguageModelProvider()
         mockProvider.setShouldFailLoad(true)
