@@ -660,4 +660,19 @@ final class LocalAgentServiceTests: XCTestCase {
 
         XCTAssertFalse(verified)
     }
+
+    func test37_verification_createIssuePassesWithoutIssueNumberInInput() async {
+        let runtime = AgentRuntime()
+        let successCap = CapabilityResult(capabilityId: "github_integration", status: .success, output: "{\"number\": 42, \"title\": \"New Feature\"}")
+
+        // create_issue input does NOT contain issue_number -> must pass in mock mode with owner, repo, title
+        let verified = await runtime.verifyActionOutcome(
+            capabilityId: "github_integration",
+            action: "create_issue",
+            input: ["owner": "owner", "repo": "repo", "title": "New Feature", "mock_offline": "true"],
+            executionResult: successCap
+        )
+
+        XCTAssertTrue(verified)
+    }
 }

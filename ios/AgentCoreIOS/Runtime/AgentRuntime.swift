@@ -619,7 +619,7 @@ public final class AgentRuntime: @unchecked Sendable {
         if capabilityId == "github_integration" {
             switch action {
             case "create_issue":
-                return await verifyGitHubCreateIssue(input: input, isMockOffline: isMockOffline)
+                return await verifyGitHubCreateIssue(input: input, executionResult: executionResult, isMockOffline: isMockOffline)
             case "create_issue_comment":
                 return await verifyGitHubCreateIssueComment(input: input, isMockOffline: isMockOffline)
             case "update_issue":
@@ -634,7 +634,8 @@ public final class AgentRuntime: @unchecked Sendable {
         return executionResult.output != nil && !executionResult.output!.isEmpty
     }
 
-    private func verifyGitHubCreateIssue(input: [String: String], isMockOffline: Bool) async -> Bool {
+    private func verifyGitHubCreateIssue(input: [String: String], executionResult: CapabilityResult, isMockOffline: Bool) async -> Bool {
+        // Do NOT require issue_number as create_issue input.
         guard let owner = input["owner"], !owner.isEmpty,
               let repo = input["repo"], !repo.isEmpty,
               let expectedTitle = input["title"], !expectedTitle.isEmpty else {
@@ -645,11 +646,20 @@ public final class AgentRuntime: @unchecked Sendable {
             return true
         }
 
-        guard let issueNumberStr = input["issue_number"], let issueNumber = Int(issueNumberStr) else {
-            return false
+        // Extract created issue number from executionResult output/metadata or input fallback
+        var issueNumber: Int? = nil
+        if let inputNumStr = input["issue_number"], let inputNum = Int(inputNumStr) {
+            issueNumber = inputNum
+        } else if let outputStr = executionResult.output, let data = outputStr.data(using: .utf8) {
+            if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
+                if let num = json["number"] as? Int ?? (json["data"] as? [String: Any])?["number"] as? Int {
+                    issueNumber = num
+                }
+            }
         }
 
-        guard let url = URL(string: "https://api.github.com/repos/\(owner)/\(repo)/issues/\(issueNumber)") else {
+        guard let validIssueNumber = issueNumber,
+              let url = URL(string: "https://api.github.com/repos/\(owner)/\(repo)/issues/\(validIssueNumber)") else {
             return false
         }
 
