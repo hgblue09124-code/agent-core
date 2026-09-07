@@ -37,11 +37,13 @@ final class LocalAgentServiceTests: XCTestCase {
         chkStore = LocalCheckpointStore(storageDir: tempDir.appendingPathComponent("runs"))
         let vltStore = LocalVaultStore(storageDir: tempDir.appendingPathComponent("vault"))
 
+        let mockProvider = MockLanguageModelProvider(fixedResponseText: "Real LLM generated response for task.")
         let runtime = AgentRuntime(
             memoryStore: memStore,
             experienceStore: expStore,
             checkpointStore: chkStore,
-            vaultStore: vltStore
+            vaultStore: vltStore,
+            languageModelProvider: mockProvider
         )
         service = LocalAgentService(runtime: runtime)
         updateManager = GitHubDataUpdateManager(storageDir: tempDir.appendingPathComponent("data"))
@@ -585,5 +587,104 @@ final class LocalAgentServiceTests: XCTestCase {
         XCTAssertEqual(state.totalSteps, 0)
         XCTAssertEqual(state.steps.count, 0)
         XCTAssertEqual(state.progress, 0.0)
+    }
+
+    // MARK: - Big Update Real Local Execution Behavioral Tests
+
+    func test32_genericGoal_invokesRealProviderAndReturnsModelOutput() async {
+        let mockProvider = MockLanguageModelProvider(fixedResponseText: "1. Organize inbox\n2. Schedule meetings\n3. Set priorities")
+        let runtime = AgentRuntime(
+            memoryStore: LocalMemoryStore(storageDir: tempDir.appendingPathComponent("mem_b1")),
+            experienceStore: LocalExperienceStore(storageDir: tempDir.appendingPathComponent("exp_b1")),
+            checkpointStore: LocalCheckpointStore(storageDir: tempDir.appendingPathComponent("chk_b1")),
+            vaultStore: LocalVaultStore(storageDir: tempDir.appendingPathComponent("vlt_b1")),
+            languageModelProvider: mockProvider
+        )
+        let localService = LocalAgentService(runtime: runtime)
+
+        let result = await localService.run(goal: "Create a short plan for organizing my week.", userApproved: true)
+
+        XCTAssertEqual(result.status, .success)
+        XCTAssertEqual(result.verificationVerdict, "PASS")
+        XCTAssertTrue(result.output?.contains("Organize inbox") ?? false)
+        XCTAssertFalse(result.output?.contains("LocalDeterministicPlanner") ?? false)
+        XCTAssertFalse(result.output?.contains("Successfully executed goal") ?? false)
+        XCTAssertEqual(result.planSteps.count, 3)
+    }
+
+    func test33_providerFailure_producesFailedResultWithoutFallback() async {
+        let mockProvider = MockLanguageModelProvider()
+        mockProvider.setShouldFailLoad(true)
+
+        let runtime = AgentRuntime(
+            memoryStore: LocalMemoryStore(storageDir: tempDir.appendingPathComponent("mem_b2")),
+            experienceStore: LocalExperienceStore(storageDir: tempDir.appendingPathComponent("exp_b2")),
+            checkpointStore: LocalCheckpointStore(storageDir: tempDir.appendingPathComponent("chk_b2")),
+            vaultStore: LocalVaultStore(storageDir: tempDir.appendingPathComponent("vlt_b2")),
+            languageModelProvider: mockProvider
+        )
+        let localService = LocalAgentService(runtime: runtime)
+
+        let result = await localService.run(goal: "Plan my schedule", userApproved: true)
+
+        XCTAssertEqual(result.status, .failed)
+        XCTAssertEqual(result.verificationVerdict, "FAIL")
+        XCTAssertEqual(result.errorCode, "MODEL_NOT_LOADED")
+        XCTAssertFalse(result.errorMessage?.isEmpty ?? true)
+        XCTAssertFalse(result.output?.contains("Successfully executed goal") ?? false)
+    }
+
+    func test34_unloadedModel_failsClosedWithoutCloudOrMockFallback() async {
+        let defaults = UserDefaults(suiteName: UUID().uuidString)!
+        let settingsStore = LLMSettingsStore(defaults: defaults)
+        settingsStore.save(LLMSettings(
+            backend: .onDevice,
+            onDeviceModelId: ModelCatalog.defaultModelId,
+            remoteModel: "",
+            baseURL: "",
+            privacyMode: true
+        ))
+
+        let router = RoutingLanguageModelProvider(settingsStore: settingsStore)
+        let runtime = AgentRuntime(
+            memoryStore: LocalMemoryStore(storageDir: tempDir.appendingPathComponent("mem_b3")),
+            experienceStore: LocalExperienceStore(storageDir: tempDir.appendingPathComponent("exp_b3")),
+            checkpointStore: LocalCheckpointStore(storageDir: tempDir.appendingPathComponent("chk_b3")),
+            vaultStore: LocalVaultStore(storageDir: tempDir.appendingPathComponent("vlt_b3")),
+            languageModelProvider: router
+        )
+        let localService = LocalAgentService(runtime: runtime)
+
+        let result = await localService.run(goal: "Organize my week", userApproved: true)
+
+        XCTAssertEqual(result.status, .failed)
+        XCTAssertEqual(result.verificationVerdict, "FAIL")
+        XCTAssertEqual(result.errorCode, "MODEL_NOT_LOADED")
+        XCTAssertNil(result.output)
+    }
+
+    func test35_cheapPaths_succeedWithoutModel() async {
+        let mockProvider = MockLanguageModelProvider()
+        mockProvider.setShouldFailLoad(true)
+
+        let runtime = AgentRuntime(
+            memoryStore: LocalMemoryStore(storageDir: tempDir.appendingPathComponent("mem_b4")),
+            experienceStore: LocalExperienceStore(storageDir: tempDir.appendingPathComponent("exp_b4")),
+            checkpointStore: LocalCheckpointStore(storageDir: tempDir.appendingPathComponent("chk_b4")),
+            vaultStore: LocalVaultStore(storageDir: tempDir.appendingPathComponent("vlt_b4")),
+            languageModelProvider: mockProvider
+        )
+        let localService = LocalAgentService(runtime: runtime)
+
+        let rememberRes = await localService.run(goal: "Remember that my timezone is UTC", userApproved: true)
+        XCTAssertEqual(rememberRes.status, .success)
+        XCTAssertEqual(rememberRes.verificationVerdict, "PASS")
+
+        let statusRes = await localService.run(goal: "status", userApproved: true)
+        XCTAssertEqual(statusRes.status, .success)
+        XCTAssertTrue(statusRes.output?.contains("Agent Status:") ?? false)
+
+        let forgetRes = await localService.forget(key: "timezone")
+        XCTAssertEqual(forgetRes.status, .success)
     }
 }
