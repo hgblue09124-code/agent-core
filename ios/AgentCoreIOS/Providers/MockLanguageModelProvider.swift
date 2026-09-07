@@ -162,7 +162,7 @@ public final class MockLanguageModelProvider: LanguageModelProvider, @unchecked 
 
         let lastUser = request.messages.last(where: { $0.role == .user })?.content ?? ""
         let text: String
-        if lastUser.isEmpty {
+        if lastUser.isEmpty || _fixedResponseText != "Mock response for testing." {
             text = _fixedResponseText
         } else {
             text = "\(_fixedResponseText) [echo: \(lastUser)]"

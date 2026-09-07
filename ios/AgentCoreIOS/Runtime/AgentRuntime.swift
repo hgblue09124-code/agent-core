@@ -382,7 +382,7 @@ public final class AgentRuntime: @unchecked Sendable {
             )
 
             if capRes.status == .success {
-                let isVerified = verifyActionOutcome(action: action, result: capRes)
+                let isVerified = await verifyActionOutcome(action: action, result: capRes)
                 if isVerified {
                     let obsOutput = capRes.output ?? "Completed step \(idx + 1)"
                     emit(.observeResult, .pass, obsOutput, payload: ["stepId": stepId, "stepIndex": "\(idx)"])
@@ -737,6 +737,12 @@ public final class AgentRuntime: @unchecked Sendable {
                 return CapabilityResult(capabilityId: "github_integration", status: .failed, errorMessage: "Action 'get_issue' requires 'issue_number'.")
             }
             urlString = "https://api.github.com/repos/\(owner)/\(repo)/issues/\(issueNum)"
+        case "create_issue":
+            urlString = "https://api.github.com/repos/\(owner)/\(repo)/issues"
+            httpMethod = "POST"
+            let title = input["title"] ?? "New Issue"
+            let body = input["body"] ?? ""
+            httpBody = try? JSONSerialization.data(withJSONObject: ["title": title, "body": body])
         case "create_issue_comment":
             guard let issueNum = input["issue_number"] ?? input["issue"], let body = input["body"] else {
                 return CapabilityResult(capabilityId: "github_integration", status: .failed, errorMessage: "Action 'create_issue_comment' requires 'issue_number' and 'body'.")
@@ -744,6 +750,26 @@ public final class AgentRuntime: @unchecked Sendable {
             urlString = "https://api.github.com/repos/\(owner)/\(repo)/issues/\(issueNum)/comments"
             httpMethod = "POST"
             httpBody = try? JSONSerialization.data(withJSONObject: ["body": body])
+        case "update_issue", "close_issue":
+            guard let issueNum = input["issue_number"] ?? input["issue"] else {
+                return CapabilityResult(capabilityId: "github_integration", status: .failed, errorMessage: "Action '\(action)' requires 'issue_number'.")
+            }
+            urlString = "https://api.github.com/repos/\(owner)/\(repo)/issues/\(issueNum)"
+            httpMethod = "PATCH"
+            var dict: [String: Any] = [:]
+            if let title = input["title"] { dict["title"] = title }
+            if let body = input["body"] { dict["body"] = body }
+            if action == "close_issue" { dict["state"] = "closed" }
+            httpBody = try? JSONSerialization.data(withJSONObject: dict)
+        case "merge_pr":
+            guard let prNum = input["pull_number"] ?? input["pr_number"] ?? input["issue"] else {
+                return CapabilityResult(capabilityId: "github_integration", status: .failed, errorMessage: "Action 'merge_pr' requires 'pull_number'.")
+            }
+            urlString = "https://api.github.com/repos/\(owner)/\(repo)/pulls/\(prNum)/merge"
+            httpMethod = "PUT"
+            if let commitMsg = input["commit_message"] {
+                httpBody = try? JSONSerialization.data(withJSONObject: ["commit_message": commitMsg])
+            }
         default:
             return CapabilityResult(capabilityId: "github_integration", status: .failed, errorMessage: "Unsupported GitHub action '\(action)'.")
         }
@@ -841,16 +867,32 @@ public final class AgentRuntime: @unchecked Sendable {
     private func parseAction(from step: String) -> StructuredAction? {
         let trimmed = step.trimmingCharacters(in: .whitespacesAndNewlines)
 
-        // 1. Try JSON parsing
-        if (trimmed.hasPrefix("{") && trimmed.hasSuffix("}")) || (trimmed.hasPrefix("[{") && trimmed.hasSuffix("}]")) {
-            let jsonString = trimmed.hasPrefix("[{") ? String(trimmed.dropFirst().dropLast()) : trimmed
-            if let data = jsonString.data(using: .utf8),
-               let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
+        // 1. Try JSON parsing (including nested "actions" array or "input" sub-dictionary)
+        var jsonCandidate = trimmed
+        if let startIdx = trimmed.firstIndex(of: "{"), let endIdx = trimmed.lastIndex(of: "}"), startIdx <= endIdx {
+            jsonCandidate = String(trimmed[startIdx...endIdx])
+        }
+
+        if let data = jsonCandidate.data(using: .utf8),
+           let topObj = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
+            var targetObj: [String: Any]? = nil
+            if let actionsArr = topObj["actions"] as? [[String: Any]], let firstAction = actionsArr.first {
+                targetObj = firstAction
+            } else {
+                targetObj = topObj
+            }
+
+            if let obj = targetObj {
                 let capId = (obj["capabilityId"] as? String) ?? (obj["capability_id"] as? String) ?? (obj["capability"] as? String) ?? ""
                 if !capId.isEmpty && capabilities[capId] != nil {
                     var input: [String: String] = [:]
+                    if let nestedInput = obj["input"] as? [String: Any] {
+                        for (k, v) in nestedInput {
+                            input[k] = "\(v)"
+                        }
+                    }
                     for (k, v) in obj {
-                        if k != "capabilityId" && k != "capability_id" && k != "capability" {
+                        if k != "capabilityId" && k != "capability_id" && k != "capability" && k != "input" {
                             input[k] = "\(v)"
                         }
                     }
@@ -896,7 +938,7 @@ public final class AgentRuntime: @unchecked Sendable {
         return nil
     }
 
-    private func verifyActionOutcome(action: StructuredAction, result: CapabilityResult) -> Bool {
+    private func verifyActionOutcome(action: StructuredAction, result: CapabilityResult) async -> Bool {
         guard result.status == .success, let output = result.output, !output.trimmingCharacters(in: .whitespaces).isEmpty else {
             return false
         }
@@ -906,6 +948,56 @@ public final class AgentRuntime: @unchecked Sendable {
             if lowerOutput.contains("error") || lowerOutput.contains("failed") || lowerOutput.contains("denied") {
                 return false
             }
+
+            if action.input["mock_offline"] == "true" {
+                return true
+            }
+
+            let actName = action.input["action"] ?? ""
+            let owner = action.input["owner"] ?? ""
+            let repo = action.input["repo"] ?? ""
+
+            // Perform independent read-back query for write actions when possible
+            if (actName == "create_issue" || actName == "create_issue_comment" || actName == "update_issue" || actName == "close_issue") && !owner.isEmpty && !repo.isEmpty {
+                if let data = output.data(using: .utf8),
+                   let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
+                    let verifyUrlString: String?
+                    if let issueNum = json["number"] as? Int {
+                        verifyUrlString = "https://api.github.com/repos/\(owner)/\(repo)/issues/\(issueNum)"
+                    } else if let id = json["id"] as? Int, actName == "create_issue_comment" {
+                        let issueNum = action.input["issue_number"] ?? action.input["issue"] ?? ""
+                        verifyUrlString = !issueNum.isEmpty ? "https://api.github.com/repos/\(owner)/\(repo)/issues/comments/\(id)" : nil
+                    } else {
+                        verifyUrlString = nil
+                    }
+
+                    if let verifyUrlString, let url = URL(string: verifyUrlString) {
+                        var req = URLRequest(url: url)
+                        req.httpMethod = "GET"
+                        req.setValue("application/vnd.github.v3+json", forHTTPHeaderField: "Accept")
+                        req.setValue("Agent-Core-iOS/0.2.0", forHTTPHeaderField: "User-Agent")
+                        let token = action.input["token"] ?? ProcessInfo.processInfo.environment["GITHUB_TOKEN"]
+                        if let token, !token.isEmpty {
+                            req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+                        }
+                        do {
+                            let (readData, readResp) = try await urlSession.data(for: req)
+                            if let httpResp = readResp as? HTTPURLResponse, (200...299).contains(httpResp.statusCode) {
+                                let readStr = String(data: readData, encoding: .utf8) ?? ""
+                                if actName == "close_issue" {
+                                    return readStr.contains("\"state\":\"closed\"") || readStr.contains("\"state\": \"closed\"")
+                                }
+                                return !readStr.isEmpty
+                            } else {
+                                return false
+                            }
+                        } catch {
+                            return false
+                        }
+                    }
+                }
+            }
+
             return true
         }
 

@@ -802,4 +802,80 @@ final class LocalAgentServiceTests: XCTestCase {
         let forgetRes = await localService.forget(key: "timezone")
         XCTAssertEqual(forgetRes.status, .success)
     }
+
+    func test41_independentVerification_readBackStateVerification_passesWhenStateMatches() async throws {
+        StubURLProtocol.handler = { request in
+            let urlStr = request.url?.absoluteString ?? ""
+            if request.httpMethod == "POST" && urlStr.contains("/issues") {
+                let respJson = #"{"number": 42, "title": "Test Issue", "body": "Issue Body"}"#
+                return (201, Data(respJson.utf8), "application/json")
+            } else if request.httpMethod == "GET" && urlStr.contains("/issues/42") {
+                let readBackJson = #"{"number": 42, "state": "open", "title": "Test Issue"}"#
+                return (200, Data(readBackJson.utf8), "application/json")
+            }
+            return (400, Data("Bad Request".utf8), "text/plain")
+        }
+        defer { StubURLProtocol.handler = nil }
+
+        let config = URLSessionConfiguration.ephemeral
+        config.protocolClasses = [StubURLProtocol.self]
+        let session = URLSession(configuration: config)
+
+        let jsonContract = #"{"actions": [{"capabilityId": "github_integration", "action": "create_issue", "input": {"owner": "testowner", "repo": "testrepo", "title": "Test Issue"}}]}"#
+        let mockProvider = MockLanguageModelProvider(fixedResponseText: jsonContract)
+
+        let runtime = AgentRuntime(
+            memoryStore: LocalMemoryStore(storageDir: tempDir.appendingPathComponent("mem_b10")),
+            experienceStore: LocalExperienceStore(storageDir: tempDir.appendingPathComponent("exp_b10")),
+            checkpointStore: LocalCheckpointStore(storageDir: tempDir.appendingPathComponent("chk_b10")),
+            vaultStore: LocalVaultStore(storageDir: tempDir.appendingPathComponent("vlt_b10")),
+            languageModelProvider: mockProvider,
+            urlSession: session
+        )
+        let localService = LocalAgentService(runtime: runtime)
+
+        let result = await localService.run(goal: "Create a test issue on GitHub", userApproved: true)
+
+        XCTAssertEqual(result.status, .success)
+        XCTAssertEqual(result.verificationVerdict, "PASS")
+    }
+
+    func test42_independentVerification_readBackStateVerification_failsWhenStateMismatch() async throws {
+        StubURLProtocol.handler = { request in
+            let urlStr = request.url?.absoluteString ?? ""
+            if request.httpMethod == "PATCH" && urlStr.contains("/issues/42") {
+                let respJson = #"{"number": 42, "state": "closed"}"#
+                return (200, Data(respJson.utf8), "application/json")
+            } else if request.httpMethod == "GET" && urlStr.contains("/issues/42") {
+                // Read-back returns state still "open" instead of "closed"
+                let readBackJson = #"{"number": 42, "state": "open"}"#
+                return (200, Data(readBackJson.utf8), "application/json")
+            }
+            return (400, Data("Bad Request".utf8), "text/plain")
+        }
+        defer { StubURLProtocol.handler = nil }
+
+        let config = URLSessionConfiguration.ephemeral
+        config.protocolClasses = [StubURLProtocol.self]
+        let session = URLSession(configuration: config)
+
+        let jsonContract = #"{"actions": [{"capabilityId": "github_integration", "action": "close_issue", "input": {"owner": "testowner", "repo": "testrepo", "issue_number": "42"}}]}"#
+        let mockProvider = MockLanguageModelProvider(fixedResponseText: jsonContract)
+
+        let runtime = AgentRuntime(
+            memoryStore: LocalMemoryStore(storageDir: tempDir.appendingPathComponent("mem_b11")),
+            experienceStore: LocalExperienceStore(storageDir: tempDir.appendingPathComponent("exp_b11")),
+            checkpointStore: LocalCheckpointStore(storageDir: tempDir.appendingPathComponent("chk_b11")),
+            vaultStore: LocalVaultStore(storageDir: tempDir.appendingPathComponent("vlt_b11")),
+            languageModelProvider: mockProvider,
+            urlSession: session
+        )
+        let localService = LocalAgentService(runtime: runtime)
+
+        let result = await localService.run(goal: "Close issue #42", userApproved: true)
+
+        XCTAssertEqual(result.status, .failed)
+        XCTAssertEqual(result.verificationVerdict, "FAIL")
+        XCTAssertTrue(result.errorMessage?.contains("Independent post-execution state verification failed") ?? false)
+    }
 }
