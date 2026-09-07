@@ -21,6 +21,21 @@ logger = logging.getLogger(__name__)
 # Persistent events file (written by adapter, read by server in separate process)
 _EVENTS_PATH = Path("/tmp/agent-core-events.json")
 
+# Shared AgentRuntime singleton for console HTTP server lifecycle
+_shared_runtime = None
+_runtime_lock = threading.Lock()
+
+
+def get_shared_runtime():
+    """Returns or initializes the shared AgentRuntime instance for the console process."""
+    global _shared_runtime
+    if _shared_runtime is None:
+        with _runtime_lock:
+            if _shared_runtime is None:
+                from core.runtime.agent_runtime import AgentRuntime
+                _shared_runtime = AgentRuntime()
+    return _shared_runtime
+
 # ── Directory helpers ─────────────────────────────────────────────────
 
 def _static_dir() -> Path:
@@ -440,39 +455,72 @@ class LiveActivityHandler(BaseHTTPRequestHandler):
         self._json({"error": "Not found"}, code=404)
 
     def _agent_submit(self):
-        content_len = int(self.headers.get("Content-Length", 0))
-        body = self.rfile.read(content_len) if content_len > 0 else b"{}"
         try:
-            req_data = json.loads(body)
-        except json.JSONDecodeError:
-            self._json({"error": "Invalid JSON"}, code=400)
+            content_len_header = self.headers.get("Content-Length", "0")
+            content_len = int(content_len_header) if content_len_header.isdigit() else 0
+        except Exception:
+            self._json({"error": "Invalid Content-Length header"}, code=400)
             return
 
-        message = req_data.get("message", "")
-        user_approved = bool(req_data.get("user_approved", False))
+        if content_len <= 0:
+            self._json({"error": "Empty request body"}, code=400)
+            return
+
+        if content_len > 1_000_000:  # 1MB limit for payload
+            self._json({"error": "Payload too large"}, code=413)
+            return
+
+        try:
+            body = self.rfile.read(content_len)
+            req_data = json.loads(body.decode("utf-8"))
+        except (json.JSONDecodeError, UnicodeDecodeError):
+            self._json({"error": "Invalid JSON payload"}, code=400)
+            return
+        except Exception as exc:
+            logger.error("Error reading request body: %s", exc)
+            self._json({"error": "Failed to read request body"}, code=400)
+            return
+
+        if not isinstance(req_data, dict):
+            self._json({"error": "Request payload must be a JSON object"}, code=400)
+            return
+
+        message = req_data.get("message")
         if not message or not isinstance(message, str):
-            self._json({"error": "Field 'message' is required"}, code=400)
+            self._json({"error": "Field 'message' must be a non-empty string"}, code=400)
             return
 
-        from core.runtime.agent_runtime import AgentRuntime
-        runtime = AgentRuntime()
-        res = runtime.submit(message, user_approved=user_approved)
+        if len(message) > 10_000:
+            self._json({"error": "Message length exceeds limit of 10,000 characters"}, code=400)
+            return
 
-        self._json({
-            "event_id": res.event.event_id,
-            "objective": res.objective.to_dict() if res.objective else None,
-            "phase": res.agent_state.phase,
-            "last_outcome": res.agent_state.last_outcome,
-            "llm_calls": res.llm_calls,
-            "stages": res.stages,
-            "error": res.error,
-        })
+        user_approved = bool(req_data.get("user_approved", False))
+
+        try:
+            runtime = get_shared_runtime()
+            res = runtime.submit(message, user_approved=user_approved)
+
+            self._json({
+                "event_id": res.event.event_id,
+                "objective": res.objective.to_dict() if res.objective else None,
+                "phase": res.agent_state.phase,
+                "stages": res.stages,
+                "outcome": res.agent_state.last_outcome,
+                "llm_calls": res.llm_calls,
+                "error": res.error or "",
+            })
+        except Exception as exc:
+            logger.exception("AgentRuntime submission error: %s", exc)
+            self._json({"error": "Runtime processing failure"}, code=500)
 
     def _list_objectives(self):
-        from core.runtime.agent_runtime import AgentRuntime
-        runtime = AgentRuntime()
-        objs = runtime.list_objectives()
-        self._json({"objectives": [o.to_dict() for o in objs], "total": len(objs)})
+        try:
+            runtime = get_shared_runtime()
+            objs = runtime.list_objectives()
+            self._json({"objectives": [o.to_dict() for o in objs], "total": len(objs)})
+        except Exception as exc:
+            logger.exception("AgentRuntime list_objectives error: %s", exc)
+            self._json({"error": "Failed to list objectives"}, code=500)
 
     def log_message(self, fmt, *args):
         # Suppress default noise; use logger instead

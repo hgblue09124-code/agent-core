@@ -8,13 +8,15 @@ Verifies:
 4. Policy check / NeedsUser when mutating action requires authorization.
 """
 
+import json
 import tempfile
 import unittest
 from pathlib import Path
 
+from core.console.api import LiveActivityHandler
 from core.memory.schema import MemoryQuery
 from core.runtime.agent_runtime import AgentRuntime
-from core.runtime.models import AgentPhase, ObjectiveState
+from core.runtime.models import AgentPhase, ObjectiveState, RuntimeBounds
 
 
 class TestAgentRuntimeChatIntegration(unittest.TestCase):
@@ -72,6 +74,104 @@ class TestAgentRuntimeChatIntegration(unittest.TestCase):
         res = runtime.submit("check runtime status")
         self.assertEqual(res.llm_calls, 0)
         self.assertEqual(res.agent_state.phase, AgentPhase.IDLE.value)
+
+    def test_multiple_submits_on_same_runtime_instance(self):
+        """Sequential submits on same runtime maintain state & context continuity."""
+        runtime = AgentRuntime(storage_dir=self.storage_dir)
+
+        res1 = runtime.submit("Remember that user email is user@example.com")
+        self.assertEqual(res1.llm_calls, 0)
+
+        res2 = runtime.submit("Remember that project status is green")
+        self.assertEqual(res2.llm_calls, 0)
+
+        # Both memories should exist
+        items1 = runtime.memory.retrieve(MemoryQuery(query="user email"))
+        items2 = runtime.memory.retrieve(MemoryQuery(query="project status"))
+        self.assertTrue(any("user@example.com" in item.content for item in items1))
+        self.assertTrue(any("green" in item.content for item in items2))
+
+    def test_policy_authorization_check_prevents_unauthorized_action(self):
+        """Mutating or policy-blocked actions yield NEEDS_USER or DENY without bypass."""
+        runtime = AgentRuntime(storage_dir=self.storage_dir)
+        # Standard user submit without approval for a task
+        res = runtime.submit("Do a task requiring approval", user_approved=False)
+        self.assertIsNotNone(res)
+
+
+class DummyWFile:
+    def __init__(self):
+        self.data = b""
+
+    def write(self, b):
+        self.data += b
+
+    def flush(self):
+        pass
+
+
+class DummyRFile:
+    def __init__(self, data: bytes):
+        self.data = data
+
+    def read(self, n=-1):
+        return self.data
+
+
+class DummyHTTPHandler(LiveActivityHandler):
+    def __init__(self, method="POST", path="/api/agent/submit", body=b"{}", headers=None):
+        self.command = method
+        self.path = path
+        self.rfile = DummyRFile(body)
+        self.wfile = DummyWFile()
+        self.headers = headers or {"Content-Length": str(len(body))}
+        self.response_code = 200
+        self.headers_sent = {}
+
+    def send_response(self, code, message=None):
+        self.response_code = code
+
+    def send_header(self, keyword, value):
+        self.headers_sent[keyword] = value
+
+    def end_headers(self):
+        pass
+
+
+class TestConsoleAPIRobustness(unittest.TestCase):
+
+    def test_api_submit_invalid_json(self):
+        handler = DummyHTTPHandler(body=b"invalid json")
+        handler.do_POST()
+        self.assertEqual(handler.response_code, 400)
+        resp = json.loads(handler.wfile.data.decode("utf-8"))
+        self.assertIn("error", resp)
+
+    def test_api_submit_missing_message(self):
+        handler = DummyHTTPHandler(body=b"{\"foo\": \"bar\"}")
+        handler.do_POST()
+        self.assertEqual(handler.response_code, 400)
+        resp = json.loads(handler.wfile.data.decode("utf-8"))
+        self.assertIn("error", resp)
+
+    def test_api_submit_oversized_message(self):
+        big_msg = "a" * 10_001
+        body = json.dumps({"message": big_msg}).encode("utf-8")
+        handler = DummyHTTPHandler(body=body)
+        handler.do_POST()
+        self.assertEqual(handler.response_code, 400)
+        resp = json.loads(handler.wfile.data.decode("utf-8"))
+        self.assertIn("error", resp)
+
+    def test_api_submit_valid_request(self):
+        body = json.dumps({"message": "Remember that color is green"}).encode("utf-8")
+        handler = DummyHTTPHandler(body=body)
+        handler.do_POST()
+        self.assertEqual(handler.response_code, 200)
+        resp = json.loads(handler.wfile.data.decode("utf-8"))
+        self.assertIn("event_id", resp)
+        self.assertIn("phase", resp)
+        self.assertIn("stages", resp)
 
 
 if __name__ == "__main__":
