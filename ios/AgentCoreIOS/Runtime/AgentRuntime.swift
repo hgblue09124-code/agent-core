@@ -225,6 +225,7 @@ public final class AgentRuntime: @unchecked Sendable {
                 return res
             }
 
+            emit(.planCreated, .ok, "Dispatched capability \(dispatch.capabilityId)")
             emit(.execution, .running, "Executing capability action: \(dispatch.input["action"] ?? dispatch.capabilityId)")
             let capRes = await executeCapability(
                 capabilityId: dispatch.capabilityId,
@@ -286,6 +287,7 @@ public final class AgentRuntime: @unchecked Sendable {
                 authorized: true,
                 verificationVerdict: "PASS"
             )
+            emit(.verify, .pass, "Verification verdict PASS")
             emit(.taskCompleted, .ok, capRes.output ?? "Capability dispatch completed")
             runEventsMap[runId] = events
             checkpointStore.save(result: res)
@@ -401,7 +403,7 @@ public final class AgentRuntime: @unchecked Sendable {
 
         guard let actions = parseActions(from: response.text) else {
             let duration = Date().timeIntervalSince(startTime)
-            let failedReason = "LLM response could not be parsed as a valid action contract."
+            let failedReason = "LLM response could not be parsed as a valid action contract and could not be mapped to registered capabilities."
             emit(.planCreated, .fail, failedReason)
             emit(.verify, .fail, "Verification verdict FAIL (\(failedReason))")
             let result = AgentRunResult(

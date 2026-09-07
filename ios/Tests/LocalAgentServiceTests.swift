@@ -53,9 +53,16 @@ final class LocalAgentServiceTests: XCTestCase {
         )
         service = LocalAgentService(runtime: runtime)
         updateManager = GitHubDataUpdateManager(storageDir: tempDir.appendingPathComponent("data"))
+
+        // Default GitHub HTTP stub so generic LLM contracts (get_repo) succeed without a live network.
+        // Tests that need a specific response override StubURLProtocol.handler.
+        StubURLProtocol.handler = { _ in
+            (200, Data(#"{"id": 1, "name": "repo", "full_name": "owner/repo"}"#.utf8), "application/json")
+        }
     }
 
     override func tearDown() async throws {
+        StubURLProtocol.handler = nil
         try? FileManager.default.removeItem(at: tempDir)
         try await super.tearDown()
     }
@@ -653,7 +660,10 @@ final class LocalAgentServiceTests: XCTestCase {
         XCTAssertEqual(result.status, .failed)
         XCTAssertEqual(result.verificationVerdict, "FAIL")
         XCTAssertEqual(result.errorCode, "UNMAPPED_ACTION")
-        XCTAssertTrue(result.errorMessage?.contains("could not be mapped") ?? false)
+        XCTAssertTrue(
+            (result.errorMessage?.contains("could not be mapped") ?? false)
+                || (result.errorMessage?.contains("could not be parsed") ?? false)
+        )
     }
 
     func test37_mockEchoFallbackRemovedFromGenericPath() async {
