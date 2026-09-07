@@ -77,10 +77,10 @@ def main():
         threading.Thread(target=_open, daemon=True).start()
 
     print(f"┌─────────────────────────────────────────────┐")
-    print(f"│  agent-core Live Console v1.1              │")
+    print(f"│  Personal Agent — User Workspace           │")
     print(f"├─────────────────────────────────────────────┤")
     print(f"│  Server : {server.url:<36}│")
-    print(f"│  API    : {server.url}api/runs              │")
+    print(f"│  API    : {server.url}api/agent/workspace   │")
     print(f"└─────────────────────────────────────────────┘")
     print()
     print("Open browser at:", server.url)

@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import queue
 import threading
 import time
@@ -25,6 +26,8 @@ _EVENTS_PATH = Path("/tmp/agent-core-events.json")
 _shared_runtime = None
 _runtime_lock = threading.Lock()
 _runtime_submit_lock = threading.Lock()
+_last_cycle_lock = threading.Lock()
+_last_cycle_result = None
 
 
 def get_shared_runtime():
@@ -33,9 +36,32 @@ def get_shared_runtime():
     if _shared_runtime is None:
         with _runtime_lock:
             if _shared_runtime is None:
+                from core.capabilities.adapter import CapabilityRegistry
+                from core.capabilities.mock_adapter import (
+                    MockEchoCapabilityAdapter,
+                    MutationCapability,
+                )
                 from core.runtime.agent_runtime import AgentRuntime
-                _shared_runtime = AgentRuntime()
+                registry = CapabilityRegistry()
+                registry.register(MockEchoCapabilityAdapter())
+                registry.register(MutationCapability())
+                storage = os.environ.get("AGENTCORE_CONSOLE_STORAGE")
+                _shared_runtime = AgentRuntime(
+                    storage_dir=storage if storage else None,
+                    capabilities=registry,
+                )
     return _shared_runtime
+
+
+def _remember_cycle(result) -> None:
+    global _last_cycle_result
+    with _last_cycle_lock:
+        _last_cycle_result = result
+
+
+def _cached_cycle():
+    with _last_cycle_lock:
+        return _last_cycle_result
 
 # ── Directory helpers ─────────────────────────────────────────────────
 
@@ -188,13 +214,16 @@ class LiveActivityHandler(BaseHTTPRequestHandler):
     def _set_headers(self, code: int = 200,
                      content_type: str = "application/json",
                      cors: bool = True,
-                     extra: Optional[dict] = None):
+                     extra: Optional[dict] = None,
+                     length: Optional[int] = None):
         self.send_response(code)
         self.send_header("Content-Type", content_type)
+        if length is not None:
+            self.send_header("Content-Length", str(length))
         if cors:
             self.send_header("Access-Control-Allow-Origin", "*")
             self.send_header("Access-Control-Allow-Methods",
-                             "GET, OPTIONS")
+                             "GET, POST, OPTIONS")
             self.send_header("Access-Control-Allow-Headers",
                              "Content-Type, Cache-Control")
             # Prevent nginx buffering for SSE
@@ -205,13 +234,15 @@ class LiveActivityHandler(BaseHTTPRequestHandler):
         self.end_headers()
 
     def do_OPTIONS(self):
-        self._set_headers(204)
+        self._set_headers(204, length=0)
 
     def do_POST(self):
         path = urllib.parse.urlparse(self.path).path
         try:
             if path == "/api/agent/submit":
                 self._agent_submit()
+            elif path == "/api/agent/approve":
+                self._agent_approve()
             else:
                 self._not_found()
         except Exception as exc:
@@ -226,6 +257,10 @@ class LiveActivityHandler(BaseHTTPRequestHandler):
         try:
             if path == "/api/agent/objectives":
                 self._list_objectives()
+            elif path == "/api/agent/workspace":
+                self._agent_workspace()
+            elif path == "/api/agent/state":
+                self._agent_state()
             elif path == "/api/healthz":
                 self._health()
             elif path == "/api/runs":
@@ -253,9 +288,14 @@ class LiveActivityHandler(BaseHTTPRequestHandler):
                 self._serve_static(path)
             else:
                 self._not_found()
+        except (ConnectionResetError, BrokenPipeError, ConnectionAbortedError):
+            return
         except Exception as exc:
             logger.exception("API error: %s", exc)
-            self._json({"error": str(exc)}, code=500)
+            try:
+                self._json({"error": str(exc)}, code=500)
+            except (ConnectionResetError, BrokenPipeError, ConnectionAbortedError):
+                return
 
     # ── Endpoints ─────────────────────────────────────────────────
 
@@ -427,16 +467,16 @@ class LiveActivityHandler(BaseHTTPRequestHandler):
             return
         ext = p.suffix.lower()
         ct_map = {
-            ".html": "text/html",
-            ".js": "application/javascript",
-            ".css": "text/css",
+            ".html": "text/html; charset=utf-8",
+            ".js": "application/javascript; charset=utf-8",
+            ".css": "text/css; charset=utf-8",
             ".json": "application/json",
             ".ico": "image/x-icon",
         }
         ct = ct_map.get(ext, "text/plain")
-        self._set_headers(200, ct)
-        with open(p, "rb") as f:
-            self.wfile.write(f.read())
+        body = p.read_bytes()
+        self._set_headers(200, ct, length=len(body))
+        self.wfile.write(body)
 
     def _serve_static(self, path: str):
         # Security: prevent path traversal
@@ -449,8 +489,9 @@ class LiveActivityHandler(BaseHTTPRequestHandler):
     # ── Helpers ──────────────────────────────────────────────────
 
     def _json(self, data: dict, code: int = 200):
-        self._set_headers(code)
-        self.wfile.write(json.dumps(data, indent=2, default=str).encode("utf-8"))
+        payload = json.dumps(data, indent=2, default=str).encode("utf-8")
+        self._set_headers(code, length=len(payload))
+        self.wfile.write(payload)
 
     def _not_found(self):
         self._json({"error": "Not found"}, code=404)
@@ -501,16 +542,9 @@ class LiveActivityHandler(BaseHTTPRequestHandler):
             runtime = get_shared_runtime()
             with _runtime_submit_lock:
                 res = runtime.submit(message, user_approved=user_approved)
-
-            self._json({
-                "event_id": res.event.event_id,
-                "objective": res.objective.to_dict() if res.objective else None,
-                "phase": res.agent_state.phase,
-                "stages": res.stages,
-                "outcome": res.agent_state.last_outcome,
-                "llm_calls": res.llm_calls,
-                "error": res.error or "",
-            })
+            _remember_cycle(res)
+            from core.console.presentation import serialize_cycle
+            self._json(serialize_cycle(res))
         except Exception as exc:
             logger.exception("AgentRuntime submission error: %s", exc)
             self._json({"error": "Runtime processing failure"}, code=500)
@@ -523,6 +557,78 @@ class LiveActivityHandler(BaseHTTPRequestHandler):
         except Exception as exc:
             logger.exception("AgentRuntime list_objectives error: %s", exc)
             self._json({"error": "Failed to list objectives"}, code=500)
+
+    def _read_json_body(self) -> tuple[Optional[dict], Optional[tuple[dict, int]]]:
+        """Return (payload, error_response). error_response is (dict, code)."""
+        try:
+            content_len_header = self.headers.get("Content-Length", "0")
+            content_len = int(content_len_header) if content_len_header.isdigit() else 0
+        except Exception:
+            return None, ({"error": "Invalid Content-Length header"}, 400)
+
+        if content_len <= 0:
+            return None, ({"error": "Empty request body"}, 400)
+        if content_len > 1_000_000:
+            return None, ({"error": "Payload too large"}, 413)
+
+        try:
+            body = self.rfile.read(content_len)
+            req_data = json.loads(body.decode("utf-8"))
+        except (json.JSONDecodeError, UnicodeDecodeError):
+            return None, ({"error": "Invalid JSON payload"}, 400)
+        except Exception as exc:
+            logger.error("Error reading request body: %s", exc)
+            return None, ({"error": "Failed to read request body"}, 400)
+
+        if not isinstance(req_data, dict):
+            return None, ({"error": "Request payload must be a JSON object"}, 400)
+        return req_data, None
+
+    def _agent_approve(self):
+        req_data, err = self._read_json_body()
+        if err is not None:
+            self._json(err[0], code=err[1])
+            return
+
+        objective_id = req_data.get("objective_id")
+        if not objective_id or not isinstance(objective_id, str):
+            self._json({"error": "Field 'objective_id' must be a non-empty string"}, code=400)
+            return
+
+        try:
+            runtime = get_shared_runtime()
+            with _runtime_submit_lock:
+                res = runtime.approve(objective_id)
+            _remember_cycle(res)
+            from core.console.presentation import serialize_cycle
+            self._json(serialize_cycle(res))
+        except Exception as exc:
+            logger.exception("AgentRuntime approval error: %s", exc)
+            self._json({"error": "Runtime processing failure"}, code=500)
+
+    def _agent_workspace(self):
+        try:
+            from core.console.presentation import present_workspace
+            runtime = get_shared_runtime()
+            events = self._combined_events()
+            view = present_workspace(
+                state=runtime.state,
+                objectives=runtime.list_objectives(),
+                events=events,
+                cycle=_cached_cycle(),
+            )
+            self._json(view)
+        except Exception as exc:
+            logger.exception("AgentRuntime workspace error: %s", exc)
+            self._json({"error": "Failed to build workspace"}, code=500)
+
+    def _agent_state(self):
+        try:
+            runtime = get_shared_runtime()
+            self._json({"agent_state": runtime.state.to_dict()})
+        except Exception as exc:
+            logger.exception("AgentRuntime state error: %s", exc)
+            self._json({"error": "Failed to read agent state"}, code=500)
 
     def log_message(self, fmt, *args):
         # Suppress default noise; use logger instead
