@@ -514,7 +514,7 @@ public final class AgentRuntime: @unchecked Sendable {
                 status: .failed,
                 goal: trimmedGoal,
                 output: failedReason,
-                errorCode: "UNMAPPED_ACTION",
+                errorCode: "VERIFY_FAIL",
                 errorMessage: failedReason ?? "Action execution or verification failed",
                 planSteps: planStepSummaries,
                 authorized: true,
@@ -783,6 +783,14 @@ public final class AgentRuntime: @unchecked Sendable {
             )
         }
 
+        if input["mock_offline"] == "true" {
+            return CapabilityResult(
+                capabilityId: "github_integration",
+                status: .success,
+                output: "{\"ok\":true,\"mock_offline\":true,\"action\":\"\(action)\"}"
+            )
+        }
+
         if owner.isEmpty || repo.isEmpty {
             return CapabilityResult(
                 capabilityId: "github_integration",
@@ -948,8 +956,6 @@ public final class AgentRuntime: @unchecked Sendable {
         let actionObjects: [[String: Any]]
         if let arr = topObj["actions"] as? [[String: Any]] {
             actionObjects = arr
-        } else if topObj["capabilityId"] != nil || topObj["capability_id"] != nil || topObj["capability"] != nil {
-            actionObjects = [topObj]
         } else {
             return nil
         }
