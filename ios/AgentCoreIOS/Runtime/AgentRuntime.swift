@@ -707,14 +707,6 @@ public final class AgentRuntime: @unchecked Sendable {
             )
         }
 
-        if input["mock_offline"] == "true" {
-            return CapabilityResult(
-                capabilityId: "github_integration",
-                status: .success,
-                output: "{\"action\": \"\(action)\", \"status\": \"success\", \"data\": {\"owner\": \"\(owner)\", \"repo\": \"\(repo)\", \"mock\": true}}"
-            )
-        }
-
         if owner.isEmpty || repo.isEmpty {
             return CapabilityResult(
                 capabilityId: "github_integration",
@@ -867,7 +859,7 @@ public final class AgentRuntime: @unchecked Sendable {
     private func parseAction(from step: String) -> StructuredAction? {
         let trimmed = step.trimmingCharacters(in: .whitespacesAndNewlines)
 
-        // 1. Try JSON parsing (including nested "actions" array or "input" sub-dictionary)
+        // Strict JSON contract parsing ONLY
         var jsonCandidate = trimmed
         if let startIdx = trimmed.firstIndex(of: "{"), let endIdx = trimmed.lastIndex(of: "}"), startIdx <= endIdx {
             jsonCandidate = String(trimmed[startIdx...endIdx])
@@ -901,40 +893,6 @@ public final class AgentRuntime: @unchecked Sendable {
             }
         }
 
-        // 2. Try prefix line format e.g. "github_integration:get_repo|owner=x,repo=y"
-        if let colonIdx = trimmed.firstIndex(of: ":") {
-            let capId = String(trimmed[..<colonIdx]).trimmingCharacters(in: .whitespaces)
-            if capabilities[capId] != nil {
-                let rest = String(trimmed[trimmed.index(after: colonIdx)...]).trimmingCharacters(in: .whitespaces)
-                var input: [String: String] = [:]
-                let parts = rest.split(separator: "|")
-                if let actionName = parts.first {
-                    input["action"] = String(actionName).trimmingCharacters(in: .whitespaces)
-                }
-                if parts.count > 1 {
-                    let params = parts[1].split(separator: ",")
-                    for p in params {
-                        let kv = p.split(separator: "=")
-                        if kv.count == 2 {
-                            let k = String(kv[0]).trimmingCharacters(in: .whitespaces)
-                            let v = String(kv[1]).trimmingCharacters(in: .whitespaces)
-                            input[k] = v
-                        }
-                    }
-                }
-                return StructuredAction(capabilityId: capId, input: input)
-            }
-        }
-
-        // 3. Match against registered capabilities by name/keyword (excluding mock test capabilities)
-        for cap in capabilities.values {
-            if cap.capabilityId == "mock.echo" { continue }
-            if trimmed.lowercased().contains(cap.capabilityId.lowercased()) {
-                let input: [String: String] = ["action": "execute", "text": trimmed]
-                return StructuredAction(capabilityId: cap.capabilityId, input: input)
-            }
-        }
-
         return nil
     }
 
@@ -947,10 +905,6 @@ public final class AgentRuntime: @unchecked Sendable {
             let lowerOutput = output.lowercased()
             if lowerOutput.contains("error") || lowerOutput.contains("failed") || lowerOutput.contains("denied") {
                 return false
-            }
-
-            if action.input["mock_offline"] == "true" {
-                return true
             }
 
             let actName = action.input["action"] ?? ""

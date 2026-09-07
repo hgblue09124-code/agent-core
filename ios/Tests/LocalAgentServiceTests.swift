@@ -37,13 +37,19 @@ final class LocalAgentServiceTests: XCTestCase {
         chkStore = LocalCheckpointStore(storageDir: tempDir.appendingPathComponent("runs"))
         let vltStore = LocalVaultStore(storageDir: tempDir.appendingPathComponent("vault"))
 
-        let mockProvider = MockLanguageModelProvider(fixedResponseText: "github_integration:get_repo|owner=owner,repo=repo|mock_offline=true")
+        let config = URLSessionConfiguration.ephemeral
+        config.protocolClasses = [StubURLProtocol.self]
+        let session = URLSession(configuration: config)
+
+        let jsonContract = #"{"actions": [{"capabilityId": "github_integration", "action": "get_repo", "input": {"owner": "owner", "repo": "repo"}}]}"#
+        let mockProvider = MockLanguageModelProvider(fixedResponseText: jsonContract)
         let runtime = AgentRuntime(
             memoryStore: memStore,
             experienceStore: expStore,
             checkpointStore: chkStore,
             vaultStore: vltStore,
-            languageModelProvider: mockProvider
+            languageModelProvider: mockProvider,
+            urlSession: session
         )
         service = LocalAgentService(runtime: runtime)
         updateManager = GitHubDataUpdateManager(storageDir: tempDir.appendingPathComponent("data"))
@@ -74,10 +80,15 @@ final class LocalAgentServiceTests: XCTestCase {
     }
 
     func test04_actionAwarePolicy_readActionAllowedWithoutApproval() async {
+        StubURLProtocol.handler = { request in
+            return (200, Data(#"{"name": "repo"}"#.utf8), "application/json")
+        }
+        defer { StubURLProtocol.handler = nil }
+
         // Read action 'get_repo' on github_integration passes without user approval
         let res = await service.executeCapability(
             capabilityId: "github_integration",
-            input: ["action": "get_repo", "owner": "owner", "repo": "repo", "mock_offline": "true"],
+            input: ["action": "get_repo", "owner": "owner", "repo": "repo"],
             userApproved: false
         )
         XCTAssertEqual(res.status, .success)
@@ -95,10 +106,15 @@ final class LocalAgentServiceTests: XCTestCase {
     }
 
     func test06_actionAwarePolicy_writeActionAllowedWithApproval() async {
+        StubURLProtocol.handler = { request in
+            return (200, Data(#"{"id": 1, "body": "comment"}"#.utf8), "application/json")
+        }
+        defer { StubURLProtocol.handler = nil }
+
         // Write action 'create_issue_comment' with explicit approval -> SUCCESS
         let res = await service.executeCapability(
             capabilityId: "github_integration",
-            input: ["action": "create_issue_comment", "owner": "owner", "repo": "repo", "issue_number": "1", "body": "comment", "mock_offline": "true"],
+            input: ["action": "create_issue_comment", "owner": "owner", "repo": "repo", "issue_number": "1", "body": "comment"],
             userApproved: true
         )
         XCTAssertEqual(res.status, .success)
@@ -592,13 +608,24 @@ final class LocalAgentServiceTests: XCTestCase {
     // MARK: - Big Update Real Local Execution Behavioral Tests
 
     func test32_genericGoal_invokesRealProviderAndReturnsModelOutput() async {
-        let mockProvider = MockLanguageModelProvider(fixedResponseText: "github_integration:get_repo|owner=owner,repo=repo|mock_offline=true")
+        StubURLProtocol.handler = { request in
+            return (200, Data(#"{"id": 123, "name": "repo"}"#.utf8), "application/json")
+        }
+        defer { StubURLProtocol.handler = nil }
+
+        let config = URLSessionConfiguration.ephemeral
+        config.protocolClasses = [StubURLProtocol.self]
+        let session = URLSession(configuration: config)
+
+        let jsonContract = #"{"actions": [{"capabilityId": "github_integration", "action": "get_repo", "input": {"owner": "owner", "repo": "repo"}}]}"#
+        let mockProvider = MockLanguageModelProvider(fixedResponseText: jsonContract)
         let runtime = AgentRuntime(
             memoryStore: LocalMemoryStore(storageDir: tempDir.appendingPathComponent("mem_b1")),
             experienceStore: LocalExperienceStore(storageDir: tempDir.appendingPathComponent("exp_b1")),
             checkpointStore: LocalCheckpointStore(storageDir: tempDir.appendingPathComponent("chk_b1")),
             vaultStore: LocalVaultStore(storageDir: tempDir.appendingPathComponent("vlt_b1")),
-            languageModelProvider: mockProvider
+            languageModelProvider: mockProvider,
+            urlSession: session
         )
         let localService = LocalAgentService(runtime: runtime)
 
@@ -606,7 +633,6 @@ final class LocalAgentServiceTests: XCTestCase {
 
         XCTAssertEqual(result.status, .success)
         XCTAssertEqual(result.verificationVerdict, "PASS")
-        XCTAssertTrue(result.output?.contains("github_integration") ?? false)
         XCTAssertFalse(result.output?.contains("LocalDeterministicPlanner") ?? false)
         XCTAssertFalse(result.output?.contains("Successfully executed goal") ?? false)
     }
@@ -650,13 +676,24 @@ final class LocalAgentServiceTests: XCTestCase {
     }
 
     func test38_independentVerification_failsWhenOutputIsInvalidOrEmpty() async {
-        let mockProvider = MockLanguageModelProvider(fixedResponseText: "github_integration:get_repo|owner=owner,repo=repo|mock_offline=true")
+        StubURLProtocol.handler = { request in
+            return (200, Data(#"{"id": 123, "name": "repo"}"#.utf8), "application/json")
+        }
+        defer { StubURLProtocol.handler = nil }
+
+        let config = URLSessionConfiguration.ephemeral
+        config.protocolClasses = [StubURLProtocol.self]
+        let session = URLSession(configuration: config)
+
+        let jsonContract = #"{"actions": [{"capabilityId": "github_integration", "action": "get_repo", "input": {"owner": "owner", "repo": "repo"}}]}"#
+        let mockProvider = MockLanguageModelProvider(fixedResponseText: jsonContract)
         let runtime = AgentRuntime(
             memoryStore: LocalMemoryStore(storageDir: tempDir.appendingPathComponent("mem_b7")),
             experienceStore: LocalExperienceStore(storageDir: tempDir.appendingPathComponent("exp_b7")),
             checkpointStore: LocalCheckpointStore(storageDir: tempDir.appendingPathComponent("chk_b7")),
             vaultStore: LocalVaultStore(storageDir: tempDir.appendingPathComponent("vlt_b7")),
-            languageModelProvider: mockProvider
+            languageModelProvider: mockProvider,
+            urlSession: session
         )
         let localService = LocalAgentService(runtime: runtime)
 
