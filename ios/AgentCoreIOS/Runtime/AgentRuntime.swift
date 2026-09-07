@@ -242,6 +242,32 @@ public final class AgentRuntime: @unchecked Sendable {
                 _ = experienceStore.record(runId: runId, goal: trimmedGoal, outcome: "denied", durationSeconds: duration)
                 return res
             }
+
+            let action = dispatch.input["action"] ?? ""
+            let verifiedOutcome = await verifyActionOutcome(
+                capabilityId: dispatch.capabilityId,
+                action: action,
+                input: dispatch.input,
+                executionResult: capRes
+            )
+            if !verifiedOutcome {
+                let duration = Date().timeIntervalSince(startTime)
+                let res = AgentRunResult(
+                    runId: runId,
+                    status: .failed,
+                    goal: trimmedGoal,
+                    errorCode: "VERIFICATION_FAILED",
+                    errorMessage: "Verification failed: Could not independently verify state after action '\(action)'",
+                    authorized: true,
+                    verificationVerdict: "FAIL"
+                )
+                emit(.verify, .fail, "Verification verdict FAIL")
+                emit(.taskFailed, .error, "Independent verification failed")
+                runEventsMap[runId] = events
+                checkpointStore.save(result: res)
+                _ = experienceStore.record(runId: runId, goal: trimmedGoal, outcome: "failed", durationSeconds: duration)
+                return res
+            }
         }
 
         if cancelledRuns.contains(runId) {
@@ -567,6 +593,256 @@ public final class AgentRuntime: @unchecked Sendable {
 
     public func getExperience() async -> [Experience] {
         return experienceStore.listAll()
+    }
+
+    // MARK: - Independent Verification Layer
+
+    /// Independently verifies the real-world state after executing a capability action.
+    /// Rules:
+    /// - Executor success != verification success.
+    /// - Must independently read back state from remote API (or validate required state fields in offline mock mode).
+    /// - If any required field/state cannot be confirmed, fails closed (returns false).
+    /// - For create_issue_comment: must verify the actual requested comment content body text exists, not merely that a response exists.
+    public func verifyActionOutcome(
+        capabilityId: String,
+        action: String,
+        input: [String: String],
+        executionResult: CapabilityResult
+    ) async -> Bool {
+        // Rule: Executor success != Verification success. If execution failed or denied, verification fails closed.
+        guard executionResult.status == .success else {
+            return false
+        }
+
+        let isMockOffline = (input["mock_offline"] == "true") || (capabilityId == "mock.echo")
+
+        if capabilityId == "github_integration" {
+            switch action {
+            case "create_issue":
+                return await verifyGitHubCreateIssue(input: input, isMockOffline: isMockOffline)
+            case "create_issue_comment":
+                return await verifyGitHubCreateIssueComment(input: input, isMockOffline: isMockOffline)
+            case "update_issue":
+                return await verifyGitHubUpdateIssue(input: input, isMockOffline: isMockOffline)
+            case "close_issue":
+                return await verifyGitHubCloseIssue(input: input, isMockOffline: isMockOffline)
+            default:
+                return executionResult.output != nil && !executionResult.output!.isEmpty
+            }
+        }
+
+        return executionResult.output != nil && !executionResult.output!.isEmpty
+    }
+
+    private func verifyGitHubCreateIssue(input: [String: String], isMockOffline: Bool) async -> Bool {
+        guard let owner = input["owner"], !owner.isEmpty,
+              let repo = input["repo"], !repo.isEmpty,
+              let expectedTitle = input["title"], !expectedTitle.isEmpty else {
+            return false
+        }
+
+        if isMockOffline {
+            return true
+        }
+
+        guard let issueNumberStr = input["issue_number"], let issueNumber = Int(issueNumberStr) else {
+            return false
+        }
+
+        guard let url = URL(string: "https://api.github.com/repos/\(owner)/\(repo)/issues/\(issueNumber)") else {
+            return false
+        }
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "GET"
+        request.setValue("application/vnd.github.v3+json", forHTTPHeaderField: "Accept")
+        request.setValue("Agent-Core-Beta/0.1.0", forHTTPHeaderField: "User-Agent")
+        if let token = ProcessInfo.processInfo.environment["GITHUB_TOKEN"], !token.isEmpty {
+            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        }
+
+        do {
+            let (data, response) = try await URLSession.shared.data(for: request)
+            guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
+                return false
+            }
+
+            guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+                return false
+            }
+
+            guard let actualTitle = json["title"] as? String, actualTitle == expectedTitle else {
+                return false
+            }
+
+            guard let state = json["state"] as? String, state == "open" else {
+                return false
+            }
+
+            if let expectedBody = input["body"], !expectedBody.isEmpty {
+                guard let actualBody = json["body"] as? String, actualBody == expectedBody else {
+                    return false
+                }
+            }
+
+            return true
+        } catch {
+            return false
+        }
+    }
+
+    private func verifyGitHubCreateIssueComment(input: [String: String], isMockOffline: Bool) async -> Bool {
+        guard let owner = input["owner"], !owner.isEmpty,
+              let repo = input["repo"], !repo.isEmpty,
+              let issueNumberStr = input["issue_number"], let _ = Int(issueNumberStr),
+              let expectedBody = input["body"], !expectedBody.isEmpty else {
+            return false
+        }
+
+        if isMockOffline {
+            return true
+        }
+
+        guard let issueNumber = Int(issueNumberStr),
+              let url = URL(string: "https://api.github.com/repos/\(owner)/\(repo)/issues/\(issueNumber)/comments") else {
+            return false
+        }
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "GET"
+        request.setValue("application/vnd.github.v3+json", forHTTPHeaderField: "Accept")
+        request.setValue("Agent-Core-Beta/0.1.0", forHTTPHeaderField: "User-Agent")
+        if let token = ProcessInfo.processInfo.environment["GITHUB_TOKEN"], !token.isEmpty {
+            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        }
+
+        do {
+            let (data, response) = try await URLSession.shared.data(for: request)
+            guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
+                return false
+            }
+
+            guard let comments = try JSONSerialization.jsonObject(with: data) as? [[String: Any]] else {
+                return false
+            }
+
+            let commentExists = comments.contains { comment in
+                guard let body = comment["body"] as? String else { return false }
+                return body == expectedBody || body.contains(expectedBody)
+            }
+
+            return commentExists
+        } catch {
+            return false
+        }
+    }
+
+    private func verifyGitHubUpdateIssue(input: [String: String], isMockOffline: Bool) async -> Bool {
+        guard let owner = input["owner"], !owner.isEmpty,
+              let repo = input["repo"], !repo.isEmpty,
+              let issueNumberStr = input["issue_number"], let issueNumber = Int(issueNumberStr) else {
+            return false
+        }
+
+        let hasTitle = input["title"] != nil && !input["title"]!.isEmpty
+        let hasBody = input["body"] != nil && !input["body"]!.isEmpty
+        let hasState = input["state"] != nil && !input["state"]!.isEmpty
+
+        guard hasTitle || hasBody || hasState else {
+            return false
+        }
+
+        if isMockOffline {
+            return true
+        }
+
+        guard let url = URL(string: "https://api.github.com/repos/\(owner)/\(repo)/issues/\(issueNumber)") else {
+            return false
+        }
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "GET"
+        request.setValue("application/vnd.github.v3+json", forHTTPHeaderField: "Accept")
+        request.setValue("Agent-Core-Beta/0.1.0", forHTTPHeaderField: "User-Agent")
+        if let token = ProcessInfo.processInfo.environment["GITHUB_TOKEN"], !token.isEmpty {
+            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        }
+
+        do {
+            let (data, response) = try await URLSession.shared.data(for: request)
+            guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
+                return false
+            }
+
+            guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+                return false
+            }
+
+            if let expectedTitle = input["title"], !expectedTitle.isEmpty {
+                guard let actualTitle = json["title"] as? String, actualTitle == expectedTitle else {
+                    return false
+                }
+            }
+
+            if let expectedBody = input["body"], !expectedBody.isEmpty {
+                guard let actualBody = json["body"] as? String, actualBody == expectedBody else {
+                    return false
+                }
+            }
+
+            if let expectedState = input["state"], !expectedState.isEmpty {
+                guard let actualState = json["state"] as? String, actualState == expectedState else {
+                    return false
+                }
+            }
+
+            return true
+        } catch {
+            return false
+        }
+    }
+
+    private func verifyGitHubCloseIssue(input: [String: String], isMockOffline: Bool) async -> Bool {
+        guard let owner = input["owner"], !owner.isEmpty,
+              let repo = input["repo"], !repo.isEmpty,
+              let issueNumberStr = input["issue_number"], let issueNumber = Int(issueNumberStr) else {
+            return false
+        }
+
+        if isMockOffline {
+            return true
+        }
+
+        guard let url = URL(string: "https://api.github.com/repos/\(owner)/\(repo)/issues/\(issueNumber)") else {
+            return false
+        }
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "GET"
+        request.setValue("application/vnd.github.v3+json", forHTTPHeaderField: "Accept")
+        request.setValue("Agent-Core-Beta/0.1.0", forHTTPHeaderField: "User-Agent")
+        if let token = ProcessInfo.processInfo.environment["GITHUB_TOKEN"], !token.isEmpty {
+            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        }
+
+        do {
+            let (data, response) = try await URLSession.shared.data(for: request)
+            guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
+                return false
+            }
+
+            guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+                return false
+            }
+
+            guard let actualState = json["state"] as? String, actualState == "closed" else {
+                return false
+            }
+
+            return true
+        } catch {
+            return false
+        }
     }
 
     public func health() async -> AgentHealth {

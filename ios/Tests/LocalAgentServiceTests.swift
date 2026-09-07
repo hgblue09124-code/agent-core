@@ -586,4 +586,78 @@ final class LocalAgentServiceTests: XCTestCase {
         XCTAssertEqual(state.steps.count, 0)
         XCTAssertEqual(state.progress, 0.0)
     }
+
+    // MARK: - Verification Layer Tests (verifyActionOutcome)
+
+    func test32_verification_executorFailureFailsClosed() async {
+        let runtime = AgentRuntime()
+        let failedCap = CapabilityResult(capabilityId: "github_integration", status: .failed, errorMessage: "HTTP 500 Server Error")
+
+        let verified = await runtime.verifyActionOutcome(
+            capabilityId: "github_integration",
+            action: "create_issue",
+            input: ["owner": "owner", "repo": "repo", "title": "New Issue", "mock_offline": "true"],
+            executionResult: failedCap
+        )
+
+        // Executor failure != Verification success -> Must fail closed
+        XCTAssertFalse(verified)
+    }
+
+    func test33_verification_createIssueFailsClosedOnMissingTitle() async {
+        let runtime = AgentRuntime()
+        let successCap = CapabilityResult(capabilityId: "github_integration", status: .success, output: "Success")
+
+        let verified = await runtime.verifyActionOutcome(
+            capabilityId: "github_integration",
+            action: "create_issue",
+            input: ["owner": "owner", "repo": "repo", "mock_offline": "true"], // missing title
+            executionResult: successCap
+        )
+
+        XCTAssertFalse(verified)
+    }
+
+    func test34_verification_createIssueCommentFailsClosedOnMissingBody() async {
+        let runtime = AgentRuntime()
+        let successCap = CapabilityResult(capabilityId: "github_integration", status: .success, output: "Success")
+
+        let verified = await runtime.verifyActionOutcome(
+            capabilityId: "github_integration",
+            action: "create_issue_comment",
+            input: ["owner": "owner", "repo": "repo", "issue_number": "1", "mock_offline": "true"], // missing body
+            executionResult: successCap
+        )
+
+        // Must fail closed when required comment body is absent
+        XCTAssertFalse(verified)
+    }
+
+    func test35_verification_updateIssueFailsClosedWithoutFieldsToUpdate() async {
+        let runtime = AgentRuntime()
+        let successCap = CapabilityResult(capabilityId: "github_integration", status: .success, output: "Success")
+
+        let verified = await runtime.verifyActionOutcome(
+            capabilityId: "github_integration",
+            action: "update_issue",
+            input: ["owner": "owner", "repo": "repo", "issue_number": "1", "mock_offline": "true"], // no title/body/state
+            executionResult: successCap
+        )
+
+        XCTAssertFalse(verified)
+    }
+
+    func test36_verification_closeIssueFailsClosedOnMissingIssueNumber() async {
+        let runtime = AgentRuntime()
+        let successCap = CapabilityResult(capabilityId: "github_integration", status: .success, output: "Success")
+
+        let verified = await runtime.verifyActionOutcome(
+            capabilityId: "github_integration",
+            action: "close_issue",
+            input: ["owner": "owner", "repo": "repo", "mock_offline": "true"], // missing issue_number
+            executionResult: successCap
+        )
+
+        XCTAssertFalse(verified)
+    }
 }
