@@ -2,6 +2,7 @@
 // Native iOS Local Agent SwiftUI App — Personal Agent Entrypoint & ViewModel
 
 import SwiftUI
+import Combine
 
 // MARK: - App Entrypoint
 
@@ -167,6 +168,7 @@ final class AgentAppViewModel: ObservableObject {
 
     // Activity Records
     @Published var activities: [ActivityRecord] = []
+    @Published var conversation: [WorkspaceMessage] = []
 
     // Collections & Health
     @Published var memories: [MemoryItem] = []
@@ -202,6 +204,7 @@ final class AgentAppViewModel: ObservableObject {
     private let updateManager: GitHubDataUpdateManager
     private var pendingPermissionContinuation: ((Bool) -> Void)?
     private var activeRunTask: Task<Void, Never>?
+    private var cancellables = Set<AnyCancellable>()
 
     init(service: LocalAgentServiceProtocol? = nil, updateManager: GitHubDataUpdateManager? = nil) {
         let s: LocalAgentServiceProtocol
@@ -211,8 +214,15 @@ final class AgentAppViewModel: ObservableObject {
             s = LocalAgentService(runtime: AgentRuntime(languageModelProvider: RoutingLanguageModelProvider.shared))
         }
         self.service = s
-        self.runtimeStore = AgentRuntimeStore(service: s)
+        let store = AgentRuntimeStore(service: s)
+        self.runtimeStore = store
         self.updateManager = updateManager ?? GitHubDataUpdateManager()
+        store.objectWillChange
+            .receive(on: RunLoop.main)
+            .sink { [weak self] _ in
+                self?.objectWillChange.send()
+            }
+            .store(in: &cancellables)
         Task {
             await self.refreshState()
         }
@@ -245,6 +255,7 @@ final class AgentAppViewModel: ObservableObject {
     // MARK: - Interactive Agent Execution Flow
 
     func runTask(requestPermissionPrompt: Bool = false) async {
+        await activeRunTask?.value
         activeRunTask = Task {
             lastErrorPayload = nil
 
@@ -286,6 +297,29 @@ final class AgentAppViewModel: ObservableObject {
             await refreshState()
         }
         await activeRunTask?.value
+    }
+
+    func submitWorkspaceMessage(_ text: String) async {
+        let goal = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !goal.isEmpty else { return }
+        conversation.append(WorkspaceMessage(role: .user, text: goal))
+        currentGoal = goal
+        await runTask(requestPermissionPrompt: false)
+        appendAgentReplyIfNeeded()
+    }
+
+    func retryWorkspace() async {
+        await retryTask()
+        appendAgentReplyIfNeeded()
+    }
+
+    private func appendAgentReplyIfNeeded() {
+        let snapshot = WorkspacePresentation.map(
+            state: runtimeStore.state,
+            lastResult: lastRunResult
+        )
+        guard let reply = snapshot.agentReply else { return }
+        conversation.append(reply)
     }
 
     func handlePermissionResponse(allowed: Bool) {
