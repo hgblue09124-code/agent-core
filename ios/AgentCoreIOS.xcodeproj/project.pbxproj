@@ -42,6 +42,7 @@
 		002113 /* ConnectionRowView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 002013 /* ConnectionRowView.swift */; };
 		002114 /* SettingsCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 002014 /* SettingsCard.swift */; };
 		002115 /* HomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 002015 /* HomeView.swift */; };
+		002122 /* WorkspacePresentation.swift in Sources */ = {isa = PBXBuildFile; fileRef = 002022 /* WorkspacePresentation.swift */; };
 		002116 /* ExecuteView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 002016 /* ExecuteView.swift */; };
 		002117 /* ActivityView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 002017 /* ActivityView.swift */; };
 		002118 /* VaultView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 002018 /* VaultView.swift */; };
@@ -56,6 +57,7 @@
 		005005 /* OpenAICompatibleProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 005004 /* OpenAICompatibleProvider.swift */; };
 		005007 /* RoutingLanguageModelProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 005006 /* RoutingLanguageModelProvider.swift */; };
 		005011 /* LLMProviderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 005010 /* LLMProviderTests.swift */; };
+		006001 /* WorkspacePresentationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 006000 /* WorkspacePresentationTests.swift */; };
 		005021 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 005020 /* Assets.xcassets */; };
 /* End PBXBuildFile section */
 
@@ -108,6 +110,7 @@
 		002013 /* ConnectionRowView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConnectionRowView.swift; sourceTree = "<group>"; };
 		002014 /* SettingsCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsCard.swift; sourceTree = "<group>"; };
 		002015 /* HomeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeView.swift; sourceTree = "<group>"; };
+		002022 /* WorkspacePresentation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkspacePresentation.swift; sourceTree = "<group>"; };
 		002016 /* ExecuteView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExecuteView.swift; sourceTree = "<group>"; };
 		002017 /* ActivityView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActivityView.swift; sourceTree = "<group>"; };
 		002018 /* VaultView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VaultView.swift; sourceTree = "<group>"; };
@@ -122,6 +125,7 @@
 		005004 /* OpenAICompatibleProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OpenAICompatibleProvider.swift; sourceTree = "<group>"; };
 		005006 /* RoutingLanguageModelProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoutingLanguageModelProvider.swift; sourceTree = "<group>"; };
 		005010 /* LLMProviderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LLMProviderTests.swift; sourceTree = "<group>"; };
+		006000 /* WorkspacePresentationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkspacePresentationTests.swift; sourceTree = "<group>"; };
 		005020 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
@@ -283,6 +287,7 @@
 			isa = PBXGroup;
 			children = (
 				002015 /* HomeView.swift */,
+				002022 /* WorkspacePresentation.swift */,
 			);
 			path = Home;
 			sourceTree = "<group>";
@@ -341,6 +346,7 @@
 				001030 /* LocalAgentServiceTests.swift */,
 				004004 /* LanguageModelProviderTests.swift */,
 				005010 /* LLMProviderTests.swift */,
+				006000 /* WorkspacePresentationTests.swift */,
 			);
 			path = Tests;
 			sourceTree = "<group>";
@@ -485,6 +491,7 @@
 				002113 /* ConnectionRowView.swift in Sources */,
 				002114 /* SettingsCard.swift in Sources */,
 				002115 /* HomeView.swift in Sources */,
+				002122 /* WorkspacePresentation.swift in Sources */,
 				002116 /* ExecuteView.swift in Sources */,
 				002117 /* ActivityView.swift in Sources */,
 				002118 /* VaultView.swift in Sources */,
@@ -501,6 +508,7 @@
 				001031 /* LocalAgentServiceTests.swift in Sources */,
 				004005 /* LanguageModelProviderTests.swift in Sources */,
 				005011 /* LLMProviderTests.swift in Sources */,
+				006001 /* WorkspacePresentationTests.swift in Sources */,
 				001001 /* AgentAPIModels.swift in Sources */,
 				001003 /* AgentRuntimeContract.swift in Sources */,
 				001005 /* LocalAgentService.swift in Sources */,
@@ -541,6 +549,7 @@
 				002113 /* ConnectionRowView.swift in Sources */,
 				002114 /* SettingsCard.swift in Sources */,
 				002115 /* HomeView.swift in Sources */,
+				002122 /* WorkspacePresentation.swift in Sources */,
 				002116 /* ExecuteView.swift in Sources */,
 				002117 /* ActivityView.swift in Sources */,
 				002118 /* VaultView.swift in Sources */,
