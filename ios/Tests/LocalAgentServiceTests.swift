@@ -667,6 +667,66 @@ final class LocalAgentServiceTests: XCTestCase {
         XCTAssertEqual(result.verificationVerdict, "PASS")
     }
 
+    func test39_realHTTPExecution_githubGetRepoDispatchesRequestAndVerifiesResponse() async throws {
+        StubURLProtocol.handler = { request in
+            XCTAssertTrue(request.url?.absoluteString.contains("api.github.com/repos/testowner/testrepo") == true)
+            let json = """
+            {"id": 12345, "name": "testrepo", "full_name": "testowner/testrepo", "stargazers_count": 42}
+            """
+            return (200, Data(json.utf8), "application/json")
+        }
+        defer { StubURLProtocol.handler = nil }
+
+        let config = URLSessionConfiguration.ephemeral
+        config.protocolClasses = [StubURLProtocol.self]
+        let session = URLSession(configuration: config)
+
+        let mockProvider = MockLanguageModelProvider(fixedResponseText: "github_integration:get_repo|owner=testowner,repo=testrepo")
+        let runtime = AgentRuntime(
+            memoryStore: LocalMemoryStore(storageDir: tempDir.appendingPathComponent("mem_b8")),
+            experienceStore: LocalExperienceStore(storageDir: tempDir.appendingPathComponent("exp_b8")),
+            checkpointStore: LocalCheckpointStore(storageDir: tempDir.appendingPathComponent("chk_b8")),
+            vaultStore: LocalVaultStore(storageDir: tempDir.appendingPathComponent("vlt_b8")),
+            languageModelProvider: mockProvider,
+            urlSession: session
+        )
+        let localService = LocalAgentService(runtime: runtime)
+
+        let result = await localService.run(goal: "Inspect repo testowner/testrepo", userApproved: true)
+
+        XCTAssertEqual(result.status, .success)
+        XCTAssertEqual(result.verificationVerdict, "PASS")
+        XCTAssertTrue(result.output?.contains("testowner/testrepo") ?? false)
+    }
+
+    func test40_realHTTPExecution_githubHTTPError_failsClosed() async throws {
+        StubURLProtocol.handler = { _ in
+            return (404, Data(#"{"message": "Not Found"}"#.utf8), "application/json")
+        }
+        defer { StubURLProtocol.handler = nil }
+
+        let config = URLSessionConfiguration.ephemeral
+        config.protocolClasses = [StubURLProtocol.self]
+        let session = URLSession(configuration: config)
+
+        let mockProvider = MockLanguageModelProvider(fixedResponseText: "github_integration:get_repo|owner=nonexistent,repo=nonexistent")
+        let runtime = AgentRuntime(
+            memoryStore: LocalMemoryStore(storageDir: tempDir.appendingPathComponent("mem_b9")),
+            experienceStore: LocalExperienceStore(storageDir: tempDir.appendingPathComponent("exp_b9")),
+            checkpointStore: LocalCheckpointStore(storageDir: tempDir.appendingPathComponent("chk_b9")),
+            vaultStore: LocalVaultStore(storageDir: tempDir.appendingPathComponent("vlt_b9")),
+            languageModelProvider: mockProvider,
+            urlSession: session
+        )
+        let localService = LocalAgentService(runtime: runtime)
+
+        let result = await localService.run(goal: "Inspect nonexistent repo", userApproved: true)
+
+        XCTAssertEqual(result.status, .failed)
+        XCTAssertEqual(result.verificationVerdict, "FAIL")
+        XCTAssertTrue(result.errorMessage?.contains("404") ?? false)
+    }
+
     func test33_providerFailure_producesFailedResultWithoutFallback() async {
         let mockProvider = MockLanguageModelProvider()
         mockProvider.setShouldFailLoad(true)

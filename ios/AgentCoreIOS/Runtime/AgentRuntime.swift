@@ -12,6 +12,7 @@ public final class AgentRuntime: @unchecked Sendable {
     /// Optional language model provider abstraction (Step 1).
     /// AgentRuntime never depends on concrete LLM implementations.
     private let languageModelProvider: LanguageModelProvider?
+    private let urlSession: URLSession
 
     private var capabilities: [String: Capability] = [:]
     private var runEventsMap: [String: [AgentRunEvent]] = [:]
@@ -27,7 +28,8 @@ public final class AgentRuntime: @unchecked Sendable {
         checkpointStore: LocalCheckpointStore? = nil,
         vaultStore: LocalVaultStore? = nil,
         planner: AgentModelProviderProtocol? = nil,
-        languageModelProvider: LanguageModelProvider? = nil
+        languageModelProvider: LanguageModelProvider? = nil,
+        urlSession: URLSession = .shared
     ) {
         self.memoryStore = memoryStore ?? LocalMemoryStore()
         self.experienceStore = experienceStore ?? LocalExperienceStore()
@@ -35,6 +37,7 @@ public final class AgentRuntime: @unchecked Sendable {
         self.vaultStore = vaultStore ?? LocalVaultStore()
         self.planner = planner ?? LocalDeterministicPlanner()
         self.languageModelProvider = languageModelProvider
+        self.urlSession = urlSession
 
         registerDefaultCapabilities()
     }
@@ -172,36 +175,6 @@ public final class AgentRuntime: @unchecked Sendable {
             )
         }
 
-        let writeKeywords = ["create", "update", "delete", "post", "put", "patch", "write", "comment", "merge", "close", "remove", "drop", "clear", "modify"]
-        let goalWords = trimmedGoal.lowercased().components(separatedBy: CharacterSet.alphanumerics.inverted)
-        let isMutatingGoal = writeKeywords.contains(where: { goalWords.contains($0) })
-
-        if isMutatingGoal && !userApproved {
-            let duration = Date().timeIntervalSince(startTime)
-            let permReq = PermissionRequest(
-                runId: runId,
-                capabilityId: "core.policy",
-                action: "execute_mutating_goal",
-                input: ["goal": trimmedGoal],
-                reason: "Policy Denial: Execution of mutating goal '\(trimmedGoal)' requires explicit user approval."
-            )
-            pendingApprovals[runId] = permReq
-
-            let res = AgentRunResult(
-                runId: runId,
-                status: .denied,
-                goal: trimmedGoal,
-                errorCode: "POLICY_DENIAL",
-                errorMessage: "Policy Denial: Execution of mutating goal '\(trimmedGoal)' requires explicit user approval (userApproved = true).",
-                authorized: false,
-                verificationVerdict: "DENIED"
-            )
-            emit(.taskFailed, .error, "Policy denial: user approval required")
-            runEventsMap[runId] = events
-            checkpointStore.save(result: res)
-            _ = experienceStore.record(runId: runId, goal: trimmedGoal, outcome: "denied", durationSeconds: duration)
-            return res
-        }
 
         if let dispatch = capabilityDispatch {
             if cancelledRuns.contains(runId) {
@@ -308,7 +281,16 @@ public final class AgentRuntime: @unchecked Sendable {
             memoryContext = "\nRelevant Memory Context:\n\(snippet)\n"
         }
 
-        let systemPrompt = "You are an intelligent local personal agent. Reason about the user's goal and provide a clear, concise, actionable response or plan.\(memoryContext)"
+        let capDescriptions = capabilities.values.map { "- \($0.capabilityId): \($0.description)" }.joined(separator: "\n")
+        let systemPrompt = """
+        You are an intelligent local personal agent.
+        Available Capabilities:
+        \(capDescriptions)
+
+        Reason about the user's goal. To perform actions, output a JSON action contract:
+        {"actions": [{"capabilityId": "capability_name", "action": "action_name", "input": {"key": "value"}}]}
+        \(memoryContext)
+        """
         let request = LanguageModelRequest(
             systemPrompt: systemPrompt,
             messages: [LanguageModelMessage(role: .user, content: trimmedGoal)],
@@ -682,26 +664,135 @@ public final class AgentRuntime: @unchecked Sendable {
         }
 
         let action = input["action"] ?? ""
+
+        if capabilityId == "github_integration" {
+            let owner = input["owner"] ?? ""
+            let repo = input["repo"] ?? ""
+            return await executeGitHubCapability(
+                action: action,
+                owner: owner,
+                repo: repo,
+                input: input,
+                userApproved: userApproved
+            )
+        }
+
+        if capabilityId == "mock.echo" {
+            let text = input["text"] ?? input["body"] ?? "echo"
+            return CapabilityResult(
+                capabilityId: capabilityId,
+                status: .success,
+                output: "echo: \(text)"
+            )
+        }
+
+        return CapabilityResult(capabilityId: capabilityId, status: .failed, errorMessage: "No executor registered for capability '\(capabilityId)'.")
+    }
+
+    private func executeGitHubCapability(
+        action: String,
+        owner: String,
+        repo: String,
+        input: [String: String],
+        userApproved: Bool
+    ) async -> CapabilityResult {
         let writeActions = ["create_issue_comment", "create_issue", "update_issue", "close_issue", "merge_pr"]
         let isWrite = writeActions.contains(action)
 
         if isWrite && !userApproved {
             return CapabilityResult(
-                capabilityId: capabilityId,
+                capabilityId: "github_integration",
                 status: .denied,
-                errorMessage: "Policy Denial: Action '\(action)' on capability '\(capabilityId)' requires explicit user approval."
+                errorMessage: "Policy Denial: Action '\(action)' on capability 'github_integration' requires explicit user approval."
             )
         }
 
-        if input["mock_offline"] == "true" || capabilityId == "mock.echo" {
+        if input["mock_offline"] == "true" {
             return CapabilityResult(
-                capabilityId: capabilityId,
+                capabilityId: "github_integration",
                 status: .success,
-                output: "Mock offline execution of '\(action.isEmpty ? capabilityId : action)' completed."
+                output: "{\"action\": \"\(action)\", \"status\": \"success\", \"data\": {\"owner\": \"\(owner)\", \"repo\": \"\(repo)\", \"mock\": true}}"
             )
         }
 
-        return CapabilityResult(capabilityId: capabilityId, status: .success, output: "Executed capability '\(capabilityId)' successfully.")
+        if owner.isEmpty || repo.isEmpty {
+            return CapabilityResult(
+                capabilityId: "github_integration",
+                status: .failed,
+                errorMessage: "Missing required parameters: 'owner' and 'repo' are required for GitHub capability actions."
+            )
+        }
+
+        let urlString: String
+        var httpMethod = "GET"
+        var httpBody: Data? = nil
+
+        switch action {
+        case "get_repo":
+            urlString = "https://api.github.com/repos/\(owner)/\(repo)"
+        case "list_issues":
+            urlString = "https://api.github.com/repos/\(owner)/\(repo)/issues"
+        case "get_issue":
+            guard let issueNum = input["issue_number"] ?? input["issue"] else {
+                return CapabilityResult(capabilityId: "github_integration", status: .failed, errorMessage: "Action 'get_issue' requires 'issue_number'.")
+            }
+            urlString = "https://api.github.com/repos/\(owner)/\(repo)/issues/\(issueNum)"
+        case "create_issue_comment":
+            guard let issueNum = input["issue_number"] ?? input["issue"], let body = input["body"] else {
+                return CapabilityResult(capabilityId: "github_integration", status: .failed, errorMessage: "Action 'create_issue_comment' requires 'issue_number' and 'body'.")
+            }
+            urlString = "https://api.github.com/repos/\(owner)/\(repo)/issues/\(issueNum)/comments"
+            httpMethod = "POST"
+            httpBody = try? JSONSerialization.data(withJSONObject: ["body": body])
+        default:
+            return CapabilityResult(capabilityId: "github_integration", status: .failed, errorMessage: "Unsupported GitHub action '\(action)'.")
+        }
+
+        guard let url = URL(string: urlString) else {
+            return CapabilityResult(capabilityId: "github_integration", status: .failed, errorMessage: "Invalid GitHub API URL '\(urlString)'.")
+        }
+
+        var req = URLRequest(url: url)
+        req.httpMethod = httpMethod
+        req.httpBody = httpBody
+        req.setValue("application/vnd.github.v3+json", forHTTPHeaderField: "Accept")
+        req.setValue("Agent-Core-iOS/0.2.0", forHTTPHeaderField: "User-Agent")
+        if httpBody != nil {
+            req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        }
+
+        let token = input["token"] ?? ProcessInfo.processInfo.environment["GITHUB_TOKEN"]
+        if let token, !token.isEmpty {
+            req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        }
+
+        do {
+            let (data, response) = try await urlSession.data(for: req)
+            guard let httpResp = response as? HTTPURLResponse else {
+                return CapabilityResult(capabilityId: "github_integration", status: .failed, errorMessage: "Invalid response from GitHub API.")
+            }
+
+            let respBody = String(data: data, encoding: .utf8) ?? ""
+            if (200...299).contains(httpResp.statusCode) {
+                return CapabilityResult(
+                    capabilityId: "github_integration",
+                    status: .success,
+                    output: respBody
+                )
+            } else {
+                return CapabilityResult(
+                    capabilityId: "github_integration",
+                    status: .failed,
+                    errorMessage: "GitHub API error (HTTP \(httpResp.statusCode)): \(respBody.prefix(200))"
+                )
+            }
+        } catch {
+            return CapabilityResult(
+                capabilityId: "github_integration",
+                status: .failed,
+                errorMessage: "GitHub network request failed: \(error.localizedDescription)"
+            )
+        }
     }
 
     public func getRun(runId: String) async -> AgentRunResult? {
