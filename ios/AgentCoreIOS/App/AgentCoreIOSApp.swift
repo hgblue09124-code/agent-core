@@ -475,8 +475,8 @@ final class AgentAppViewModel: ObservableObject {
             blockerDetails.append("Agent Execution check failed")
         }
 
-        let unapprovedRes = await service.executeCapability(capabilityId: "github_integration", input: ["action": "create_issue_comment"], userApproved: false)
-        let approvedRes = await service.executeCapability(capabilityId: "github_integration", input: ["action": "create_issue_comment", "mock_offline": "true"], userApproved: true)
+        let unapprovedRes = await service.executeCapability(capabilityId: "github_integration", input: ["action": "create_issue_comment", "owner": "owner", "repo": "repo", "issue_number": "1", "body": "comment"], userApproved: false)
+        let approvedRes = await service.executeCapability(capabilityId: "github_integration", input: ["action": "get_repo", "owner": "owner", "repo": "repo"], userApproved: false)
         if unapprovedRes.status == .denied && approvedRes.status == .success {
             setCheck(id: 5, status: .pass, msg: "Permission denial and approval flow verified")
             connectionStatus = .pass
