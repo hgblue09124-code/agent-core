@@ -24,6 +24,7 @@ _EVENTS_PATH = Path("/tmp/agent-core-events.json")
 # Shared AgentRuntime singleton for console HTTP server lifecycle
 _shared_runtime = None
 _runtime_lock = threading.Lock()
+_runtime_submit_lock = threading.Lock()
 
 
 def get_shared_runtime():
@@ -498,7 +499,8 @@ class LiveActivityHandler(BaseHTTPRequestHandler):
 
         try:
             runtime = get_shared_runtime()
-            res = runtime.submit(message, user_approved=user_approved)
+            with _runtime_submit_lock:
+                res = runtime.submit(message, user_approved=user_approved)
 
             self._json({
                 "event_id": res.event.event_id,

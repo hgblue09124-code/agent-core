@@ -94,9 +94,18 @@ class TestAgentRuntimeChatIntegration(unittest.TestCase):
     def test_policy_authorization_check_prevents_unauthorized_action(self):
         """Mutating or policy-blocked actions yield NEEDS_USER or DENY without bypass."""
         runtime = AgentRuntime(storage_dir=self.storage_dir)
-        # Standard user submit without approval for a task
-        res = runtime.submit("Do a task requiring approval", user_approved=False)
+        # Create a mutating capability in registry that requires user approval
+        from core.capabilities.mock_adapter import MutationCapability
+        runtime._capabilities.register(MutationCapability())
+
+        # Submit task targeting mutating capability without user approval
+        res = runtime.submit("Execute mutation capability action", user_approved=False)
         self.assertIsNotNone(res)
+        # Policy gate should transition state to NEEDS_USER or DENY
+        self.assertIn(res.agent_state.phase, {AgentPhase.NEEDS_USER.value, AgentPhase.FAILED.value})
+        self.assertIn(res.agent_state.last_outcome, {"BLOCKED", "FAILED"})
+        # Verify action result was not executed successfully
+        self.assertNotEqual(res.agent_state.last_outcome, "COMPLETED")
 
 
 class DummyWFile:
