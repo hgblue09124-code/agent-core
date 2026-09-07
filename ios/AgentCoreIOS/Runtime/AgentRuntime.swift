@@ -12,6 +12,7 @@ public final class AgentRuntime: @unchecked Sendable {
     /// Optional language model provider abstraction (Step 1).
     /// AgentRuntime never depends on concrete LLM implementations.
     private let languageModelProvider: LanguageModelProvider?
+    private let urlSession: URLSession
 
     private var capabilities: [String: Capability] = [:]
     private var runEventsMap: [String: [AgentRunEvent]] = [:]
@@ -27,7 +28,8 @@ public final class AgentRuntime: @unchecked Sendable {
         checkpointStore: LocalCheckpointStore? = nil,
         vaultStore: LocalVaultStore? = nil,
         planner: AgentModelProviderProtocol? = nil,
-        languageModelProvider: LanguageModelProvider? = nil
+        languageModelProvider: LanguageModelProvider? = nil,
+        urlSession: URLSession = .shared
     ) {
         self.memoryStore = memoryStore ?? LocalMemoryStore()
         self.experienceStore = experienceStore ?? LocalExperienceStore()
@@ -35,6 +37,7 @@ public final class AgentRuntime: @unchecked Sendable {
         self.vaultStore = vaultStore ?? LocalVaultStore()
         self.planner = planner ?? LocalDeterministicPlanner()
         self.languageModelProvider = languageModelProvider
+        self.urlSession = urlSession
 
         registerDefaultCapabilities()
     }
@@ -147,9 +150,21 @@ public final class AgentRuntime: @unchecked Sendable {
 
         let intent = classifyGoal(trimmedGoal)
 
-        // Cheap remember/forget skip the mutating-keyword gate (forget is a first-class memory op).
+        // Cheap remember/forget/status execute directly without calling the LLM.
         if intent.kind == .remember || intent.kind == .forget {
             return await executeMemoryIntent(
+                intent: intent,
+                runId: runId,
+                trimmedGoal: trimmedGoal,
+                startTime: startTime,
+                emit: { phase, status, summary, payload in
+                    emit(phase, status, summary, payload: payload)
+                }
+            )
+        }
+
+        if intent.kind == .status {
+            return await executeStatusIntent(
                 intent: intent,
                 runId: runId,
                 trimmedGoal: trimmedGoal,
@@ -242,6 +257,40 @@ public final class AgentRuntime: @unchecked Sendable {
                 _ = experienceStore.record(runId: runId, goal: trimmedGoal, outcome: "denied", durationSeconds: duration)
                 return res
             }
+
+            if capRes.status != .success {
+                let duration = Date().timeIntervalSince(startTime)
+                let res = AgentRunResult(
+                    runId: runId,
+                    status: .failed,
+                    goal: trimmedGoal,
+                    output: capRes.errorMessage,
+                    errorCode: "CAPABILITY_FAILED",
+                    errorMessage: capRes.errorMessage ?? "Capability dispatch failed.",
+                    authorized: true,
+                    verificationVerdict: "FAIL"
+                )
+                emit(.taskFailed, .error, res.errorMessage ?? "Capability dispatch failed")
+                runEventsMap[runId] = events
+                checkpointStore.save(result: res)
+                _ = experienceStore.record(runId: runId, goal: trimmedGoal, outcome: "failed", durationSeconds: duration)
+                return res
+            }
+
+            let duration = Date().timeIntervalSince(startTime)
+            let res = AgentRunResult(
+                runId: runId,
+                status: .success,
+                goal: trimmedGoal,
+                output: capRes.output,
+                authorized: true,
+                verificationVerdict: "PASS"
+            )
+            emit(.taskCompleted, .ok, capRes.output ?? "Capability dispatch completed")
+            runEventsMap[runId] = events
+            checkpointStore.save(result: res)
+            _ = experienceStore.record(runId: runId, goal: trimmedGoal, outcome: "success", durationSeconds: duration)
+            return res
         }
 
         if cancelledRuns.contains(runId) {
@@ -262,13 +311,124 @@ public final class AgentRuntime: @unchecked Sendable {
             return res
         }
 
-        isThinking = true
-        let planSteps = await generatePlanSteps(goal: trimmedGoal)
-        isThinking = false
-        emit(.planCreated, .ok, "Generated plan with \(planSteps.count) steps", payload: ["planSteps": planSteps.joined(separator: "\n")])
+        let provider = languageModelProvider ?? RoutingLanguageModelProvider.shared
 
-        var failedStep: String? = nil
-        for (idx, step) in planSteps.enumerated() {
+        isThinking = true
+        do {
+            if !provider.isLoaded {
+                try await provider.load()
+            }
+        } catch {
+            isThinking = false
+            let duration = Date().timeIntervalSince(startTime)
+            let errorMsg = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+            let res = AgentRunResult(
+                runId: runId,
+                status: .failed,
+                goal: trimmedGoal,
+                errorCode: "MODEL_NOT_LOADED",
+                errorMessage: errorMsg,
+                authorized: true,
+                verificationVerdict: "FAIL"
+            )
+            emit(.taskFailed, .error, errorMsg)
+            runEventsMap[runId] = events
+            checkpointStore.save(result: res)
+            _ = experienceStore.record(runId: runId, goal: trimmedGoal, outcome: "failed", durationSeconds: duration)
+            return res
+        }
+
+        let relevantMemories = await retrieve(query: trimmedGoal)
+        var memoryContext = ""
+        if !relevantMemories.isEmpty {
+            let snippet = relevantMemories.prefix(3).map { "\($0.key): \($0.value)" }.joined(separator: "\n")
+            memoryContext = "\nRelevant Memory Context:\n\(snippet)\n"
+        }
+
+        let capDescriptions = capabilities.values.map { "- \($0.capabilityId): \($0.description)" }.joined(separator: "\n")
+        let systemPrompt = """
+        You are an intelligent local personal agent.
+        Available Capabilities:
+        \(capDescriptions)
+
+        Reason about the user's goal. To perform actions, output a JSON action contract:
+        {"actions": [{"capabilityId": "capability_name", "action": "action_name", "input": {"key": "value"}}]}
+        \(memoryContext)
+        """
+        let request = LanguageModelRequest(
+            systemPrompt: systemPrompt,
+            messages: [LanguageModelMessage(role: .user, content: trimmedGoal)],
+            parameters: LanguageModelGenerationParameters(maxTokens: 500)
+        )
+
+        let response: LanguageModelResponse
+        do {
+            response = try await provider.generate(request)
+            isThinking = false
+        } catch {
+            isThinking = false
+            let duration = Date().timeIntervalSince(startTime)
+            let errorMsg = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+            let errorCode: String
+            if let lmError = error as? LanguageModelError {
+                switch lmError {
+                case .notLoaded: errorCode = "MODEL_NOT_LOADED"
+                case .providerUnavailable: errorCode = "PROVIDER_UNAVAILABLE"
+                case .generationFailed: errorCode = "GENERATION_FAILED"
+                case .invalidRequest: errorCode = "INVALID_REQUEST"
+                case .cancelled: errorCode = "CANCELLED"
+                default: errorCode = "LLM_ERROR"
+                }
+            } else {
+                errorCode = "LLM_ERROR"
+            }
+
+            let res = AgentRunResult(
+                runId: runId,
+                status: .failed,
+                goal: trimmedGoal,
+                errorCode: errorCode,
+                errorMessage: errorMsg,
+                authorized: true,
+                verificationVerdict: "FAIL"
+            )
+            emit(.taskFailed, .error, errorMsg)
+            runEventsMap[runId] = events
+            checkpointStore.save(result: res)
+            _ = experienceStore.record(runId: runId, goal: trimmedGoal, outcome: "failed", durationSeconds: duration)
+            return res
+        }
+
+        guard let actions = parseActions(from: response.text) else {
+            let duration = Date().timeIntervalSince(startTime)
+            let failedReason = "LLM response could not be parsed as a valid action contract."
+            emit(.planCreated, .fail, failedReason)
+            emit(.verify, .fail, "Verification verdict FAIL (\(failedReason))")
+            let result = AgentRunResult(
+                runId: runId,
+                status: .failed,
+                goal: trimmedGoal,
+                output: failedReason,
+                errorCode: "UNMAPPED_ACTION",
+                errorMessage: failedReason,
+                planSteps: [response.text],
+                authorized: true,
+                verificationVerdict: "FAIL"
+            )
+            emit(.taskFailed, .error, failedReason)
+            runEventsMap[runId] = events
+            checkpointStore.save(result: result)
+            _ = experienceStore.record(runId: runId, goal: trimmedGoal, outcome: "failed", durationSeconds: duration)
+            return result
+        }
+
+        let planStepSummaries = actions.map { "\($0.capabilityId): \($0.input["action"] ?? "")" }
+        emit(.planCreated, .ok, "Generated plan with \(actions.count) steps", payload: ["planSteps": planStepSummaries.joined(separator: "\n")])
+
+        var allVerified = true
+        var failedReason: String? = nil
+
+        for (idx, action) in actions.enumerated() {
             if Task.isCancelled || cancelledRuns.contains(runId) {
                 let duration = Date().timeIntervalSince(startTime)
                 let res = AgentRunResult(
@@ -288,34 +448,75 @@ public final class AgentRuntime: @unchecked Sendable {
             }
 
             let stepId = "STEP-\(idx + 1)"
-            emit(.execute, .running, step, payload: ["stepId": stepId, "stepIndex": "\(idx)"])
+            let stepSummary = "\(action.capabilityId): \(action.input["action"] ?? "")"
+            emit(.execute, .running, stepSummary, payload: ["stepId": stepId, "stepIndex": "\(idx)"])
+
             let capRes = await executeCapability(
-                capabilityId: "mock.echo",
-                input: ["action": "echo", "text": step, "mock_offline": "true"],
+                capabilityId: action.capabilityId,
+                input: action.input,
                 userApproved: userApproved
             )
+
             if capRes.status == .success {
-                emit(.observeResult, .pass, capRes.output ?? "Completed step \(idx + 1)", payload: ["stepId": stepId, "stepIndex": "\(idx)"])
+                let isVerified = await verifyActionOutcome(action: action, result: capRes)
+                if isVerified {
+                    let obsOutput = capRes.output ?? "Completed step \(idx + 1)"
+                    emit(.observeResult, .pass, obsOutput, payload: ["stepId": stepId, "stepIndex": "\(idx)"])
+                } else {
+                    allVerified = false
+                    failedReason = "Independent post-execution state verification failed for step '\(stepSummary)'."
+                    emit(.observeResult, .fail, failedReason!, payload: ["stepId": stepId, "stepIndex": "\(idx)"])
+                    break
+                }
+            } else if capRes.status == .denied {
+                allVerified = false
+                failedReason = capRes.errorMessage ?? "Policy Denial: Action requires explicit user approval."
+                emit(.observeResult, .fail, failedReason!, payload: ["stepId": stepId, "stepIndex": "\(idx)"])
+
+                let permReq = PermissionRequest(
+                    runId: runId,
+                    capabilityId: action.capabilityId,
+                    action: action.input["action"] ?? "",
+                    input: action.input,
+                    reason: failedReason!
+                )
+                pendingApprovals[runId] = permReq
+
+                let duration = Date().timeIntervalSince(startTime)
+                let res = AgentRunResult(
+                    runId: runId,
+                    status: .denied,
+                    goal: trimmedGoal,
+                    errorCode: "POLICY_DENIAL",
+                    errorMessage: failedReason,
+                    authorized: false,
+                    verificationVerdict: "DENIED"
+                )
+                emit(.taskFailed, .error, "Capability execution denied by policy")
+                runEventsMap[runId] = events
+                checkpointStore.save(result: res)
+                _ = experienceStore.record(runId: runId, goal: trimmedGoal, outcome: "denied", durationSeconds: duration)
+                return res
             } else {
-                failedStep = capRes.errorMessage ?? "Step \(idx + 1) failed"
-                emit(.observeResult, .fail, failedStep ?? "failed", payload: ["stepId": stepId, "stepIndex": "\(idx)"])
+                allVerified = false
+                failedReason = capRes.errorMessage ?? "Execution of capability '\(action.capabilityId)' failed."
+                emit(.observeResult, .fail, failedReason!, payload: ["stepId": stepId, "stepIndex": "\(idx)"])
                 break
             }
         }
 
-        let verified = failedStep == nil && !planSteps.isEmpty
-        emit(.verify, verified ? .pass : .fail, verified ? "Verification verdict PASS" : "Verification verdict FAIL")
+        emit(.verify, allVerified ? .pass : .fail, allVerified ? "Verification verdict PASS" : "Verification verdict FAIL (\(failedReason ?? "Unmapped or failed step"))")
 
-        if !verified {
+        if !allVerified {
             let duration = Date().timeIntervalSince(startTime)
             let result = AgentRunResult(
                 runId: runId,
                 status: .failed,
                 goal: trimmedGoal,
-                output: failedStep,
+                output: failedReason,
                 errorCode: "VERIFY_FAIL",
-                errorMessage: failedStep ?? "Verification failed",
-                planSteps: planSteps,
+                errorMessage: failedReason ?? "Action execution or verification failed",
+                planSteps: planStepSummaries,
                 authorized: true,
                 verificationVerdict: "FAIL"
             )
@@ -333,13 +534,13 @@ public final class AgentRuntime: @unchecked Sendable {
             runId: runId,
             status: .success,
             goal: trimmedGoal,
-            output: "Successfully executed goal '\(trimmedGoal)' through local agent runtime pipeline.",
-            planSteps: planSteps,
+            output: response.text,
+            planSteps: planStepSummaries,
             authorized: true,
             verificationVerdict: "PASS"
         )
 
-        emit(.taskCompleted, .ok, "Task completed successfully")
+        emit(.taskCompleted, .ok, response.text)
         runEventsMap[runId] = events
         checkpointStore.save(result: result)
         _ = experienceStore.record(runId: runId, goal: trimmedGoal, outcome: "success", durationSeconds: duration)
@@ -530,7 +731,7 @@ public final class AgentRuntime: @unchecked Sendable {
     }
 
     public func executeCapability(capabilityId: String, input: [String: String], userApproved: Bool = false) async -> CapabilityResult {
-        guard let cap = capabilities[capabilityId] else {
+        guard capabilities[capabilityId] != nil else {
             return CapabilityResult(
                 capabilityId: capabilityId,
                 status: .failed,
@@ -539,26 +740,161 @@ public final class AgentRuntime: @unchecked Sendable {
         }
 
         let action = input["action"] ?? ""
+
+        if capabilityId == "github_integration" {
+            let owner = input["owner"] ?? ""
+            let repo = input["repo"] ?? ""
+            return await executeGitHubCapability(
+                action: action,
+                owner: owner,
+                repo: repo,
+                input: input,
+                userApproved: userApproved
+            )
+        }
+
+        if capabilityId == "mock.echo" {
+            let text = input["text"] ?? input["body"] ?? "echo"
+            return CapabilityResult(
+                capabilityId: capabilityId,
+                status: .success,
+                output: "echo: \(text)"
+            )
+        }
+
+        return CapabilityResult(capabilityId: capabilityId, status: .failed, errorMessage: "No executor registered for capability '\(capabilityId)'.")
+    }
+
+    private func executeGitHubCapability(
+        action: String,
+        owner: String,
+        repo: String,
+        input: [String: String],
+        userApproved: Bool
+    ) async -> CapabilityResult {
         let writeActions = ["create_issue_comment", "create_issue", "update_issue", "close_issue", "merge_pr"]
         let isWrite = writeActions.contains(action)
 
         if isWrite && !userApproved {
             return CapabilityResult(
-                capabilityId: capabilityId,
+                capabilityId: "github_integration",
                 status: .denied,
-                errorMessage: "Policy Denial: Action '\(action)' on capability '\(capabilityId)' requires explicit user approval."
+                errorMessage: "Policy Denial: Action '\(action)' on capability 'github_integration' requires explicit user approval."
             )
         }
 
-        if input["mock_offline"] == "true" || capabilityId == "mock.echo" {
+        if input["mock_offline"] == "true" {
             return CapabilityResult(
-                capabilityId: capabilityId,
+                capabilityId: "github_integration",
                 status: .success,
-                output: "Mock offline execution of '\(action.isEmpty ? capabilityId : action)' completed."
+                output: "{\"ok\":true,\"mock_offline\":true,\"action\":\"\(action)\"}"
             )
         }
 
-        return CapabilityResult(capabilityId: capabilityId, status: .success, output: "Executed capability '\(capabilityId)' successfully.")
+        if owner.isEmpty || repo.isEmpty {
+            return CapabilityResult(
+                capabilityId: "github_integration",
+                status: .failed,
+                errorMessage: "Missing required parameters: 'owner' and 'repo' are required for GitHub capability actions."
+            )
+        }
+
+        let urlString: String
+        var httpMethod = "GET"
+        var httpBody: Data? = nil
+
+        switch action {
+        case "get_repo":
+            urlString = "https://api.github.com/repos/\(owner)/\(repo)"
+        case "list_issues":
+            urlString = "https://api.github.com/repos/\(owner)/\(repo)/issues"
+        case "get_issue":
+            guard let issueNum = input["issue_number"] ?? input["issue"] else {
+                return CapabilityResult(capabilityId: "github_integration", status: .failed, errorMessage: "Action 'get_issue' requires 'issue_number'.")
+            }
+            urlString = "https://api.github.com/repos/\(owner)/\(repo)/issues/\(issueNum)"
+        case "create_issue":
+            urlString = "https://api.github.com/repos/\(owner)/\(repo)/issues"
+            httpMethod = "POST"
+            let title = input["title"] ?? "New Issue"
+            let body = input["body"] ?? ""
+            httpBody = try? JSONSerialization.data(withJSONObject: ["title": title, "body": body])
+        case "create_issue_comment":
+            guard let issueNum = input["issue_number"] ?? input["issue"], let body = input["body"] else {
+                return CapabilityResult(capabilityId: "github_integration", status: .failed, errorMessage: "Action 'create_issue_comment' requires 'issue_number' and 'body'.")
+            }
+            urlString = "https://api.github.com/repos/\(owner)/\(repo)/issues/\(issueNum)/comments"
+            httpMethod = "POST"
+            httpBody = try? JSONSerialization.data(withJSONObject: ["body": body])
+        case "update_issue", "close_issue":
+            guard let issueNum = input["issue_number"] ?? input["issue"] else {
+                return CapabilityResult(capabilityId: "github_integration", status: .failed, errorMessage: "Action '\(action)' requires 'issue_number'.")
+            }
+            urlString = "https://api.github.com/repos/\(owner)/\(repo)/issues/\(issueNum)"
+            httpMethod = "PATCH"
+            var dict: [String: Any] = [:]
+            if let title = input["title"] { dict["title"] = title }
+            if let body = input["body"] { dict["body"] = body }
+            if action == "close_issue" { dict["state"] = "closed" }
+            httpBody = try? JSONSerialization.data(withJSONObject: dict)
+        case "merge_pr":
+            guard let prNum = input["pull_number"] ?? input["pr_number"] ?? input["issue"] else {
+                return CapabilityResult(capabilityId: "github_integration", status: .failed, errorMessage: "Action 'merge_pr' requires 'pull_number'.")
+            }
+            urlString = "https://api.github.com/repos/\(owner)/\(repo)/pulls/\(prNum)/merge"
+            httpMethod = "PUT"
+            if let commitMsg = input["commit_message"] {
+                httpBody = try? JSONSerialization.data(withJSONObject: ["commit_message": commitMsg])
+            }
+        default:
+            return CapabilityResult(capabilityId: "github_integration", status: .failed, errorMessage: "Unsupported GitHub action '\(action)'.")
+        }
+
+        guard let url = URL(string: urlString) else {
+            return CapabilityResult(capabilityId: "github_integration", status: .failed, errorMessage: "Invalid GitHub API URL '\(urlString)'.")
+        }
+
+        var req = URLRequest(url: url)
+        req.httpMethod = httpMethod
+        req.httpBody = httpBody
+        req.setValue("application/vnd.github.v3+json", forHTTPHeaderField: "Accept")
+        req.setValue("Agent-Core-iOS/0.2.0", forHTTPHeaderField: "User-Agent")
+        if httpBody != nil {
+            req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        }
+
+        let token = input["token"] ?? ProcessInfo.processInfo.environment["GITHUB_TOKEN"]
+        if let token, !token.isEmpty {
+            req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        }
+
+        do {
+            let (data, response) = try await urlSession.data(for: req)
+            guard let httpResp = response as? HTTPURLResponse else {
+                return CapabilityResult(capabilityId: "github_integration", status: .failed, errorMessage: "Invalid response from GitHub API.")
+            }
+
+            let respBody = String(data: data, encoding: .utf8) ?? ""
+            if (200...299).contains(httpResp.statusCode) {
+                return CapabilityResult(
+                    capabilityId: "github_integration",
+                    status: .success,
+                    output: respBody
+                )
+            } else {
+                return CapabilityResult(
+                    capabilityId: "github_integration",
+                    status: .failed,
+                    errorMessage: "GitHub API error (HTTP \(httpResp.statusCode)): \(respBody.prefix(200))"
+                )
+            }
+        } catch {
+            return CapabilityResult(
+                capabilityId: "github_integration",
+                status: .failed,
+                errorMessage: "GitHub network request failed: \(error.localizedDescription)"
+            )
+        }
     }
 
     public func getRun(runId: String) async -> AgentRunResult? {
@@ -570,20 +906,19 @@ public final class AgentRuntime: @unchecked Sendable {
     }
 
     public func health() async -> AgentHealth {
-        let routed = languageModelProvider as? RoutingLanguageModelProvider
+        let effectiveProvider = languageModelProvider ?? RoutingLanguageModelProvider.shared
+        let routed = effectiveProvider as? RoutingLanguageModelProvider
         let display = routed?.displayStatus()
         let localOnly: Bool
         if let display {
             localOnly = display.localOnly
-        } else if let languageModelProvider {
-            localOnly = !languageModelProvider.isRemote
         } else {
-            localOnly = true
+            localOnly = !effectiveProvider.isRemote
         }
         return AgentHealth(
             status: "HEALTHY",
             isLocalOnly: localOnly,
-            providerName: display?.name ?? languageModelProvider?.providerId ?? planner.providerName,
+            providerName: display?.name ?? effectiveProvider.providerId,
             providerStatus: display?.status ?? planner.providerStatus.rawValue,
             isVaultAvailable: vaultStore.isAvailable(),
             storagePath: "Application Support/AgentCore/",
@@ -593,11 +928,172 @@ public final class AgentRuntime: @unchecked Sendable {
 
     // MARK: - Cheap classification + real plan/execute
 
+    private struct StructuredAction {
+        let capabilityId: String
+        let input: [String: String]
+    }
+
     private struct GoalIntent {
         enum Kind { case remember, forget, status, other }
         let kind: Kind
         let key: String
         let value: String
+    }
+
+    private func parseActions(from text: String) -> [StructuredAction]? {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        var jsonCandidate = trimmed
+        if let startIdx = trimmed.firstIndex(of: "{"), let endIdx = trimmed.lastIndex(of: "}"), startIdx <= endIdx {
+            jsonCandidate = String(trimmed[startIdx...endIdx])
+        }
+
+        guard let data = jsonCandidate.data(using: .utf8),
+              let topObj = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            return nil
+        }
+
+        let actionObjects: [[String: Any]]
+        if let arr = topObj["actions"] as? [[String: Any]] {
+            actionObjects = arr
+        } else {
+            return nil
+        }
+
+        guard !actionObjects.isEmpty else { return nil }
+
+        var parsedActions: [StructuredAction] = []
+        for obj in actionObjects {
+            let capId = (obj["capabilityId"] as? String) ?? (obj["capability_id"] as? String) ?? (obj["capability"] as? String) ?? ""
+            guard !capId.isEmpty, capabilities[capId] != nil else {
+                return nil // Fail closed if any action references an unmapped capability
+            }
+
+            var input: [String: String] = [:]
+
+            // Top-level 'action' string if present
+            if let topAction = obj["action"] as? String {
+                input["action"] = topAction
+            }
+
+            // Extract nested input dictionary
+            if let nestedInput = obj["input"] as? [String: Any] {
+                for (k, v) in nestedInput {
+                    if let strVal = v as? String {
+                        input[k] = strVal
+                    } else if let numVal = v as? NSNumber {
+                        input[k] = "\(numVal)"
+                    } else if let boolVal = v as? Bool {
+                        input[k] = "\(boolVal)"
+                    } else {
+                        return nil // Fail closed on unexpected complex nested input types
+                    }
+                }
+            }
+
+            // Extract top-level scalar fields
+            for (k, v) in obj {
+                if k != "capabilityId" && k != "capability_id" && k != "capability" && k != "input" && k != "action" {
+                    if let strVal = v as? String {
+                        input[k] = strVal
+                    } else if let numVal = v as? NSNumber {
+                        input[k] = "\(numVal)"
+                    } else if let boolVal = v as? Bool {
+                        input[k] = "\(boolVal)"
+                    } else {
+                        return nil // Fail closed on unexpected complex top-level types
+                    }
+                }
+            }
+
+            parsedActions.append(StructuredAction(capabilityId: capId, input: input))
+        }
+
+        return parsedActions
+    }
+
+    private func verifyActionOutcome(action: StructuredAction, result: CapabilityResult) async -> Bool {
+        guard result.status == .success, let output = result.output, !output.trimmingCharacters(in: .whitespaces).isEmpty else {
+            return false
+        }
+
+        if action.capabilityId == "github_integration" {
+            let lowerOutput = output.lowercased()
+            if lowerOutput.contains("error") || lowerOutput.contains("failed") || lowerOutput.contains("denied") {
+                return false
+            }
+
+            let actName = action.input["action"] ?? ""
+            let owner = action.input["owner"] ?? ""
+            let repo = action.input["repo"] ?? ""
+
+            // Perform independent read-back query for write actions when possible
+            if (actName == "create_issue" || actName == "create_issue_comment" || actName == "update_issue" || actName == "close_issue") && !owner.isEmpty && !repo.isEmpty {
+                if let data = output.data(using: .utf8),
+                   let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
+                    let verifyUrlString: String?
+                    if let issueNum = json["number"] as? Int {
+                        verifyUrlString = "https://api.github.com/repos/\(owner)/\(repo)/issues/\(issueNum)"
+                    } else if let id = json["id"] as? Int, actName == "create_issue_comment" {
+                        let issueNum = action.input["issue_number"] ?? action.input["issue"] ?? ""
+                        verifyUrlString = !issueNum.isEmpty ? "https://api.github.com/repos/\(owner)/\(repo)/issues/comments/\(id)" : nil
+                    } else {
+                        verifyUrlString = nil
+                    }
+
+                    if let verifyUrlString, let url = URL(string: verifyUrlString) {
+                        var req = URLRequest(url: url)
+                        req.httpMethod = "GET"
+                        req.setValue("application/vnd.github.v3+json", forHTTPHeaderField: "Accept")
+                        req.setValue("Agent-Core-iOS/0.2.0", forHTTPHeaderField: "User-Agent")
+                        let token = action.input["token"] ?? ProcessInfo.processInfo.environment["GITHUB_TOKEN"]
+                        if let token, !token.isEmpty {
+                            req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+                        }
+                        do {
+                            let (readData, readResp) = try await urlSession.data(for: req)
+                            if let httpResp = readResp as? HTTPURLResponse, (200...299).contains(httpResp.statusCode) {
+                                guard let readJson = try? JSONSerialization.jsonObject(with: readData) as? [String: Any] else {
+                                    return false
+                                }
+                                if actName == "close_issue" {
+                                    let state = readJson["state"] as? String
+                                    return state?.lowercased() == "closed"
+                                }
+                                if actName == "create_issue" || actName == "update_issue" {
+                                    if let reqTitle = action.input["title"] {
+                                        guard let readTitle = readJson["title"] as? String, reqTitle == readTitle else {
+                                            return false
+                                        }
+                                    }
+                                    if let reqBody = action.input["body"] {
+                                        guard let readBody = readJson["body"] as? String, reqBody == readBody else {
+                                            return false
+                                        }
+                                    }
+                                }
+                                if actName == "create_issue_comment" {
+                                    if let reqBody = action.input["body"] {
+                                        guard let readBody = readJson["body"] as? String, reqBody == readBody else {
+                                            return false
+                                        }
+                                    }
+                                }
+                                return true
+                            } else {
+                                return false
+                            }
+                        } catch {
+                            return false
+                        }
+                    }
+                }
+            }
+
+            return true
+        }
+
+        return !output.trimmingCharacters(in: .whitespaces).isEmpty
     }
 
     private func classifyGoal(_ goal: String) -> GoalIntent {
@@ -743,6 +1239,40 @@ public final class AgentRuntime: @unchecked Sendable {
         emit(.taskFailed, .error, result.errorMessage ?? "failed", nil)
         checkpointStore.save(result: result)
         _ = experienceStore.record(runId: runId, goal: trimmedGoal, outcome: "failed", durationSeconds: duration)
+        return result
+    }
+
+    private func executeStatusIntent(
+        intent: GoalIntent,
+        runId: String,
+        trimmedGoal: String,
+        startTime: Date,
+        emit: (AgentEventPhase, AgentEventStatus, String, [String: String]?) -> Void
+    ) async -> AgentRunResult {
+        let stepTitle = "Check Agent Health & Status"
+        emit(.planCreated, .ok, "Generated plan with 1 steps", ["planSteps": stepTitle])
+        emit(.execute, .running, stepTitle, ["stepId": "STEP-1", "stepIndex": "0"])
+
+        let healthInfo = await health()
+        let statusText = "Agent Status: \(healthInfo.status) | Provider: \(healthInfo.providerName) (\(healthInfo.providerStatus)) | Vault: \(healthInfo.isVaultAvailable ? "Available" : "Unavailable")"
+
+        emit(.observeResult, .pass, statusText, ["stepId": "STEP-1", "stepIndex": "0"])
+        emit(.verify, .pass, "Verification verdict PASS", nil)
+
+        let duration = Date().timeIntervalSince(startTime)
+        let result = AgentRunResult(
+            runId: runId,
+            status: .success,
+            goal: trimmedGoal,
+            output: statusText,
+            planSteps: [stepTitle],
+            authorized: true,
+            verificationVerdict: "PASS"
+        )
+        emit(.taskCompleted, .ok, "Task completed successfully", nil)
+        runEventsMap[runId] = runEventsMap[runId] ?? []
+        checkpointStore.save(result: result)
+        _ = experienceStore.record(runId: runId, goal: trimmedGoal, outcome: "success", durationSeconds: duration)
         return result
     }
 
