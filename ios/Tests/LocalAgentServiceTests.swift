@@ -919,4 +919,64 @@ final class LocalAgentServiceTests: XCTestCase {
         XCTAssertEqual(result.verificationVerdict, "FAIL")
         XCTAssertTrue(result.errorMessage?.contains("Independent post-execution state verification failed") ?? false)
     }
+
+    func test43_independentVerification_readBackStateVerification_failsWhenCommentBodyMismatch() async throws {
+        StubURLProtocol.handler = { request in
+            let urlStr = request.url?.absoluteString ?? ""
+            if request.httpMethod == "POST" && urlStr.contains("/comments") {
+                let respJson = #"{"id": 100, "body": "Original Comment"}"#
+                return (201, Data(respJson.utf8), "application/json")
+            } else if request.httpMethod == "GET" && urlStr.contains("/comments/100") {
+                // Read-back returns a different body than requested
+                let readBackJson = #"{"id": 100, "body": "Corrupted Comment Body"}"#
+                return (200, Data(readBackJson.utf8), "application/json")
+            }
+            return (400, Data("Bad Request".utf8), "text/plain")
+        }
+        defer { StubURLProtocol.handler = nil }
+
+        let config = URLSessionConfiguration.ephemeral
+        config.protocolClasses = [StubURLProtocol.self]
+        let session = URLSession(configuration: config)
+
+        let jsonContract = #"{"actions": [{"capabilityId": "github_integration", "action": "create_issue_comment", "input": {"owner": "testowner", "repo": "testrepo", "issue_number": "1", "body": "Original Comment"}}]}"#
+        let mockProvider = MockLanguageModelProvider(fixedResponseText: jsonContract)
+
+        let runtime = AgentRuntime(
+            memoryStore: LocalMemoryStore(storageDir: tempDir.appendingPathComponent("mem_b12")),
+            experienceStore: LocalExperienceStore(storageDir: tempDir.appendingPathComponent("exp_b12")),
+            checkpointStore: LocalCheckpointStore(storageDir: tempDir.appendingPathComponent("chk_b12")),
+            vaultStore: LocalVaultStore(storageDir: tempDir.appendingPathComponent("vlt_b12")),
+            languageModelProvider: mockProvider,
+            urlSession: session
+        )
+        let localService = LocalAgentService(runtime: runtime)
+
+        let result = await localService.run(goal: "Comment on issue #1", userApproved: true)
+
+        XCTAssertEqual(result.status, .failed)
+        XCTAssertEqual(result.verificationVerdict, "FAIL")
+        XCTAssertTrue(result.errorMessage?.contains("Independent post-execution state verification failed") ?? false)
+    }
+
+    func test44_actionContractParsing_failsClosedOnMalformedInputTypes() async throws {
+        // LLM returns nested object inside input where scalar string is expected
+        let malformedJson = #"{"actions": [{"capabilityId": "github_integration", "action": "get_repo", "input": {"owner": "testowner", "repo": {"nested": "value"}}}]}"#
+        let mockProvider = MockLanguageModelProvider(fixedResponseText: malformedJson)
+
+        let runtime = AgentRuntime(
+            memoryStore: LocalMemoryStore(storageDir: tempDir.appendingPathComponent("mem_b13")),
+            experienceStore: LocalExperienceStore(storageDir: tempDir.appendingPathComponent("exp_b13")),
+            checkpointStore: LocalCheckpointStore(storageDir: tempDir.appendingPathComponent("chk_b13")),
+            vaultStore: LocalVaultStore(storageDir: tempDir.appendingPathComponent("vlt_b13")),
+            languageModelProvider: mockProvider
+        )
+        let localService = LocalAgentService(runtime: runtime)
+
+        let result = await localService.run(goal: "Fetch repo with malformed input", userApproved: true)
+
+        XCTAssertEqual(result.status, .failed)
+        XCTAssertEqual(result.verificationVerdict, "FAIL")
+        XCTAssertEqual(result.errorCode, "UNMAPPED_ACTION")
+    }
 }

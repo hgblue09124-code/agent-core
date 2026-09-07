@@ -900,16 +900,42 @@ public final class AgentRuntime: @unchecked Sendable {
             }
 
             var input: [String: String] = [:]
+
+            // Top-level 'action' string if present
+            if let topAction = obj["action"] as? String {
+                input["action"] = topAction
+            }
+
+            // Extract nested input dictionary
             if let nestedInput = obj["input"] as? [String: Any] {
                 for (k, v) in nestedInput {
-                    input[k] = "\(v)"
+                    if let strVal = v as? String {
+                        input[k] = strVal
+                    } else if let numVal = v as? NSNumber {
+                        input[k] = "\(numVal)"
+                    } else if let boolVal = v as? Bool {
+                        input[k] = "\(boolVal)"
+                    } else {
+                        return nil // Fail closed on unexpected complex nested input types
+                    }
                 }
             }
+
+            // Extract top-level scalar fields
             for (k, v) in obj {
-                if k != "capabilityId" && k != "capability_id" && k != "capability" && k != "input" {
-                    input[k] = "\(v)"
+                if k != "capabilityId" && k != "capability_id" && k != "capability" && k != "input" && k != "action" {
+                    if let strVal = v as? String {
+                        input[k] = strVal
+                    } else if let numVal = v as? NSNumber {
+                        input[k] = "\(numVal)"
+                    } else if let boolVal = v as? Bool {
+                        input[k] = "\(boolVal)"
+                    } else {
+                        return nil // Fail closed on unexpected complex top-level types
+                    }
                 }
             }
+
             parsedActions.append(StructuredAction(capabilityId: capId, input: input))
         }
 
@@ -965,11 +991,22 @@ public final class AgentRuntime: @unchecked Sendable {
                                     return state?.lowercased() == "closed"
                                 }
                                 if actName == "create_issue" || actName == "update_issue" {
-                                    if let reqTitle = action.input["title"], let readTitle = readJson["title"] as? String {
-                                        if reqTitle != readTitle { return false }
+                                    if let reqTitle = action.input["title"] {
+                                        guard let readTitle = readJson["title"] as? String, reqTitle == readTitle else {
+                                            return false
+                                        }
                                     }
-                                    if let reqBody = action.input["body"], let readBody = readJson["body"] as? String {
-                                        if reqBody != readBody { return false }
+                                    if let reqBody = action.input["body"] {
+                                        guard let readBody = readJson["body"] as? String, reqBody == readBody else {
+                                            return false
+                                        }
+                                    }
+                                }
+                                if actName == "create_issue_comment" {
+                                    if let reqBody = action.input["body"] {
+                                        guard let readBody = readJson["body"] as? String, reqBody == readBody else {
+                                            return false
+                                        }
                                     }
                                 }
                                 return true
