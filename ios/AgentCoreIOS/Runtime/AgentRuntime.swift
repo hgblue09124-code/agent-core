@@ -335,18 +335,36 @@ public final class AgentRuntime: @unchecked Sendable {
             return res
         }
 
-        let rawLines = response.text
-            .split(separator: "\n")
-            .map { $0.trimmingCharacters(in: .whitespaces) }
-            .filter { !$0.isEmpty && !$0.hasPrefix("#") }
-        let planSteps: [String] = rawLines.isEmpty ? [response.text] : Array(rawLines.prefix(5))
+        guard let actions = parseActions(from: response.text) else {
+            let duration = Date().timeIntervalSince(startTime)
+            let failedReason = "LLM response could not be parsed as a valid action contract."
+            emit(.planCreated, .fail, failedReason)
+            emit(.verify, .fail, "Verification verdict FAIL (\(failedReason))")
+            let result = AgentRunResult(
+                runId: runId,
+                status: .failed,
+                goal: trimmedGoal,
+                output: failedReason,
+                errorCode: "UNMAPPED_ACTION",
+                errorMessage: failedReason,
+                planSteps: [response.text],
+                authorized: true,
+                verificationVerdict: "FAIL"
+            )
+            emit(.taskFailed, .error, failedReason)
+            runEventsMap[runId] = events
+            checkpointStore.save(result: result)
+            _ = experienceStore.record(runId: runId, goal: trimmedGoal, outcome: "failed", durationSeconds: duration)
+            return result
+        }
 
-        emit(.planCreated, .ok, "Generated plan with \(planSteps.count) steps", payload: ["planSteps": planSteps.joined(separator: "\n")])
+        let planStepSummaries = actions.map { "\($0.capabilityId): \($0.input["action"] ?? "")" }
+        emit(.planCreated, .ok, "Generated plan with \(actions.count) steps", payload: ["planSteps": planStepSummaries.joined(separator: "\n")])
 
         var allVerified = true
         var failedReason: String? = nil
 
-        for (idx, step) in planSteps.enumerated() {
+        for (idx, action) in actions.enumerated() {
             if Task.isCancelled || cancelledRuns.contains(runId) {
                 let duration = Date().timeIntervalSince(startTime)
                 let res = AgentRunResult(
@@ -366,14 +384,8 @@ public final class AgentRuntime: @unchecked Sendable {
             }
 
             let stepId = "STEP-\(idx + 1)"
-            emit(.execute, .running, step, payload: ["stepId": stepId, "stepIndex": "\(idx)"])
-
-            guard let action = parseAction(from: step), capabilities[action.capabilityId] != nil else {
-                allVerified = false
-                failedReason = "Plan step '\(step)' could not be mapped to any registered capability."
-                emit(.observeResult, .fail, failedReason!, payload: ["stepId": stepId, "stepIndex": "\(idx)"])
-                break
-            }
+            let stepSummary = "\(action.capabilityId): \(action.input["action"] ?? "")"
+            emit(.execute, .running, stepSummary, payload: ["stepId": stepId, "stepIndex": "\(idx)"])
 
             let capRes = await executeCapability(
                 capabilityId: action.capabilityId,
@@ -388,7 +400,7 @@ public final class AgentRuntime: @unchecked Sendable {
                     emit(.observeResult, .pass, obsOutput, payload: ["stepId": stepId, "stepIndex": "\(idx)"])
                 } else {
                     allVerified = false
-                    failedReason = "Independent post-execution state verification failed for step '\(step)'."
+                    failedReason = "Independent post-execution state verification failed for step '\(stepSummary)'."
                     emit(.observeResult, .fail, failedReason!, payload: ["stepId": stepId, "stepIndex": "\(idx)"])
                     break
                 }
@@ -440,7 +452,7 @@ public final class AgentRuntime: @unchecked Sendable {
                 output: failedReason,
                 errorCode: "UNMAPPED_ACTION",
                 errorMessage: failedReason ?? "Action execution or verification failed",
-                planSteps: planSteps,
+                planSteps: planStepSummaries,
                 authorized: true,
                 verificationVerdict: "FAIL"
             )
@@ -459,7 +471,7 @@ public final class AgentRuntime: @unchecked Sendable {
             status: .success,
             goal: trimmedGoal,
             output: response.text,
-            planSteps: planSteps,
+            planSteps: planStepSummaries,
             authorized: true,
             verificationVerdict: "PASS"
         )
@@ -856,44 +868,52 @@ public final class AgentRuntime: @unchecked Sendable {
         let value: String
     }
 
-    private func parseAction(from step: String) -> StructuredAction? {
-        let trimmed = step.trimmingCharacters(in: .whitespacesAndNewlines)
+    private func parseActions(from text: String) -> [StructuredAction]? {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
 
-        // Strict JSON contract parsing ONLY
         var jsonCandidate = trimmed
         if let startIdx = trimmed.firstIndex(of: "{"), let endIdx = trimmed.lastIndex(of: "}"), startIdx <= endIdx {
             jsonCandidate = String(trimmed[startIdx...endIdx])
         }
 
-        if let data = jsonCandidate.data(using: .utf8),
-           let topObj = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
-            var targetObj: [String: Any]? = nil
-            if let actionsArr = topObj["actions"] as? [[String: Any]], let firstAction = actionsArr.first {
-                targetObj = firstAction
-            } else {
-                targetObj = topObj
-            }
-
-            if let obj = targetObj {
-                let capId = (obj["capabilityId"] as? String) ?? (obj["capability_id"] as? String) ?? (obj["capability"] as? String) ?? ""
-                if !capId.isEmpty && capabilities[capId] != nil {
-                    var input: [String: String] = [:]
-                    if let nestedInput = obj["input"] as? [String: Any] {
-                        for (k, v) in nestedInput {
-                            input[k] = "\(v)"
-                        }
-                    }
-                    for (k, v) in obj {
-                        if k != "capabilityId" && k != "capability_id" && k != "capability" && k != "input" {
-                            input[k] = "\(v)"
-                        }
-                    }
-                    return StructuredAction(capabilityId: capId, input: input)
-                }
-            }
+        guard let data = jsonCandidate.data(using: .utf8),
+              let topObj = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            return nil
         }
 
-        return nil
+        let actionObjects: [[String: Any]]
+        if let arr = topObj["actions"] as? [[String: Any]] {
+            actionObjects = arr
+        } else if topObj["capabilityId"] != nil || topObj["capability_id"] != nil || topObj["capability"] != nil {
+            actionObjects = [topObj]
+        } else {
+            return nil
+        }
+
+        guard !actionObjects.isEmpty else { return nil }
+
+        var parsedActions: [StructuredAction] = []
+        for obj in actionObjects {
+            let capId = (obj["capabilityId"] as? String) ?? (obj["capability_id"] as? String) ?? (obj["capability"] as? String) ?? ""
+            guard !capId.isEmpty, capabilities[capId] != nil else {
+                return nil // Fail closed if any action references an unmapped capability
+            }
+
+            var input: [String: String] = [:]
+            if let nestedInput = obj["input"] as? [String: Any] {
+                for (k, v) in nestedInput {
+                    input[k] = "\(v)"
+                }
+            }
+            for (k, v) in obj {
+                if k != "capabilityId" && k != "capability_id" && k != "capability" && k != "input" {
+                    input[k] = "\(v)"
+                }
+            }
+            parsedActions.append(StructuredAction(capabilityId: capId, input: input))
+        }
+
+        return parsedActions
     }
 
     private func verifyActionOutcome(action: StructuredAction, result: CapabilityResult) async -> Bool {
@@ -937,11 +957,22 @@ public final class AgentRuntime: @unchecked Sendable {
                         do {
                             let (readData, readResp) = try await urlSession.data(for: req)
                             if let httpResp = readResp as? HTTPURLResponse, (200...299).contains(httpResp.statusCode) {
-                                let readStr = String(data: readData, encoding: .utf8) ?? ""
-                                if actName == "close_issue" {
-                                    return readStr.contains("\"state\":\"closed\"") || readStr.contains("\"state\": \"closed\"")
+                                guard let readJson = try? JSONSerialization.jsonObject(with: readData) as? [String: Any] else {
+                                    return false
                                 }
-                                return !readStr.isEmpty
+                                if actName == "close_issue" {
+                                    let state = readJson["state"] as? String
+                                    return state?.lowercased() == "closed"
+                                }
+                                if actName == "create_issue" || actName == "update_issue" {
+                                    if let reqTitle = action.input["title"], let readTitle = readJson["title"] as? String {
+                                        if reqTitle != readTitle { return false }
+                                    }
+                                    if let reqBody = action.input["body"], let readBody = readJson["body"] as? String {
+                                        if reqBody != readBody { return false }
+                                    }
+                                }
+                                return true
                             } else {
                                 return false
                             }

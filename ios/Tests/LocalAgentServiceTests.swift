@@ -677,7 +677,8 @@ final class LocalAgentServiceTests: XCTestCase {
 
     func test38_independentVerification_failsWhenOutputIsInvalidOrEmpty() async {
         StubURLProtocol.handler = { request in
-            return (200, Data(#"{"id": 123, "name": "repo"}"#.utf8), "application/json")
+            // Return empty response body for HTTP call to simulate verification failure
+            return (200, Data("".utf8), "application/json")
         }
         defer { StubURLProtocol.handler = nil }
 
@@ -699,9 +700,10 @@ final class LocalAgentServiceTests: XCTestCase {
 
         let result = await localService.run(goal: "Fetch repo info", userApproved: true)
 
-        // Valid registered capability action passes independent verification
-        XCTAssertEqual(result.status, .success)
-        XCTAssertEqual(result.verificationVerdict, "PASS")
+        // Empty capability output causes independent verification to FAIL
+        XCTAssertEqual(result.status, .failed)
+        XCTAssertEqual(result.verificationVerdict, "FAIL")
+        XCTAssertTrue(result.errorMessage?.contains("Independent post-execution state verification failed") ?? false)
     }
 
     func test39_realHTTPExecution_githubGetRepoDispatchesRequestAndVerifiesResponse() async throws {
@@ -718,7 +720,8 @@ final class LocalAgentServiceTests: XCTestCase {
         config.protocolClasses = [StubURLProtocol.self]
         let session = URLSession(configuration: config)
 
-        let mockProvider = MockLanguageModelProvider(fixedResponseText: "github_integration:get_repo|owner=testowner,repo=testrepo")
+        let jsonContract = #"{"actions": [{"capabilityId": "github_integration", "action": "get_repo", "input": {"owner": "testowner", "repo": "testrepo"}}]}"#
+        let mockProvider = MockLanguageModelProvider(fixedResponseText: jsonContract)
         let runtime = AgentRuntime(
             memoryStore: LocalMemoryStore(storageDir: tempDir.appendingPathComponent("mem_b8")),
             experienceStore: LocalExperienceStore(storageDir: tempDir.appendingPathComponent("exp_b8")),
@@ -746,7 +749,8 @@ final class LocalAgentServiceTests: XCTestCase {
         config.protocolClasses = [StubURLProtocol.self]
         let session = URLSession(configuration: config)
 
-        let mockProvider = MockLanguageModelProvider(fixedResponseText: "github_integration:get_repo|owner=nonexistent,repo=nonexistent")
+        let jsonContract = #"{"actions": [{"capabilityId": "github_integration", "action": "get_repo", "input": {"owner": "nonexistent", "repo": "nonexistent"}}]}"#
+        let mockProvider = MockLanguageModelProvider(fixedResponseText: jsonContract)
         let runtime = AgentRuntime(
             memoryStore: LocalMemoryStore(storageDir: tempDir.appendingPathComponent("mem_b9")),
             experienceStore: LocalExperienceStore(storageDir: tempDir.appendingPathComponent("exp_b9")),
