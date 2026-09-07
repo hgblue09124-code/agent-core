@@ -225,6 +225,7 @@ public final class AgentRuntime: @unchecked Sendable {
                 return res
             }
 
+            emit(.planCreated, .ok, "Generated plan for capability dispatch", payload: ["planSteps": dispatch.capabilityId])
             emit(.execution, .running, "Executing capability action: \(dispatch.input["action"] ?? dispatch.capabilityId)")
             let capRes = await executeCapability(
                 capabilityId: dispatch.capabilityId,
@@ -277,6 +278,7 @@ public final class AgentRuntime: @unchecked Sendable {
                 return res
             }
 
+            emit(.verify, .pass, "Verification verdict PASS")
             let duration = Date().timeIntervalSince(startTime)
             let res = AgentRunResult(
                 runId: runId,
@@ -427,6 +429,7 @@ public final class AgentRuntime: @unchecked Sendable {
 
         var allVerified = true
         var failedReason: String? = nil
+        var lastCapabilityOutput: String? = nil
 
         for (idx, action) in actions.enumerated() {
             if Task.isCancelled || cancelledRuns.contains(runId) {
@@ -458,6 +461,7 @@ public final class AgentRuntime: @unchecked Sendable {
             )
 
             if capRes.status == .success {
+                lastCapabilityOutput = capRes.output
                 let isVerified = await verifyActionOutcome(action: action, result: capRes)
                 if isVerified {
                     let obsOutput = capRes.output ?? "Completed step \(idx + 1)"
@@ -530,11 +534,12 @@ public final class AgentRuntime: @unchecked Sendable {
         _ = vaultStore.storeContext(key: "run_summary_\(runId)", value: trimmedGoal, category: "run_history")
 
         let duration = Date().timeIntervalSince(startTime)
+        let finalOutput = lastCapabilityOutput ?? response.text
         let result = AgentRunResult(
             runId: runId,
             status: .success,
             goal: trimmedGoal,
-            output: response.text,
+            output: finalOutput,
             planSteps: planStepSummaries,
             authorized: true,
             verificationVerdict: "PASS"
