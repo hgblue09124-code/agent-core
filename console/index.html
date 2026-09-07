@@ -2,84 +2,137 @@
 <html lang="vi">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>agent-core Live Console</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#0A0A0D">
+  <title>Personal Agent</title>
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
-
-<header class="header">
-  <div class="logo">&#x1F680; agent-core <span class="badge">Live Console v1.1</span></div>
-  <div class="header-right">
-    <span id="connection-status" class="conn-status disconnected">&#x25CF; Disconnected</span>
-    <span id="event-count" class="event-count">0 events</span>
-  </div>
-</header>
-
-<main class="main">
-
-  <!-- Left column: run list + goal -->
-  <aside class="sidebar">
-    <section class="panel">
-      <h2 class="panel-title">&#x1F3AF; Runs</h2>
-      <div id="run-list" class="run-list">
-        <div class="empty-state">No runs yet</div>
-      </div>
-    </section>
-
-    <section class="panel">
-      <h2 class="panel-title">&#x1F3AF; Goal</h2>
-      <div id="goal-panel" class="goal-panel">
-        <div class="empty-state">Select a run to view details</div>
-      </div>
-    </section>
-  </aside>
-
-  <!-- Right column: activity + evidence + result -->
-  <div class="content">
-
-    <!-- Live Activity -->
-    <section class="panel activity-panel">
-      <div class="panel-header">
-        <h2 class="panel-title">&#x26A1; Live Activity</h2>
-        <div class="phase-legend">
-          <span class="legend-item" data-phase="PLAN">PLAN</span>
-          <span class="legend-item" data-phase="KNOWLEDGE">KNOWLEDGE</span>
-          <span class="legend-item" data-phase="EXECUTE">EXECUTE</span>
-          <span class="legend-item" data-phase="OBSERVE">OBSERVE</span>
-          <span class="legend-item" data-phase="VERIFY">VERIFY</span>
-          <span class="legend-item" data-phase="RECOVERY">RECOVERY</span>
-          <span class="legend-item" data-phase="CHECKPOINT">CHECKPOINT</span>
-          <span class="legend-item" data-phase="EXPERIENCE">EXPERIENCE</span>
-          <span class="legend-item" data-phase="EVALUATION">EVALUATION</span>
-          <span class="legend-item" data-phase="RESULT">RESULT</span>
+  <div class="app" id="app">
+    <header class="topbar">
+      <div class="identity">
+        <div class="orb orb-mini" id="orb" aria-hidden="true">
+          <span class="orb-core"></span>
+        </div>
+        <div class="identity-copy">
+          <p class="eyebrow" id="greeting">Trợ lý cá nhân</p>
+          <h1 class="identity-name">Agent Core</h1>
         </div>
       </div>
-      <div id="activity-feed" class="activity-feed">
-        <div class="empty-state">Waiting for events...</div>
+      <div class="topbar-actions">
+        <span class="pill" id="status-pill" data-status="ready">
+          <span class="pill-dot"></span>
+          <span id="status-label">Sẵn sàng</span>
+        </span>
+        <span class="chip" title="On-device">On-device</span>
+        <button type="button" class="icon-btn" id="toggle-developer" aria-pressed="false" aria-label="Mở Live Console">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/>
+          </svg>
+        </button>
       </div>
-    </section>
+    </header>
 
-    <!-- Evidence + Result row -->
-    <div class="bottom-row">
-      <section class="panel evidence-panel">
-        <h2 class="panel-title">&#x1F50E; Evidence</h2>
-        <div id="evidence-panel" class="evidence-panel-body">
-          <div class="empty-state">No evidence yet</div>
-        </div>
+    <main class="workspace">
+      <section class="column conversation-col" aria-label="Hội thoại">
+        <div class="thread" id="thread"></div>
+        <footer class="composer-wrap">
+          <form class="composer" id="composer" autocomplete="off">
+            <label class="sr-only" for="composer-input">Giao việc cho agent</label>
+            <input id="composer-input" name="message" maxlength="8000" placeholder="Giao việc cho em…" required>
+            <button type="submit" class="send-btn" id="send-btn" aria-label="Gửi">
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/>
+              </svg>
+            </button>
+          </form>
+          <div class="quick-row" id="quick-row">
+            <button type="button" class="quick" data-prompt="Nhớ giúp anh rằng màu yêu thích là xanh lam.">Nhớ giúp anh</button>
+            <button type="button" class="quick" data-prompt="Tìm lại thông tin em đã nhớ.">Tìm lại</button>
+            <button type="button" class="quick" data-prompt="Execute mutation capability action">Cập nhật cấu hình</button>
+          </div>
+        </footer>
       </section>
 
-      <section class="panel result-panel">
-        <h2 class="panel-title">&#x2705; Result</h2>
-        <div id="result-panel" class="result-panel-body">
-          <div class="empty-state">Run not complete</div>
+      <section class="column now-col" aria-label="Việc đang làm">
+        <article class="card now-card" id="now-card">
+          <p class="cap">Mục tiêu hiện tại</p>
+          <h2 class="now-intent" id="now-intent">Chưa có việc nào đang chạy.</h2>
+          <p class="muted" id="now-outcome"></p>
+
+          <div class="activity-block" id="activity-block">
+            <p class="cap">Em đang làm gì</p>
+            <p class="activity-headline" id="activity-headline">Em đang chờ anh giao việc.</p>
+            <p class="muted" id="activity-why"></p>
+          </div>
+
+          <div class="progress-block" id="progress-block" hidden>
+            <div class="progress-track" aria-hidden="true">
+              <div class="progress-fill" id="progress-fill"></div>
+            </div>
+            <ul class="steps" id="steps"></ul>
+          </div>
+
+          <div class="result-block" id="result-block" hidden>
+            <p class="cap" id="result-kicker">Kết quả</p>
+            <p class="result-headline" id="result-headline"></p>
+            <p class="result-body" id="result-body"></p>
+          </div>
+
+          <div class="approval-block" id="approval-block" hidden>
+            <p class="cap">Cần quyết định</p>
+            <p class="approval-headline" id="approval-headline">Anh cần xác nhận trước khi em tiếp tục.</p>
+            <p class="muted" id="approval-reason"></p>
+            <p class="approval-action" id="approval-action"></p>
+            <div class="approval-actions">
+              <button type="button" class="btn primary" id="approve-btn">Cho phép</button>
+              <button type="button" class="btn ghost" id="deny-btn">Để sau</button>
+            </div>
+          </div>
+
+          <div class="error-block" id="error-block" hidden>
+            <p class="cap">Trở ngại</p>
+            <p id="error-message"></p>
+            <p class="muted" id="error-hint"></p>
+          </div>
+
+          <div class="done-list" id="done-list" hidden>
+            <p class="cap">Đã làm được</p>
+            <ul id="done-items"></ul>
+          </div>
+        </article>
+
+        <article class="card history-card">
+          <p class="cap">Việc gần đây</p>
+          <ul class="history-list" id="history-list">
+            <li class="empty-hint">Chưa có việc nào.</li>
+          </ul>
+        </article>
+      </section>
+    </main>
+
+    <aside class="developer" id="developer" hidden>
+      <div class="developer-head">
+        <h2>Live Console</h2>
+        <p class="muted">Phase · state · event · diagnostics</p>
+      </div>
+      <pre class="developer-json" id="developer-json">Waiting for runtime…</pre>
+      <section class="panel activity-panel">
+        <div class="panel-header">
+          <h3 class="panel-title">Live Activity</h3>
+          <div class="phase-legend">
+            <span class="legend-item">PLAN</span>
+            <span class="legend-item">EXECUTE</span>
+            <span class="legend-item">VERIFY</span>
+            <span class="legend-item">RESULT</span>
+          </div>
+        </div>
+        <div id="activity-feed" class="activity-feed">
+          <div class="empty-state">Waiting for events...</div>
         </div>
       </section>
-    </div>
-
+    </aside>
   </div>
-</main>
-
-<script src="app.js"></script>
+  <script src="app.js"></script>
 </body>
 </html>

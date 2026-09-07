@@ -1,448 +1,374 @@
 /**
- * agent-core Live Console — app.js
- * Fetches real events from the Live Activity API and renders them.
- * No fake events. No animations. Just real data.
+ * Personal Agent — User Workspace
+ * Presentation-only. Consumes AgentState / Objective / Activity / Result
+ * via /api/agent/* . Does not branch layout on Runtime phases.
  */
 
-const API_BASE = '';  // same origin
+const API_BASE = "";
 
-// ── State ─────────────────────────────────────────────────────────────
-
-const state = {
-  runs: {},           // run_id → { phase, status, last_ts, event_count }
-  activeRunId: null,
-  eventCount: 0,
-  connected: false,
-  es: null,           // EventSource
-  pollTimer: null,
-  lastSeenEventId: new Set(),
+const ui = {
+  workspace: null,
+  lastPresentation: null,
+  conversation: [],
+  sending: false,
+  developerOpen: false,
+  pendingObjectiveId: null,
 };
 
-// ── API helpers ───────────────────────────────────────────────────────
-
-async function api(url) {
-  const r = await fetch(API_BASE + url, { cache: 'no-cache' });
-  if (!r.ok) throw new Error(`${url} → ${r.status}`);
-  return r.json();
+function $(id) {
+  return document.getElementById(id);
 }
 
-async function fetchRuns() {
-  try {
-    const data = await api('/api/runs');
-    return data.runs || [];
-  } catch {
-    return [];
+async function api(path, options) {
+  const res = await fetch(API_BASE + path, {
+    cache: "no-cache",
+    headers: { "Content-Type": "application/json", ...(options && options.headers) },
+    ...options,
+  });
+  const text = await res.text();
+  let data;
+  try { data = JSON.parse(text); } catch { data = { raw: text }; }
+  if (!res.ok) {
+    const err = new Error((data && data.error) || res.statusText || "request failed");
+    err.status = res.status;
+    err.data = data;
+    throw err;
+  }
+  return data;
+}
+
+function esc(s) {
+  const d = document.createElement("div");
+  d.textContent = String(s == null ? "" : s);
+  return d.innerHTML;
+}
+
+function greeting() {
+  const h = new Date().getHours();
+  if (h < 12) return "Chào buổi sáng";
+  if (h < 18) return "Chào buổi chiều";
+  return "Chào buổi tối";
+}
+
+function setPresence(status, label) {
+  const pill = $("status-pill");
+  const orb = $("orb");
+  pill.dataset.status = status || "ready";
+  $("status-label").textContent = label || "Sẵn sàng";
+  orb.classList.toggle("working", status === "working" || status === "watching");
+  orb.setAttribute("aria-label", "Agent status: " + (label || status || "ready"));
+}
+
+function renderIdentity(ws) {
+  const identity = (ws && ws.identity) || {};
+  $("greeting").textContent = greeting();
+  setPresence(identity.status, identity.status_label);
+}
+
+function renderNow(ws, presentation) {
+  const view = presentation || ws || {};
+  const objective = view.objective || null;
+  const activity = view.activity || {};
+  const progress = view.progress || {};
+  const result = view.result;
+  const pending = view.pending_approval;
+  const error = view.error;
+
+  $("now-intent").textContent = objective
+    ? objective.intent
+    : (ui.sending ? "Em đang nhận việc của anh…" : "Chưa có việc nào đang chạy.");
+  $("now-outcome").textContent = objective && objective.desired_outcome && objective.desired_outcome !== objective.intent
+    ? objective.desired_outcome
+    : (objective ? (objective.status_label || "") : "");
+
+  $("activity-headline").textContent = ui.sending
+    ? "Em đang làm việc cho anh…"
+    : (activity.headline || "Em đang chờ anh giao việc.");
+  $("activity-why").textContent = activity.why || "";
+
+  const steps = progress.steps || [];
+  const progressEl = $("progress-block");
+  if (steps.length || (progress.ratio && progress.ratio > 0)) {
+    progressEl.hidden = false;
+    $("progress-fill").style.width = Math.round((progress.ratio || 0) * 100) + "%";
+    $("steps").innerHTML = steps.map((s) => {
+      const cls = s.active ? "active" : s.done ? "done" : "";
+      const mark = s.done ? "✓" : s.active ? "" : "";
+      return `<li class="${cls}"><span class="mark">${mark}</span><span>${esc(s.label)}</span></li>`;
+    }).join("");
+  } else {
+    progressEl.hidden = true;
+    $("steps").innerHTML = "";
+  }
+
+  const resultEl = $("result-block");
+  const showResult = result && result.present && !ui.sending && !(pending && pending.present);
+  if (showResult) {
+    resultEl.hidden = false;
+    resultEl.classList.toggle("ok", !!result.ok);
+    resultEl.classList.toggle("bad", !result.ok);
+    $("result-kicker").textContent = result.ok ? "Kết quả" : "Chưa xong";
+    $("result-headline").textContent = result.headline || "";
+    $("result-body").textContent = result.body || "";
+  } else {
+    resultEl.hidden = true;
+  }
+
+  const approvalEl = $("approval-block");
+  if (pending && pending.present && !ui.sending) {
+    approvalEl.hidden = false;
+    ui.pendingObjectiveId = pending.objective_id;
+    $("approval-headline").textContent = pending.headline || "Anh cần xác nhận trước khi em tiếp tục.";
+    $("approval-reason").textContent = pending.reason || "";
+    $("approval-action").textContent = pending.action_summary || "";
+  } else {
+    approvalEl.hidden = true;
+    if (!pending) ui.pendingObjectiveId = null;
+  }
+
+  const errorEl = $("error-block");
+  if (error && error.present && !ui.sending) {
+    errorEl.hidden = false;
+    $("error-message").textContent = error.message || "";
+    $("error-hint").textContent = error.recovery_hint || "";
+  } else {
+    errorEl.hidden = true;
+  }
+
+  const done = (ws && ws.completed_actions) || [];
+  const doneWrap = $("done-list");
+  if (done.length) {
+    doneWrap.hidden = false;
+    $("done-items").innerHTML = done.map((d) =>
+      `<li class="${d.ok ? "" : "bad"}">${esc(d.label)}</li>`
+    ).join("");
+  } else {
+    doneWrap.hidden = true;
+  }
+
+  const history = (ws && ws.history) || [];
+  const hist = $("history-list");
+  if (!history.length) {
+    hist.innerHTML = '<li class="empty-hint">Chưa có việc nào.</li>';
+  } else {
+    hist.innerHTML = history.map((h) =>
+      `<li><span class="h-intent">${esc(h.intent)}</span><span class="h-status">${esc(h.status_label)}</span></li>`
+    ).join("");
   }
 }
 
-async function fetchRunInfo(runId) {
-  return api(`/api/runs/${runId}`);
-}
-
-async function fetchEvents(runId) {
-  return api(`/api/runs/${runId}/events?limit=200`);
-}
-
-async function fetchResult(runId) {
-  return api(`/api/runs/${runId}/result`);
-}
-
-async function fetchHealth() {
-  try {
-    return await api('/api/healthz');
-  } catch {
-    return null;
-  }
-}
-
-// ── Live connection ───────────────────────────────────────────────────
-
-function connectLive(runId) {
-  if (state.es) {
-    state.es.close();
-    state.es = null;
-  }
-  const url = `/api/runs/${runId}/stream`;
-  try {
-    state.es = new EventSource(url);
-  } catch {
-    startPolling(runId);
-    return;
-  }
-
-  setStatus('connecting');
-  state.es.onopen = () => { setStatus('connected'); state.connected = true; };
-
-  state.es.onmessage = (e) => {
-    try {
-      const ev = JSON.parse(e.data);
-      if (ev.type === 'done') {
-        // Stream ended
-        renderResult();
-        return;
-      }
-      handleEvent(ev);
-    } catch { /* ignore parse errors */ }
-  };
-
-  state.es.onerror = () => {
-    state.connected = false;
-    setStatus('disconnected');
-    if (state.es) {
-      state.es.close();
-      state.es = null;
-    }
-    // Fallback to polling
-    startPolling(runId);
-  };
-}
-
-function startPolling(runId) {
-  if (state.pollTimer) clearInterval(state.pollTimer);
-  state.pollTimer = setInterval(async () => {
-    try {
-      const evs = await fetchEvents(runId);
-      if (evs.events) {
-        evs.events.forEach(handleEvent);
-      }
-      const health = await fetchHealth();
-      if (health) setStatus('connected');
-    } catch {
-      setStatus('disconnected');
-    }
-  }, 1000);
-}
-
-function stopLive() {
-  if (state.es) { state.es.close(); state.es = null; }
-  if (state.pollTimer) { clearInterval(state.pollTimer); state.pollTimer = null; }
-  setStatus('disconnected');
-}
-
-function setStatus(status) {
-  const el = document.getElementById('connection-status');
-  const labels = {
-    connected: '● Connected',
-    disconnected: '○ Disconnected',
-    connecting: '◐ Connecting',
-  };
-  el.textContent = labels[status] || status;
-  el.className = 'conn-status ' + status;
-}
-
-// ── Event handler ─────────────────────────────────────────────────────
-
-function handleEvent(ev) {
-  const runId = ev.run_id;
-  if (!state.runs[runId]) {
-    state.runs[runId] = { phase: '', status: '', event_count: 0 };
-  }
-  const run = state.runs[runId];
-  run.phase = ev.phase;
-  run.status = ev.status;
-  run.last_ts = ev.timestamp;
-  run.event_count = (run.event_count || 0) + 1;
-  state.eventCount++;
-
-  // Update counters
-  document.getElementById('event-count').textContent =
-    state.eventCount + ' event' + (state.eventCount !== 1 ? 's' : '');
-
-  // Deduplicate
-  if (state.lastSeenEventId.has(ev.event_id)) return;
-  state.lastSeenEventId.add(ev.event_id);
-
-  // Update run list
-  renderRunList();
-
-  // Update active run panels
-  if (runId === state.activeRunId) {
-    prependEvent(ev);
-    renderEvidence(ev);
-    if (ev.phase === 'RESULT') renderResult();
-    else renderGoal();  // refresh goal meta
-  }
-}
-
-// ── Render helpers ─────────────────────────────────────────────────────
-
-function renderRunList() {
-  const el = document.getElementById('run-list');
-  const runs = Object.entries(state.runs)
-    .sort(([, a], [, b]) => (b.last_ts || '').localeCompare(a.last_ts || ''));
-
-  if (runs.length === 0) {
-    el.innerHTML = '<div class="empty-state">No runs yet</div>';
-    return;
-  }
-
-  el.innerHTML = runs.map(([id, r]) => {
-    const phaseClass = r.phase.toLowerCase();
-    const active = id === state.activeRunId ? ' active' : '';
-    return `
-      <div class="run-item${active}" onclick="selectRun('${id}')">
-        <div class="run-id">${id}</div>
-        <div class="run-phase">${r.phase}</div>
-        <span class="run-status status-${r.status.toLowerCase()}">${r.status}</span>
+function renderThread() {
+  const thread = $("thread");
+  if (!ui.conversation.length && !ui.sending) {
+    thread.innerHTML = `
+      <div class="msg agent">
+        <p class="msg-kicker">Agent</p>
+        <p>Anh giao việc, em làm. Không cần biết Runtime chạy thế nào.</p>
       </div>`;
-  }).join('');
+    return;
+  }
+  const bits = ui.conversation.map((m) => {
+    if (m.role === "user") {
+      return `<div class="msg user"><p>${esc(m.text)}</p></div>`;
+    }
+    return `<div class="msg agent"><p class="msg-kicker">${esc(m.kicker || "Agent")}</p><p>${esc(m.text)}</p></div>`;
+  });
+  if (ui.sending) {
+    bits.push(`<div class="msg agent working"><p class="msg-kicker">Agent</p><p class="msg-body">Em đang làm việc cho anh…</p></div>`);
+  }
+  thread.innerHTML = bits.join("");
+  thread.scrollTop = thread.scrollHeight;
 }
 
-async function selectRun(runId) {
-  state.activeRunId = runId;
-  stopLive();
-  renderRunList();
+function renderDeveloper(ws, cycle) {
+  const payload = {
+    agent_state: ws && ws.developer,
+    presentation_identity: ws && ws.identity,
+    last_cycle_phase: cycle && cycle.phase,
+    last_cycle_stages: cycle && cycle.stages,
+    last_outcome: cycle && cycle.outcome,
+    objective: cycle && cycle.objective,
+  };
+  $("developer-json").textContent = JSON.stringify(payload, null, 2);
+}
 
-  // Clear panels
-  document.getElementById('activity-feed').innerHTML =
-    '<div class="empty-state">Loading...</div>';
-  document.getElementById('evidence-panel').innerHTML =
-    '<div class="empty-state">No evidence yet</div>';
-  document.getElementById('result-panel').innerHTML =
-    '<div class="empty-state">Run not complete</div>';
+function render(extraCycle) {
+  const ws = ui.workspace;
+  const presentation = ui.lastPresentation || ws;
+  renderIdentity(ws || presentation);
+  renderNow(ws, presentation);
+  renderThread();
+  renderDeveloper(ws, extraCycle);
+}
 
-  // Load all events for this run
+async function refreshWorkspace() {
   try {
-    const evs = await fetchEvents(runId);
-    document.getElementById('activity-feed').innerHTML = '';
-    (evs.events || []).forEach(ev => {
-      state.lastSeenEventId.add(ev.event_id);
-      prependEvent(ev, /* silent */ true);
+    ui.workspace = await api("/api/agent/workspace");
+    if (ui.workspace && ui.workspace.identity) {
+      ui.lastPresentation = ui.workspace;
+    }
+  } catch {
+    /* keep last snapshot */
+  }
+  render();
+}
+
+function pushAgentFromPresentation(p, fallback) {
+  if (!p) {
+    ui.conversation.push({ role: "agent", text: fallback || "Em đã nhận việc." });
+    return;
+  }
+  if (p.pending_approval && p.pending_approval.present) {
+    ui.conversation.push({
+      role: "agent",
+      kicker: "Cần anh",
+      text: p.pending_approval.headline + (p.pending_approval.reason ? "\n" + p.pending_approval.reason : ""),
     });
-  } catch { /* ignore */ }
-
-  renderGoal();
-  renderEvidenceForRun(runId);
-  renderResultForRun(runId);
-
-  // Connect to live stream
-  connectLive(runId);
-}
-
-function prependEvent(ev, silent) {
-  const feed = document.getElementById('activity-feed');
-  if (feed.querySelector('.empty-state')) {
-    feed.innerHTML = '';
+    return;
   }
-
-  const ts = formatTime(ev.timestamp);
-  const line = document.createElement('div');
-  line.className = 'event-line' + (silent ? '' : ' new');
-  line.innerHTML = `
-    <span class="event-time">${ts}</span>
-    <span class="event-phase ${ev.phase}">${ev.phase}</span>
-    <span class="event-status ${ev.status}">${ev.status}</span>
-    <span class="event-body">
-      <span class="event-action">${escHtml(ev.action || '')}</span>
-      ${ev.message ? `<div class="event-message">${escHtml(ev.message)}</div>` : ''}
-    </span>`;
-
-  feed.insertBefore(line, feed.firstChild);
-
-  // Trim to 500 lines
-  while (feed.children.length > 500) {
-    feed.removeChild(feed.lastChild);
+  if (p.error && p.error.present) {
+    ui.conversation.push({ role: "agent", kicker: "Trở ngại", text: p.error.message });
+    return;
   }
+  if (p.result && p.result.present) {
+    const body = [p.result.headline, p.result.body].filter(Boolean).join("\n");
+    ui.conversation.push({ role: "agent", kicker: p.result.ok ? "Kết quả" : "Chưa xong", text: body });
+    return;
+  }
+  ui.conversation.push({
+    role: "agent",
+    text: (p.activity && p.activity.headline) || fallback || "Em đã xong bước này.",
+  });
 }
 
-async function renderGoal() {
-  if (!state.activeRunId) return;
-  const el = document.getElementById('goal-panel');
-  const info = await fetchRunInfo(state.activeRunId).catch(() => null);
-  if (!info) return;
-
-  const first = info.first_event || {};
-  const last = info.last_event || {};
-  const meta = last.metadata || {};
-
-  el.innerHTML = `
-    <div class="goal-panel-body">
-      <span class="label">run_id</span><span class="value mono">${escHtml(state.activeRunId)}</span>
-      <span class="label">project</span><span class="value">${escHtml(meta.project_id || last.message || '—')}</span>
-      <span class="label">goal</span><span class="value">${escHtml(first.metadata?.goal || '—')}</span>
-      <span class="label">phase</span><span class="value">${escHtml(last.phase)}</span>
-      <span class="label">status</span><span class="value">${escHtml(last.status)}</span>
-      <span class="label">started</span><span class="value">${formatTime(first.timestamp)}</span>
-      <span class="label">events</span><span class="value">${info.event_count}</span>
-    </div>`;
-}
-
-async function renderEvidenceForRun(runId) {
-  const el = document.getElementById('evidence-panel');
+async function submitMessage(text, extras) {
+  const message = String(text || "").trim();
+  if (!message || ui.sending) return;
+  ui.sending = true;
+  ui.conversation.push({ role: "user", text: message });
+  render();
+  $("composer-input").value = "";
   try {
-    const data = await fetchEvents(runId);
-    const evs = data.events || [];
-    const evWithMeta = evs.filter(e => e.metadata && Object.keys(e.metadata).length > 0);
-    if (evWithMeta.length === 0) {
-      el.innerHTML = '<div class="empty-state">No evidence yet</div>';
+    const body = { message, ...(extras || {}) };
+    const res = await api("/api/agent/submit", {
+      method: "POST",
+      body: JSON.stringify(body),
+    });
+    ui.lastPresentation = res.presentation || ui.lastPresentation;
+    pushAgentFromPresentation(res.presentation, res.error);
+    await refreshWorkspace();
+  } catch (err) {
+    ui.conversation.push({
+      role: "agent",
+      kicker: "Lỗi",
+      text: (err && err.message) || "Em không gửi được việc này.",
+    });
+  } finally {
+    ui.sending = false;
+    render();
+  }
+}
+
+async function approvePending() {
+  const id = ui.pendingObjectiveId
+    || (ui.workspace && ui.workspace.pending_approval && ui.workspace.pending_approval.objective_id);
+  if (!id || ui.sending) return;
+  ui.sending = true;
+  render();
+  try {
+    const res = await api("/api/agent/approve", {
+      method: "POST",
+      body: JSON.stringify({ objective_id: id }),
+    });
+    ui.lastPresentation = res.presentation || ui.lastPresentation;
+    pushAgentFromPresentation(res.presentation, "Em đã làm tiếp.");
+    await refreshWorkspace();
+  } catch (err) {
+    ui.conversation.push({
+      role: "agent",
+      kicker: "Lỗi",
+      text: (err && err.message) || "Em chưa nhận được xác nhận.",
+    });
+  } finally {
+    ui.sending = false;
+    render();
+  }
+}
+
+function dismissApproval() {
+  ui.conversation.push({
+    role: "agent",
+    text: "Được. Em giữ nguyên, không làm bước đó.",
+  });
+  const block = $("approval-block");
+  if (block) block.hidden = true;
+  renderThread();
+}
+
+async function loadDeveloperFeed() {
+  const feed = $("activity-feed");
+  try {
+    const data = await api("/api/runs");
+    const runs = (data && data.runs) || [];
+    if (!runs.length) {
+      feed.innerHTML = '<div class="empty-state">Waiting for events...</div>';
       return;
     }
-    el.innerHTML = evWithMeta.slice(-5).map(ev => {
-      const rows = Object.entries(ev.metadata).map(([k, v]) => {
-        if (v === null || v === undefined) return '';
-        const vstr = String(v);
-        const cls = v === true || vstr === 'PASS' ? 'pass' : v === false || vstr === 'FAIL' ? 'fail' : '';
-        return `<div class="evidence-row">
-          <span class="lbl">${escHtml(k)}</span>
-          <span class="val ${cls}">${escHtml(vstr.substring(0, 200))}</span>
-        </div>`;
-      }).join('');
-      return `<div class="evidence-section">
-        <h3>${escHtml(ev.phase)} · ${formatTime(ev.timestamp)}</h3>
-        ${rows}
+    const runId = runs[0].run_id;
+    const evs = await api("/api/runs/" + encodeURIComponent(runId) + "/events?limit=80");
+    const events = (evs && evs.events) || [];
+    if (!events.length) {
+      feed.innerHTML = '<div class="empty-state">Waiting for events...</div>';
+      return;
+    }
+    feed.innerHTML = events.slice().reverse().map((ev) => {
+      const ts = String(ev.timestamp || "").split("T")[1] || "";
+      return `<div class="event-line">
+        <span>${esc(ts.split(".")[0])}</span>
+        <span>${esc(ev.phase)} · ${esc(ev.status)}</span>
+        <span>${esc(ev.action || ev.message || "")}</span>
       </div>`;
-    }).join('');
+    }).join("");
   } catch {
-    el.innerHTML = '<div class="empty-state">Error loading evidence</div>';
+    feed.innerHTML = '<div class="empty-state">Waiting for events...</div>';
   }
 }
 
-function renderEvidence(ev) {
-  // Append latest evidence
-  if (!ev.metadata || Object.keys(ev.metadata).length === 0) return;
-  const el = document.getElementById('evidence-panel');
-  if (el.querySelector('.empty-state')) el.innerHTML = '';
-
-  const rows = Object.entries(ev.metadata).map(([k, v]) => {
-    if (v === null || v === undefined) return '';
-    const vstr = String(v);
-    const cls = v === true || vstr === 'PASS' ? 'pass' : v === false || vstr === 'FAIL' ? 'fail' : '';
-    return `<div class="evidence-row">
-      <span class="lbl">${escHtml(k)}</span>
-      <span class="val ${cls}">${escHtml(vstr.substring(0, 200))}</span>
-    </div>`;
-  }).join('');
-
-  const section = document.createElement('div');
-  section.className = 'evidence-section';
-  section.innerHTML = `<h3>${escHtml(ev.phase)} · ${formatTime(ev.timestamp)}</h3>${rows}`;
-  el.insertBefore(section, el.firstChild);
-  while (el.children.length > 5) el.removeChild(el.lastChild);
+function toggleDeveloper() {
+  ui.developerOpen = !ui.developerOpen;
+  $("developer").hidden = !ui.developerOpen;
+  $("toggle-developer").setAttribute("aria-pressed", ui.developerOpen ? "true" : "false");
+  document.getElementById("app").classList.toggle("dev-open", ui.developerOpen);
+  if (ui.developerOpen) loadDeveloperFeed();
 }
 
-async function renderResultForRun(runId) {
-  const el = document.getElementById('result-panel');
-  try {
-    const data = await fetchResult(runId);
-    renderResultData(el, data);
-  } catch {
-    el.innerHTML = '<div class="empty-state">Run not complete</div>';
-  }
+function bind() {
+  $("composer").addEventListener("submit", (e) => {
+    e.preventDefault();
+    submitMessage($("composer-input").value);
+  });
+  $("toggle-developer").addEventListener("click", toggleDeveloper);
+  $("approve-btn").addEventListener("click", approvePending);
+  $("deny-btn").addEventListener("click", dismissApproval);
+  document.querySelectorAll(".quick").forEach((btn) => {
+    btn.addEventListener("click", () => submitMessage(btn.getAttribute("data-prompt")));
+  });
 }
-
-function renderResult() {
-  if (!state.activeRunId) return;
-  renderResultForRun(state.activeRunId);
-}
-
-function renderResultData(el, data) {
-  if (!data || !data.run_id) {
-    el.innerHTML = '<div class="empty-state">No result data</div>';
-    return;
-  }
-
-  const isPass = data.status === 'PASS' || data.status === 'OK';
-  const isFail = data.status === 'FAIL' || data.status === 'ERROR';
-  const statusCls = isPass ? 'pass' : isFail ? 'fail' : '';
-
-  const verif = data.verification || {};
-  const metrics = data.metrics || {};
-  const verifText = verif.verified ? 'VERIFIED' : 'NOT VERIFIED';
-  const verifCls = verif.verified ? 'pass' : 'fail';
-
-  el.innerHTML = `
-    <div class="result-row">
-      <span class="lbl">run_id</span>
-      <span class="val">${escHtml(data.run_id)}</span>
-    </div>
-    <div class="result-row">
-      <span class="lbl">status</span>
-      <span class="val big ${statusCls}">${escHtml(data.status)}</span>
-    </div>
-    <div class="result-row">
-      <span class="lbl">verification</span>
-      <span class="val ${verifCls}">${verifText}</span>
-    </div>
-    <div class="result-row">
-      <span class="lbl">checks</span>
-      <span class="val">${verif.pass_count ?? 0}/${verif.total_checks ?? 0} PASS</span>
-    </div>
-    <div class="result-row">
-      <span class="lbl">tasks</span>
-      <span class="val">${metrics.completed_tasks ?? 0} OK · ${metrics.failed_tasks ?? 0} FAIL</span>
-    </div>
-    <div class="result-row">
-      <span class="lbl">llm_calls</span>
-      <span class="val">${metrics.llm_calls ?? 0}</span>
-    </div>
-    <div class="result-row">
-      <span class="lbl">tokens (est)</span>
-      <span class="val">${metrics.estimated_tokens ?? 0}</span>
-    </div>
-    <div class="result-row">
-      <span class="lbl">duration</span>
-      <span class="val">${data.duration_seconds ? data.duration_seconds.toFixed(2) + 's' : '—'}</span>
-    </div>
-    <div class="result-row">
-      <span class="lbl">events</span>
-      <span class="val">${data.event_count ?? 0}</span>
-    </div>
-    <div class="result-row">
-      <span class="lbl">evidence</span>
-      <span class="val">${data.has_evidence ? 'Yes' : 'No'}</span>
-    </div>`;
-}
-
-// ── Utility ───────────────────────────────────────────────────────────
-
-function formatTime(ts) {
-  if (!ts) return '—';
-  try {
-    // "2026-09-03T10:21:04" or "2026-09-03T10:21:04.123456+00:00"
-    const t = ts.split('T')[1] || ts;
-    return t.split('+')[0].split('.')[0];
-  } catch {
-    return ts;
-  }
-}
-
-function escHtml(s) {
-  if (s === null || s === undefined) return '';
-  return String(s)
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;');
-}
-
-// ── Init ──────────────────────────────────────────────────────────────
 
 async function init() {
-  // Check API health
-  const health = await fetchHealth();
-  if (health) {
-    setStatus('connected');
-    state.connected = true;
-  } else {
-    setStatus('disconnected');
+  bind();
+  await refreshWorkspace();
+  const ws = ui.workspace;
+  if (ws && ws.history && ws.history.length && !ui.conversation.length) {
+    const latest = ws.history[0];
+    if (latest && latest.intent) {
+      ui.conversation.push({ role: "user", text: latest.intent });
+      if (ws.result && ws.result.present) {
+        pushAgentFromPresentation(ws);
+      }
+    }
   }
-
-  // Load existing runs
-  const runs = await fetchRuns();
-  runs.forEach(r => {
-    state.runs[r.run_id] = {
-      phase: r.phase,
-      status: r.status,
-      last_ts: r.timestamp,
-      event_count: r.event_count,
-    };
-  });
-  renderRunList();
-
-  // If there are runs, auto-select the latest
-  if (runs.length > 0) {
-    await selectRun(runs[0].run_id);
-  }
+  render();
 }
 
 init();
