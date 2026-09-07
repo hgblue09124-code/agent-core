@@ -361,6 +361,9 @@ public final class AgentRuntime: @unchecked Sendable {
 
         emit(.planCreated, .ok, "Generated plan with \(planSteps.count) steps", payload: ["planSteps": planSteps.joined(separator: "\n")])
 
+        var allVerified = true
+        var failedReason: String? = nil
+
         for (idx, step) in planSteps.enumerated() {
             if Task.isCancelled || cancelledRuns.contains(runId) {
                 let duration = Date().timeIntervalSince(startTime)
@@ -382,10 +385,81 @@ public final class AgentRuntime: @unchecked Sendable {
 
             let stepId = "STEP-\(idx + 1)"
             emit(.execute, .running, step, payload: ["stepId": stepId, "stepIndex": "\(idx)"])
-            emit(.observeResult, .pass, step, payload: ["stepId": stepId, "stepIndex": "\(idx)"])
+
+            guard let action = parseAction(from: step), capabilities[action.capabilityId] != nil else {
+                allVerified = false
+                failedReason = "Plan step '\(step)' could not be mapped to any registered capability."
+                emit(.observeResult, .fail, failedReason!, payload: ["stepId": stepId, "stepIndex": "\(idx)"])
+                break
+            }
+
+            let capRes = await executeCapability(
+                capabilityId: action.capabilityId,
+                input: action.input,
+                userApproved: userApproved
+            )
+
+            if capRes.status == .success {
+                let obsOutput = capRes.output ?? "Completed step \(idx + 1)"
+                emit(.observeResult, .pass, obsOutput, payload: ["stepId": stepId, "stepIndex": "\(idx)"])
+            } else if capRes.status == .denied {
+                allVerified = false
+                failedReason = capRes.errorMessage ?? "Policy Denial: Action requires explicit user approval."
+                emit(.observeResult, .fail, failedReason!, payload: ["stepId": stepId, "stepIndex": "\(idx)"])
+
+                let permReq = PermissionRequest(
+                    runId: runId,
+                    capabilityId: action.capabilityId,
+                    action: action.input["action"] ?? "",
+                    input: action.input,
+                    reason: failedReason!
+                )
+                pendingApprovals[runId] = permReq
+
+                let duration = Date().timeIntervalSince(startTime)
+                let res = AgentRunResult(
+                    runId: runId,
+                    status: .denied,
+                    goal: trimmedGoal,
+                    errorCode: "POLICY_DENIAL",
+                    errorMessage: failedReason,
+                    authorized: false,
+                    verificationVerdict: "DENIED"
+                )
+                emit(.taskFailed, .error, "Capability execution denied by policy")
+                runEventsMap[runId] = events
+                checkpointStore.save(result: res)
+                _ = experienceStore.record(runId: runId, goal: trimmedGoal, outcome: "denied", durationSeconds: duration)
+                return res
+            } else {
+                allVerified = false
+                failedReason = capRes.errorMessage ?? "Execution of capability '\(action.capabilityId)' failed."
+                emit(.observeResult, .fail, failedReason!, payload: ["stepId": stepId, "stepIndex": "\(idx)"])
+                break
+            }
         }
 
-        emit(.verify, .pass, "Verification verdict PASS")
+        emit(.verify, allVerified ? .pass : .fail, allVerified ? "Verification verdict PASS" : "Verification verdict FAIL (\(failedReason ?? "Unmapped or failed step"))")
+
+        if !allVerified {
+            let duration = Date().timeIntervalSince(startTime)
+            let result = AgentRunResult(
+                runId: runId,
+                status: .failed,
+                goal: trimmedGoal,
+                output: failedReason,
+                errorCode: "UNMAPPED_ACTION",
+                errorMessage: failedReason ?? "Action execution or verification failed",
+                planSteps: planSteps,
+                authorized: true,
+                verificationVerdict: "FAIL"
+            )
+            emit(.taskFailed, .error, result.errorMessage ?? "failed")
+            runEventsMap[runId] = events
+            checkpointStore.save(result: result)
+            _ = experienceStore.record(runId: runId, goal: trimmedGoal, outcome: "failed", durationSeconds: duration)
+            return result
+        }
 
         _ = vaultStore.storeContext(key: "run_summary_\(runId)", value: trimmedGoal, category: "run_history")
 
@@ -653,11 +727,77 @@ public final class AgentRuntime: @unchecked Sendable {
 
     // MARK: - Cheap classification + real plan/execute
 
+    private struct StructuredAction {
+        let capabilityId: String
+        let input: [String: String]
+    }
+
     private struct GoalIntent {
         enum Kind { case remember, forget, status, other }
         let kind: Kind
         let key: String
         let value: String
+    }
+
+    private func parseAction(from step: String) -> StructuredAction? {
+        let trimmed = step.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        // 1. Try JSON parsing
+        if (trimmed.hasPrefix("{") && trimmed.hasSuffix("}")) || (trimmed.hasPrefix("[{") && trimmed.hasSuffix("}]")) {
+            let jsonString = trimmed.hasPrefix("[{") ? String(trimmed.dropFirst().dropLast()) : trimmed
+            if let data = jsonString.data(using: .utf8),
+               let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
+                let capId = (obj["capabilityId"] as? String) ?? (obj["capability_id"] as? String) ?? (obj["capability"] as? String) ?? ""
+                if !capId.isEmpty && capabilities[capId] != nil {
+                    var input: [String: String] = [:]
+                    for (k, v) in obj {
+                        if k != "capabilityId" && k != "capability_id" && k != "capability" {
+                            input[k] = "\(v)"
+                        }
+                    }
+                    return StructuredAction(capabilityId: capId, input: input)
+                }
+            }
+        }
+
+        // 2. Try prefix line format e.g. "github_integration:get_repo|owner=x,repo=y"
+        if let colonIdx = trimmed.firstIndex(of: ":") {
+            let capId = String(trimmed[..<colonIdx]).trimmingCharacters(in: .whitespaces)
+            if capabilities[capId] != nil {
+                let rest = String(trimmed[trimmed.index(after: colonIdx)...]).trimmingCharacters(in: .whitespaces)
+                var input: [String: String] = [:]
+                let parts = rest.split(separator: "|")
+                if let actionName = parts.first {
+                    input["action"] = String(actionName).trimmingCharacters(in: .whitespaces)
+                }
+                if parts.count > 1 {
+                    let params = parts[1].split(separator: ",")
+                    for p in params {
+                        let kv = p.split(separator: "=")
+                        if kv.count == 2 {
+                            let k = String(kv[0]).trimmingCharacters(in: .whitespaces)
+                            let v = String(kv[1]).trimmingCharacters(in: .whitespaces)
+                            input[k] = v
+                        }
+                    }
+                }
+                return StructuredAction(capabilityId: capId, input: input)
+            }
+        }
+
+        // 3. Match against registered capabilities by name/keyword
+        for cap in capabilities.values {
+            if trimmed.lowercased().contains(cap.capabilityId.lowercased()) {
+                var input: [String: String] = ["action": "execute", "text": trimmed]
+                if cap.capabilityId == "mock.echo" {
+                    input["action"] = "echo"
+                    input["mock_offline"] = "true"
+                }
+                return StructuredAction(capabilityId: cap.capabilityId, input: input)
+            }
+        }
+
+        return nil
     }
 
     private func classifyGoal(_ goal: String) -> GoalIntent {

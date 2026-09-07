@@ -37,7 +37,7 @@ final class LocalAgentServiceTests: XCTestCase {
         chkStore = LocalCheckpointStore(storageDir: tempDir.appendingPathComponent("runs"))
         let vltStore = LocalVaultStore(storageDir: tempDir.appendingPathComponent("vault"))
 
-        let mockProvider = MockLanguageModelProvider(fixedResponseText: "Real LLM generated response for task.")
+        let mockProvider = MockLanguageModelProvider(fixedResponseText: "github_integration:get_repo|owner=owner,repo=repo")
         let runtime = AgentRuntime(
             memoryStore: memStore,
             experienceStore: expStore,
@@ -592,7 +592,7 @@ final class LocalAgentServiceTests: XCTestCase {
     // MARK: - Big Update Real Local Execution Behavioral Tests
 
     func test32_genericGoal_invokesRealProviderAndReturnsModelOutput() async {
-        let mockProvider = MockLanguageModelProvider(fixedResponseText: "1. Organize inbox\n2. Schedule meetings\n3. Set priorities")
+        let mockProvider = MockLanguageModelProvider(fixedResponseText: "github_integration:get_repo|owner=owner,repo=repo")
         let runtime = AgentRuntime(
             memoryStore: LocalMemoryStore(storageDir: tempDir.appendingPathComponent("mem_b1")),
             experienceStore: LocalExperienceStore(storageDir: tempDir.appendingPathComponent("exp_b1")),
@@ -602,14 +602,32 @@ final class LocalAgentServiceTests: XCTestCase {
         )
         let localService = LocalAgentService(runtime: runtime)
 
-        let result = await localService.run(goal: "Create a short plan for organizing my week.", userApproved: true)
+        let result = await localService.run(goal: "Get github repo info", userApproved: true)
 
         XCTAssertEqual(result.status, .success)
         XCTAssertEqual(result.verificationVerdict, "PASS")
-        XCTAssertTrue(result.output?.contains("Organize inbox") ?? false)
+        XCTAssertTrue(result.output?.contains("github_integration") ?? false)
         XCTAssertFalse(result.output?.contains("LocalDeterministicPlanner") ?? false)
         XCTAssertFalse(result.output?.contains("Successfully executed goal") ?? false)
-        XCTAssertEqual(result.planSteps.count, 3)
+    }
+
+    func test36_unmappedAction_failsClosed() async {
+        let mockProvider = MockLanguageModelProvider(fixedResponseText: "Arbitrary text step with no matching capability")
+        let runtime = AgentRuntime(
+            memoryStore: LocalMemoryStore(storageDir: tempDir.appendingPathComponent("mem_b5")),
+            experienceStore: LocalExperienceStore(storageDir: tempDir.appendingPathComponent("exp_b5")),
+            checkpointStore: LocalCheckpointStore(storageDir: tempDir.appendingPathComponent("chk_b5")),
+            vaultStore: LocalVaultStore(storageDir: tempDir.appendingPathComponent("vlt_b5")),
+            languageModelProvider: mockProvider
+        )
+        let localService = LocalAgentService(runtime: runtime)
+
+        let result = await localService.run(goal: "Do unmapped action", userApproved: true)
+
+        XCTAssertEqual(result.status, .failed)
+        XCTAssertEqual(result.verificationVerdict, "FAIL")
+        XCTAssertEqual(result.errorCode, "UNMAPPED_ACTION")
+        XCTAssertTrue(result.errorMessage?.contains("could not be mapped") ?? false)
     }
 
     func test33_providerFailure_producesFailedResultWithoutFallback() async {
